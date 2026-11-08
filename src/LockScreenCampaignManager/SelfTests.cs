@@ -2788,7 +2788,11 @@ internal static class SelfTests
                 MetadataCount++;
                 // A synthetic candidate must be newer than the installed build.
                 // This is not a published release or a version bump.
-                const string tag = "v0.4.0-preview.44";
+                var installed = UniversalUpdater.SemanticVersion.Parse(AppVersion.Current);
+                // Keep the offline fixture above any future installed version.
+                // Do not couple synthetic test data to each preview version bump.
+                string tag = "v" + new UniversalUpdater.SemanticVersion(
+                    installed.Major, installed.Minor, installed.Patch + 1, "preview.1");
                 var body = new[] { new {
                     tag_name = tag, draft = false, prerelease = true,
                     html_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/tag/" + tag,
