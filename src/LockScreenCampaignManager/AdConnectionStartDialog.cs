@@ -118,6 +118,8 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly ComboBox _dc = new();
     private readonly Button _refreshDc = new();
     private readonly Label _dcDiscoveryStatus = new();
+    private readonly CheckBox _advancedDc = new();
+    private readonly FlowLayoutPanel _serverOptions = new();
     private readonly RadioButton _current = new();
     private readonly RadioButton _alternate = new();
     private readonly TextBox _user = new();
@@ -163,6 +165,7 @@ internal sealed class AdConnectionStartDialog : Form
                 IPGlobalProperties.GetIPGlobalProperties().DomainName;
             _dc.Text = company?.PreferredDc ?? "";
             _current.Checked = true;
+            _advancedDc.Checked = !string.IsNullOrWhiteSpace(company?.PreferredDc);
         }
         finally { _mutating = false; }
 
@@ -267,7 +270,7 @@ internal sealed class AdConnectionStartDialog : Form
         rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         string[] steps = [
-            "1  Connect to Domain Controller",
+            "1  Sign in to Active Directory",
             "2  Read Active Directory",
             "3  Review and Confirm"
         ];
@@ -300,55 +303,77 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 165));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 175));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         connection.Controls.Add(new Label {
-            Text = "Connect to Domain Controller" + Environment.NewLine +
-                "Detect the local AD DNS domain and select a DC discovered through DNS SRV.",
+            Text = "Connect to Active Directory" + Environment.NewLine +
+                "Choose your Windows account or sign in with another AD user. Domain controllers are detected automatically.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
-        var servers = new FlowLayoutPanel {
+        var authentication = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(10, 12, 6, 5)
+            BackColor = UiStyle.SoftBlue, Padding = new Padding(12, 12, 8, 4)
         };
+        _current.Text = "Use current Windows account";
+        _alternate.Text = "Use another Active Directory account";
+        _current.AutoSize = true;
+        _alternate.AutoSize = true;
+        _current.MinimumSize = new Size(280, 30);
+        _alternate.MinimumSize = new Size(330, 30);
+        authentication.Controls.Add(_current);
+        authentication.Controls.Add(_alternate);
+        _user.PlaceholderText = @"DOMAIN\user or user@domain";
+        _password.UseSystemPasswordChar = true;
+        authentication.Controls.Add(Field("AD username", _user, 325));
+        authentication.Controls.Add(Field("Password (session only, never saved)", _password, 325));
+        connection.Controls.Add(authentication, 0, 1);
+
+        _serverOptions.Dock = DockStyle.Fill;
+        _serverOptions.WrapContents = true;
+        _serverOptions.AutoScroll = true;
+        _serverOptions.BackColor = UiStyle.Surface;
+        _serverOptions.Padding = new Padding(9, 5, 6, 1);
         _domain.PlaceholderText = "ad.company.example";
         _dc.DropDownStyle = ComboBoxStyle.DropDown;
         _dc.DropDownWidth = 750;
         _dc.MaxDropDownItems = 18;
         _dc.IntegralHeight = false;
-        _dc.Text = "";
-        servers.Controls.Add(Field("AD DNS domain (detected automatically)", _domain, 380));
-        servers.Controls.Add(Field("Domain controller (DNS SRV + Windows locator)", _dc, 475));
+        _serverOptions.Controls.Add(Field("AD DNS domain", _domain, 345));
+        _serverOptions.Controls.Add(Field("Optional DC / server (automatic by default)", _dc, 420));
         _refreshDc.Text = "Find DCs";
         _refreshDc.AutoSize = true;
         _refreshDc.MinimumSize = new Size(110, 34);
         _refreshDc.Click += async (_, _) => await DiscoverDcListAsync();
-        servers.Controls.Add(_refreshDc);
+        _serverOptions.Controls.Add(_refreshDc);
         _dcDiscoveryStatus.AutoSize = true;
         _dcDiscoveryStatus.ForeColor = UiStyle.Muted;
-        _dcDiscoveryStatus.Text = "Detecting domain controllers...";
+        _dcDiscoveryStatus.Text = "DC selection is optional";
         _dcDiscoveryStatus.Margin = new Padding(8, 12, 0, 0);
-        servers.Controls.Add(_dcDiscoveryStatus);
-        connection.Controls.Add(servers, 0, 1);
+        _serverOptions.Controls.Add(_dcDiscoveryStatus);
 
-        var authentication = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            BackColor = UiStyle.Surface, Padding = new Padding(6, 9, 8, 0)
+        _advancedDc.Text = "Advanced: choose domain controller manually";
+        _advancedDc.AutoSize = true;
+        _advancedDc.Checked = false;
+        _advancedDc.CheckedChanged += (_, _) => {
+            _serverOptions.Visible = _advancedDc.Checked;
+            // A manually selected DC is not silently retained when advanced
+            // selection is disabled. Domain selection stays unchanged.
+            if (!_advancedDc.Checked && !_mutating) _dc.Text = "";
         };
-        _current.Text = "Current Windows account";
-        _alternate.Text = "Other domain account (session only)";
-        _current.AutoSize = true;
-        _alternate.AutoSize = true;
-        authentication.Controls.Add(_current);
-        authentication.Controls.Add(_alternate);
-        _user.PlaceholderText = @"DOMAIN\user / user@domain";
-        _password.UseSystemPasswordChar = true;
-        authentication.Controls.Add(Field("AD user", _user, 315));
-        authentication.Controls.Add(Field("Password — never saved", _password, 285));
-        connection.Controls.Add(authentication, 0, 2);
+        var serverPanel = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            BackColor = UiStyle.Surface
+        };
+        serverPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        serverPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        serverPanel.Controls.Add(_advancedDc, 0, 0);
+        serverPanel.Controls.Add(_serverOptions, 0, 1);
+        connection.Controls.Add(serverPanel, 0, 2);
+        _serverOptions.Visible = false;
+
         _state.Dock = DockStyle.Fill;
         _state.TextAlign = ContentAlignment.MiddleLeft;
         connection.Controls.Add(_state, 0, 3);
@@ -438,7 +463,7 @@ internal sealed class AdConnectionStartDialog : Form
         _next.Width = 125; _next.Height = 38;
         _next.Click += (_, _) => { if (Snapshot is not null) ShowPage(2); };
         footer.Controls.Add(_next);
-        _connect.Text = "Connect & Read AD";
+        _connect.Text = "Sign in & Read AD";
         _connect.Width = 205; _connect.Height = 38;
         _connect.BackColor = UiStyle.Accent;
         _connect.ForeColor = Color.White;
@@ -555,6 +580,16 @@ internal sealed class AdConnectionStartDialog : Form
     private async Task ConnectAsync()
     {
         if (_busy) return;
+        if (_alternate.Checked && (string.IsNullOrWhiteSpace(_user.Text) ||
+            string.IsNullOrEmpty(_password.Text)))
+        {
+            UiStyle.ApplyStatus(_state,
+                "Enter both AD username and password, or use your current Windows account.",
+                UiStatusKind.Warning);
+            if (string.IsNullOrWhiteSpace(_user.Text)) _user.Focus();
+            else _password.Focus();
+            return;
+        }
         _busy = true;
         Snapshot = null;
         _next.Enabled = _continue.Enabled = false;
@@ -568,7 +603,7 @@ internal sealed class AdConnectionStartDialog : Form
         try
         {
             string domain = _domain.Text.Trim();
-            string dc = _dc.Text.Trim();
+            string dc = _advancedDc.Checked ? _dc.Text.Trim() : "";
             var credential = _alternate.Checked
                 ? new DomainCredentials(domain, _user.Text.Trim(), _password.Text)
                 : new DomainCredentials(domain, "", "");
@@ -588,6 +623,7 @@ internal sealed class AdConnectionStartDialog : Form
             {
                 _domain.Text = snapshot.Domain;
                 _dc.Text = snapshot.Dc;
+                _advancedDc.Checked = false;
                 _dc.Items.Clear();
                 foreach (var name in snapshot.DomainControllers.Distinct(
                     StringComparer.OrdinalIgnoreCase).Take(100))
@@ -614,6 +650,7 @@ internal sealed class AdConnectionStartDialog : Form
                 $"{snapshot.GroupPolicies.Count} GPOs." +
                 Environment.NewLine + Environment.NewLine +
                 "No changes have been made to AD or Group Policy.";
+            _password.Clear();
             ShowPage(1);
             UiStyle.ApplyStatus(_state,
                 $"CONNECTED / READ ONLY — {snapshot.Domain} | {snapshot.Dc} | " +
