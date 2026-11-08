@@ -85,7 +85,7 @@ for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
               'VerifyLocalPackageForTest', 'WindowsIdentity.RunImpersonated',
               'TimeZoneInfo.FindSystemTimeZoneById', 'CountDirectMembers',
               'ReadRootDse', 'SessionOptions.ReferralChasing', 'SHA256.HashData',
-              'isRODC', 'SearchPaged', 'Math.Abs((long)skew) > 300'):
+              'ReadDcWritable(ldap, root)', 'SearchPaged', 'Math.Abs((long)skew) > 300'):
     assert guard in native_deploy_plan, guard
 
 # Immediate Actions List/Preview run through read-only native LDAP/SYSVOL.
@@ -123,7 +123,9 @@ update_notice = (project / 'MainForm.UpdateNotification.cs').read_text(encoding=
 assert 'UniversalUpdaterWindow(checkOnOpen: true)' in update_notice
 assert 'UniversalUpdaterWindow.PinnedOptions(UpdateChannel.Prerelease)' in update_notice
 assert 'ShowUpdateNotice(newer)' in update_notice
-assert 'TimeSpan.FromHours(6)' in update_notice
+assert 'NoticeCheckInterval' in update_notice
+assert 'Check updates' in update_notice
+assert 'ShowUpdateCheckError' in update_notice
 assert 'DownloadAsync' not in update_notice and 'InstallSelectedAsync' not in update_notice
 
 # Lifecycle List and read-only Preview run natively in C#.
@@ -133,6 +135,9 @@ assert 'operation == DomainOperation.Lifecycle && mode == "List"' in runner
 assert 'NativeGpoLifecycleList.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.Lifecycle && mode == "Preview"' in runner
 assert 'NativeGpoLifecyclePreview.Execute(mode, request, credentials)' in runner
+assert '"Disable" or "Enable" or "Unlink" or "Relink" or "Delete"' in runner
+assert 'NativeGpoCom.DeleteManagedUnlinkedGpo' in (
+    project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
 native_preview = (project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
 legacy_fixture = (root / 'tools/test_native_gpo_lifecycle_preview.ps1').read_text(encoding='utf-8')
 for guard in ('LegacyPlanHash', 'CheckAction', 'FileSha256', 'CollectLinks',
