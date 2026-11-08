@@ -72,7 +72,7 @@ public sealed partial class MainForm
         var result = dialog.ShowDialog(this);
         if (result == DialogResult.Yes)
         {
-            _workflowStep = AdReady ? 1 : 0;
+            _workflowStep = NextWizardPreparationStep();
             SetWorkflowMode(false);
             _status.Text = _workflowStep == 0
                 ? "Wizard: connect to AD first, or choose Skip AD to prepare locally."
@@ -87,6 +87,30 @@ public sealed partial class MainForm
         {
             _status.Text = "Wizard cancelled. Local editor remains available.";
         }
+        UpdateWorkflow();
+    }
+
+    private bool _wizardScheduleConfigured;
+
+    private int NextWizardPreparationStep() =>
+        _project.ImagePaths.Count == 0 ? (AdReady ? 1 : 0) :
+        _wizardScheduleConfigured ? 4 : 2;
+
+    private void WizardImagesImported()
+    {
+        if (_advancedMode) return;
+        _wizardScheduleConfigured = false;
+        _workflowStep = 2;
+        _status.Text = "Images imported. Review the order, then choose Schedule.";
+        UpdateWorkflow();
+    }
+
+    private void WizardScheduleSaved()
+    {
+        if (_advancedMode) return;
+        _wizardScheduleConfigured = true;
+        _workflowStep = 4;
+        _status.Text = "Schedule complete. Now validate and save the campaign.";
         UpdateWorkflow();
     }
 
@@ -136,9 +160,13 @@ public sealed partial class MainForm
         _workflowHint.AccessibleDescription = _workflowHint.Text;
         _workflowBack.Enabled = _workflowStep > 0;
         _workflowNext.Visible = true;
-        _workflowNext.Text = _workflowStep == 0
-            ? (AdReady ? "Next" : "Skip AD")
-            : _workflowStep == 5 ? "Finish offline" : "Next";
+        _workflowNext.Text = _workflowStep switch
+        {
+            0 => AdReady ? "Next" : "Skip AD",
+            4 => "Save & continue",
+            5 => "Finish offline",
+            _ => "Next"
+        };
         _workflowNext.Enabled = _workflowStep is 0 or 5 || _project.ImagePaths.Count > 0;
         _workflowAction.Text = _workflowStep switch
         {
@@ -163,6 +191,11 @@ public sealed partial class MainForm
     private void AdvanceWorkflow()
     {
         ReadControls();
+        if (_workflowStep == 4)
+        {
+            SaveWizardCampaign();
+            return;
+        }
         if (_workflowStep == 5)
         {
             _status.Text = "Campaign finished locally. No AD or GPO changes were made.";
@@ -188,7 +221,15 @@ public sealed partial class MainForm
             }
             catch (Exception ex) { UiErrorDialog.Show(this, "Validate campaign", ex); return; }
         }
-        _workflowStep = Math.Min(5, _workflowStep + 1);
+        if (_workflowStep == 0)
+            _workflowStep = _project.ImagePaths.Count > 0
+                ? (_wizardScheduleConfigured ? 4 : 2) : 1;
+        else if (_workflowStep == 1 && _project.ImagePaths.Count > 0)
+            _workflowStep = 2;
+        else if (_workflowStep == 2 && _wizardScheduleConfigured)
+            _workflowStep = 4;
+        else
+            _workflowStep = Math.Min(5, _workflowStep + 1);
         _status.Text = _workflowStep == 5
             ? "Final stage: connect to AD (if needed), then choose OU/group and check GPO rights."
             : "Step " + (_workflowStep + 1) + ": follow the highlighted action above.";
@@ -241,6 +282,25 @@ public sealed partial class MainForm
         catch (Exception ex) { UiErrorDialog.Show(this, "Auto match images", ex); }
     }
 
+    private void SaveWizardCampaign()
+    {
+        try
+        {
+            ReadControls();
+            CampaignSchedule.Validate(_project, requireImages: true);
+            if (!TrySaveProject()) return;
+            _workflowStep = 5;
+            _status.Text = "Project saved. Choose GPO deployment or Finish offline.";
+            UpdateWorkflow();
+        }
+        catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
+        catch (FileNotFoundException)
+        {
+            ShowCampaignValidation("A selected image no longer exists.");
+        }
+        catch (Exception ex) { UiErrorDialog.Show(this, "Validate before saving", ex); }
+    }
+
     private void RunWorkflowAction()
     {
         switch (_workflowStep)
@@ -258,25 +318,7 @@ public sealed partial class MainForm
                 OpenScheduleEditor();
                 break;
             case 4:
-                try
-                {
-                    ReadControls();
-                    CampaignSchedule.Validate(_project, requireImages: true);
-                    if (TrySaveProject())
-                    {
-                        _workflowStep = 5;
-                        _status.Text = "Campaign saved. Final step: choose AD deployment, or finish offline.";
-                    }
-                }
-                catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
-                catch (FileNotFoundException)
-                {
-                    ShowCampaignValidation("A selected image no longer exists.");
-                }
-                catch (Exception ex)
-                {
-                    UiErrorDialog.Show(this, "Validate before saving", ex);
-                }
+                SaveWizardCampaign();
                 break;
             case 5:
                 if (!AdReady) ConnectAndReadAd();
