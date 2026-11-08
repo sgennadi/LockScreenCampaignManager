@@ -816,7 +816,7 @@ internal sealed class DomainDeploymentForm : Form
                     $"OU: {x.ou.Dn}\r\nComputer group: {x.group.Dn}\r\n" +
                     $"Direct group members: {d.GetProperty("directGroupMembers").GetInt32()}\r\n" +
                     $"GPO: {x.gpoName}\r\nClient: {_project.ClientType}\r\n" +
-                    $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (EXE launcher)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
+                    $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (direct EXE)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
                     $"Files on DC: {d.GetProperty("sysvolOnDc").GetString()}\r\n" +
                     $"Client startup: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
                     $"Security filtering: selected group receives Apply; Authenticated Users retains Read only.\r\n" +
