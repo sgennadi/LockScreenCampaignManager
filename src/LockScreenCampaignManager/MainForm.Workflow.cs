@@ -111,41 +111,38 @@ public sealed partial class MainForm
     {
         if (_workflowHint.IsDisposed) return;
         string[] hints = [
-            "1 / 4  Choose images first. No AD permissions needed.",
-            "2 / 4  Set image order, days and time.",
-            "3 / 4  Review and save project locally (no admin needed).",
-            "4 / 4  Optional deployment. Your local project is ready without AD."
+            "1 / 5  Add image files or import a folder.",
+            "2 / 5  Arrange image order (optional if already correct).",
+            "3 / 5  Configure dates, weekdays and change time.",
+            "4 / 5  Review images and save the local project.",
+            "5 / 5  Optional: connect AD and deploy GPO."
         ];
         _workflowHint.Text = _advancedMode
-            ? "Advanced mode  •  All tools available; GPO actions still require fresh AD verification."
-            : hints[Math.Clamp(_workflowStep, 0, 3)] +
+            ? "Advanced: all tools available. AD deployment checks permissions."
+            : hints[Math.Clamp(_workflowStep, 0, 4)] +
               $"  Images: {_project.ImagePaths.Count}";
         _workflowBack.Enabled = _workflowStep > 0;
-        _workflowNext.Text = _workflowStep == 2 ? "Optional AD" : "Next";
-        _workflowNext.Visible = _workflowStep < 3;
-        _workflowNext.Enabled = _workflowStep switch
-        {
-            0 => _project.ImagePaths.Count > 0,
-            1 => _project.ImagePaths.Count > 0,
-            2 => _project.ImagePaths.Count > 0,
-            _ => false
-        };
+        _workflowNext.Text = _workflowStep == 3 ? "Optional AD" : "Next";
+        _workflowNext.Visible = _workflowStep < 4;
+        _workflowNext.Enabled = _project.ImagePaths.Count > 0;
         _workflowAction.Text = _workflowStep switch
         {
             0 => "Add images...",
-            1 => "Edit schedule...",
-            2 => "Save project...",
+            1 => "Arrange / edit...",
+            2 => "Edit schedule...",
+            3 => "Save project...",
             _ => AdReady ? "Deploy wizard..." : "Connect to AD..."
         };
-        _workflowAction.Enabled = true;
+        _workflowAction.Enabled = _workflowStep != 1 ||
+            _project.ImagePaths.Count > 0;
         _imageScheduleButton.Enabled = _project.ImagePaths.Count > 0;
     }
 
     private void AdvanceWorkflow()
     {
         ReadControls();
-        if (_workflowStep is 0 or 1 or 2 && _project.ImagePaths.Count == 0) return;
-        if (_workflowStep == 1)
+        if (_workflowStep < 4 && _project.ImagePaths.Count == 0) return;
+        if (_workflowStep == 2)
         {
             try
             {
@@ -167,7 +164,7 @@ public sealed partial class MainForm
                 return;
             }
         }
-        _workflowStep = Math.Min(3, _workflowStep + 1);
+        _workflowStep = Math.Min(4, _workflowStep + 1);
         UpdateWorkflow();
     }
 
@@ -222,9 +219,10 @@ public sealed partial class MainForm
         switch (_workflowStep)
         {
             case 0: AddImages(); break;
-            case 1: OpenScheduleEditor(); break;
-            case 2: SaveProject(); break;
-            case 3:
+            case 1: _arrangeImagesButton?.PerformClick(); break;
+            case 2: OpenScheduleEditor(); break;
+            case 3: SaveProject(); break;
+            case 4:
                 if (AdReady) OpenDomainDeployment();
                 else ConnectAndReadAd();
                 break;
