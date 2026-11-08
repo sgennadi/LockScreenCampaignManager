@@ -25,6 +25,8 @@ internal static class UiLayoutSmokeTests
         ("Campaign editor - offline Wizard", () => new MainForm(),
             new[] { "Wizard", "Advanced", "Skip AD", "Back", "1  Add files...",
                 "Add folder...", "2  Arrange / edit  ▾", "3  Schedule...", "Project  ▾", "Help / tools  ▾" }),
+        ("Campaign editor - update available", () => CreateEditorWithUpdateNotice(),
+            new[] { "Wizard", "Update available: 0.4.0-preview.53" }),
         ("Campaign Wizard - AD connection", () => CreateWizardPage(0),
             new[] { "AD Connection Wizard...", "Continue offline", "Continue", "Back", "Close Wizard" }),
         ("Campaign Wizard - images", () => CreateWizardPage(1),
@@ -149,6 +151,13 @@ internal static class UiLayoutSmokeTests
             return form;
         }, new[] { "Find computers", "Preview membership change", "Apply group change" })
     };
+
+    private static Form CreateEditorWithUpdateNotice()
+    {
+        var form = new MainForm();
+        form.ShowSimulatedUpdateNoticeForLayoutTest();
+        return form;
+    }
 
     private static Form CreateWizardPage(int page)
     {

@@ -386,6 +386,15 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("Session credentials reused; write permission checks follow OU selection.", deploy)
         self.assertIn("CheckRightsAsync", deploy)
         self.assertIn("InstallAndRestart", read("UniversalUpdaterWindow.cs"))
+        notice = read("MainForm.UpdateNotification.cs")
+        assert "GitHubReleaseClient()" in notice
+        assert "TimeSpan.FromHours(6)" in notice
+        assert "UniversalUpdaterWindow(checkOnOpen: true)" in notice
+        assert "AvailableUpdateSummary" in notice
+        assert "DownloadAsync" not in notice
+        assert "InstallSelectedAsync" not in notice
+        assert "Campaign editor - update available" in smoke
+        assert "Campaign Wizard - deploy" in smoke
         self.assertIn("UiStyle.Navy", main)
         self.assertIn("Color.FromArgb(11,46,90)", theme)
         self.assertIn("Color.FromArgb(10,134,76)", theme)
@@ -417,7 +426,7 @@ class ClientManagementContracts(unittest.TestCase):
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         project = (APP / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-        self.assertIn('<Version>0.4.0-preview.52</Version>', project)
+        self.assertIn('<Version>0.4.0-preview.53</Version>', project)
         self.assertIn('test_manager_features.py', workflow)
         # Package name must derive from the project, never a stale preview string.
         self.assertIn('-getProperty:Version', workflow)

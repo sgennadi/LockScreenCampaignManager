@@ -181,6 +181,8 @@ public sealed partial class MainForm
         // UI-only: a fake release notice with no network/API/AD interaction.
         _updateNotice.Visible = true;
         _updateNotice.Text = "Update available: 0.4.0-preview.53";
+        _updateNotice.Tag = "UpdateNotice";
+        StyleUpdateNotice();
         _updateNoticeHelp.SetToolTip(_updateNotice,
             "Example new release. Click to open Updater.");
         FitUpdateNotice();

@@ -75,6 +75,15 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+# New version notice only checks pinned GitHub metadata and requires
+# explicit user interaction for all downloads and installations.
+update_notice = (project / 'MainForm.UpdateNotification.cs').read_text(encoding='utf-8')
+assert 'UniversalUpdaterWindow(checkOnOpen: true)' in update_notice
+assert 'UniversalUpdaterWindow.PinnedOptions(UpdateChannel.Prerelease)' in update_notice
+assert 'ShowUpdateNotice(newer)' in update_notice
+assert 'TimeSpan.FromHours(6)' in update_notice
+assert 'DownloadAsync' not in update_notice and 'InstallSelectedAsync' not in update_notice
+
 # Lifecycle List and read-only Preview run natively in C#.
 # Apply remains a PowerShell engine that rehashes the same fresh evidence.
 native_lifecycle = (project / 'NativeGpoLifecycleList.cs').read_text(encoding='utf-8')
