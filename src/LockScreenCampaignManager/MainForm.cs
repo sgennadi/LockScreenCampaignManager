@@ -28,7 +28,7 @@ public sealed partial class MainForm : Form
     private readonly Label _summary = new();
     private readonly Label _status = new();
     private readonly Label _workflowHint = new();
-    private readonly FlowLayoutPanel _workflowButtons = new();
+    private readonly TableLayoutPanel _workflowButtons = new();
     private readonly FlowLayoutPanel _advancedButtons = new();
     private readonly FlowLayoutPanel _quickButtons = new();
     private readonly Button _imageScheduleButton = new();
@@ -113,7 +113,7 @@ public sealed partial class MainForm : Form
         _companyLabel.ForeColor = UiStyle.Accent;
         _companyLabel.Font = new Font("Segoe UI Semibold", 9.5f);
         _companyLabel.AutoEllipsis = true;
-        _companyLabel.Text = "ACTIVE COMPANY: Unassigned — local campaign";
+        _companyLabel.Text = "LOCAL PROJECT — No organization selected; no AD privileges required";
         header.Controls.Add(_companyLabel, 0, 2);
         var adFirstStep = new FlowLayoutPanel
         {
@@ -289,9 +289,11 @@ public sealed partial class MainForm : Form
         _workflowHint.ForeColor = UiStyle.Navy;
         flowBar.Controls.Add(_workflowHint, 0, 0);
         _workflowButtons.Dock = DockStyle.Fill;
-        _workflowButtons.WrapContents = false;
-        _workflowButtons.AutoScroll = false;
-        _workflowButtons.FlowDirection = FlowDirection.LeftToRight;
+        _workflowButtons.ColumnCount = 3;
+        _workflowButtons.RowCount = 1;
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _workflowNext.Text = "Next";
         _workflowNext.Width = 83;
         _workflowNext.Height = 36;
@@ -303,9 +305,15 @@ public sealed partial class MainForm : Form
         _workflowAction.Width = 175;
         _workflowAction.Height = 36;
         _workflowAction.Click += (_, _) => RunWorkflowAction();
-        _workflowButtons.Controls.Add(_workflowBack);
-        _workflowButtons.Controls.Add(_workflowNext);
-        _workflowButtons.Controls.Add(_workflowAction);
+        foreach (var button in new[] { _workflowBack, _workflowNext, _workflowAction })
+        {
+            button.Dock = DockStyle.Fill;
+            button.Margin = new Padding(2);
+            button.Tag = "NoIcon";
+        }
+        _workflowButtons.Controls.Add(_workflowBack, 0, 0);
+        _workflowButtons.Controls.Add(_workflowNext, 1, 0);
+        _workflowButtons.Controls.Add(_workflowAction, 2, 0);
         flowBar.Controls.Add(_workflowButtons, 1, 0);
         footer.Controls.Add(flowBar, 0, 1);
         _advancedButtons.Dock = DockStyle.Fill;
@@ -337,7 +345,7 @@ public sealed partial class MainForm : Form
         actions.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
         actions.Controls.Add(MakeButton("Updates", OpenUniversalUpdater, 120));
         actions.Controls.Add(MakeButton("History", OpenCampaignHistory, 118));
-        _status.Text = "Ready";
+        _status.Text = "Ready — add images or open a project";
         _status.ForeColor = Color.DimGray;
         _status.AutoSize = true;
         _status.Margin = new Padding(22, 9, 0, 0);
@@ -452,6 +460,7 @@ public sealed partial class MainForm : Form
         _startDate.Enabled = _startTime.Enabled =
             project.ScheduleMode != CampaignScheduleMode.SpecificDates;
         _projectDirty = false;
+        _workflowStep = 0;
         UpdateCompanyBanner();
         UpdateRows();
     }
@@ -732,7 +741,7 @@ public sealed partial class MainForm : Form
         if (snapshot is null)
         {
             UiStyle.ApplyStatus(_adConnectionStatus,
-                "NOT CONNECTED — select Step 1 before GPO deployment.",
+                "AD not connected — local editing works. Connect only for GPO deployment.",
                 UiStatusKind.Warning);
             UpdateWorkflow();
             return;
