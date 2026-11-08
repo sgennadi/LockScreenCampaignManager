@@ -32,7 +32,8 @@ assert "ParseClientType(String(args, \"clientType\"))" in plan
 assert "requestedClient" in plan and "package.ClientType" in plan
 assert '"ClassicStartupCmd"' in apply and '"PowerShellStartup"' in apply
 assert '"scripts.ini"' in apply and '"psscripts.ini"' in apply
-assert '"Start-LockScreen-Agent.cmd"' in apply
+assert '"Start-LockScreen-Agent.cmd"' not in apply
+assert '0Parameters=--client-agent Install' in apply
 assert '--client-agent Install' in apply
 assert "RegisterStartup(ldap, gpoDn" in apply
 assert "ReadManagedGpo" in managed and '"scripts.ini"' in managed
