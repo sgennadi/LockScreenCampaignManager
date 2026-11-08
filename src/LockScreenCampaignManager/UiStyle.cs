@@ -153,7 +153,8 @@ internal static class UiStyle
     {
         bool primary = Equals(b.Tag, "PrimaryAction") || b.ForeColor == Color.White ||
             b.BackColor == Color.FromArgb(24,102,190) || b.BackColor == Accent;
-        if (b.Image is null && !string.IsNullOrWhiteSpace(b.Text) &&
+        if (b.Image is null && !Equals(b.Tag, "NoIcon") &&
+            !string.IsNullOrWhiteSpace(b.Text) &&
             b.Text is not "↑" and not "↓")
         {
             b.Image = UiGlyphs.ForButton(b.Text);
