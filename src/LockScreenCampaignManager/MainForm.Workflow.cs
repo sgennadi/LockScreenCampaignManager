@@ -172,7 +172,7 @@ public sealed partial class MainForm
         {
             0 => AdReady ? "AD connected" : "Connect to AD...",
             1 => "Add images...",
-            2 => "Arrange images...",
+            2 => "Review order / Schedule...",
             3 => "Edit schedule...",
             4 => "Validate / save...",
             _ => AdReady ? "GPO deployment..." : "Connect to AD..."
@@ -234,6 +234,37 @@ public sealed partial class MainForm
             ? "Final stage: connect to AD (if needed), then choose OU/group and check GPO rights."
             : "Step " + (_workflowStep + 1) + ": follow the highlighted action above.";
         UpdateWorkflow();
+    }
+
+    // The primary Wizard action must move the user forward. Advanced image
+    // operations remain in the Arrange / edit menu beside the image grid.
+    private void ReviewImageOrderAndContinue()
+    {
+        if (_project.ImagePaths.Count == 0)
+        {
+            _status.Text = "Choose at least one image to continue.";
+            _workflowStep = 1;
+            UpdateWorkflow();
+            return;
+        }
+
+        var answer = MessageBox.Show(this,
+            "Review the image order in the table.\n\n" +
+            "Yes: Continue to schedule.\n" +
+            "No: Open image arrangement tools.\n" +
+            "Cancel: Stay on this step.",
+            "Review image order", MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Question, MessageBoxDefaultButton.Button1);
+        if (answer == DialogResult.Yes)
+        {
+            _workflowStep = 3;
+            _status.Text = "Image order confirmed. Open Schedule to choose days and times.";
+            UpdateWorkflow();
+        }
+        else if (answer == DialogResult.No)
+        {
+            _arrangeImagesButton?.PerformClick();
+        }
     }
 
     private void SortImagesByFilename()
@@ -312,7 +343,7 @@ public sealed partial class MainForm
                 AddImages();
                 break;
             case 2:
-                _arrangeImagesButton?.PerformClick();
+                ReviewImageOrderAndContinue();
                 break;
             case 3:
                 OpenScheduleEditor();
