@@ -57,34 +57,51 @@ internal sealed class UniversalUpdaterWindow : Form
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterParent;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(700, 510);
-        Size = new Size(900, 625);
+        MinimumSize = new Size(800, 590);
+        Size = new Size(950, 705);
+        BackColor = UiStyle.Canvas;
 
         var layout = new TableLayoutPanel {
-            Dock = DockStyle.Fill, Padding = new Padding(16),
-            ColumnCount = 1, RowCount = 6, AutoScroll = true
+            Dock = DockStyle.Fill, Padding = new Padding(18, 16, 18, 16),
+            ColumnCount = 1, RowCount = 5, BackColor = UiStyle.Canvas
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 106));
 
-        layout.Controls.Add(new Label {
-            Dock = DockStyle.Fill, AutoSize = false,
-            Text = "UniversalUpdater 0.1.0-rc.1 — manual release check and verified staging." +
-                Environment.NewLine +
-                "Operator-approved portable EXE installation, rollback on failure; no automatic GPO/gMSA changes."
-        }, 0, 0);
-        var channelRow = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true
+        var banner = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+            BackColor = UiStyle.Navy, Padding = new Padding(19, 12, 19, 10)
         };
-        channelRow.Controls.Add(new Label {
-            Text = "Release channel:", AutoSize = true, Margin = new Padding(4, 11, 12, 0)
-        });
+        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        banner.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        banner.Controls.Add(new Label {
+            Text = "UniversalUpdater",
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI Semibold", 17f), ForeColor = Color.White
+        }, 0, 0);
+        banner.Controls.Add(new Label {
+            Text = "Check release  >  Download & verify  >  Install & restart",
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 10f),
+            ForeColor = Color.FromArgb(224, 238, 255), AutoEllipsis = true
+        }, 0, 1);
+        layout.Controls.Add(banner, 0, 0);
+
+        var config = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
+            BackColor = UiStyle.Surface, Padding = new Padding(15, 12, 15, 9),
+            Margin = new Padding(0, 8, 0, 6)
+        };
+        config.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        config.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        config.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        config.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+
         _channel.DropDownStyle = ComboBoxStyle.DropDownList;
-        _channel.Width = 180;
         _channel.Items.AddRange(new object[] { "Preview + stable", "Stable only" });
         _channel.SelectedIndex = 0;
         _channel.SelectedIndexChanged += (_, _) => {
@@ -96,24 +113,15 @@ internal sealed class UniversalUpdaterWindow : Form
             _install.Enabled = false;
             _state.Text = "Channel changed. Select Check for updates.";
         };
-        channelRow.Controls.Add(_channel);
-        channelRow.Controls.Add(new Label {
-            Text = "Version: " + AppVersion.Current + " | " +
-                UpdateOptions.CurrentWindowsArchitecture(),
-            AutoSize = true, Margin = new Padding(22, 11, 0, 0)
-        });
-        layout.Controls.Add(channelRow, 0, 1);
+        config.Controls.Add(Field("Release channel", _channel), 0, 0);
+        config.Controls.Add(Field("Installed version / architecture",
+            new TextBox {
+                Text = AppVersion.Current + "    |    " +
+                    UpdateOptions.CurrentWindowsArchitecture(),
+                ReadOnly = true, TabStop = false
+            }), 1, 0);
 
-        var credentials = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true
-        };
-        credentials.Controls.Add(new Label {
-            Text = "GitHub read-only token (optional):", AutoSize = true,
-            Margin = new Padding(2, 9, 10, 0)
-        });
-        _sessionToken.Width = 275;
         _sessionToken.MaxLength = 512;
-        _sessionToken.Margin = new Padding(2, 5, 10, 0);
         _sessionToken.AccessibleName = "Optional GitHub read-only session token";
         _sessionToken.TextChanged += (_, _) => {
             if (_operation is not null) return;
@@ -125,48 +133,101 @@ internal sealed class UniversalUpdaterWindow : Form
             _install.Enabled = false;
             _state.Text = "Session credentials changed. Check for updates again.";
         };
-        credentials.Controls.Add(_sessionToken);
-        credentials.Controls.Add(new Label {
-            Text = "Contents: Read-only. Kept in this window only; never saved.",
-            AutoSize = true, ForeColor = UiStyle.Muted,
-            Margin = new Padding(2, 9, 0, 0)
-        });
-        layout.Controls.Add(credentials, 0, 2);
+        config.Controls.Add(Field("GitHub token (optional; never saved)", _sessionToken), 0, 1);
+        config.Controls.Add(Field("Repository", new TextBox {
+            Text = Repository + "  |  Public releases do not need a token",
+            ReadOnly = true, TabStop = false
+        }), 1, 1);
+        layout.Controls.Add(config, 0, 1);
 
+        var resultArea = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
+            BackColor = UiStyle.Surface, Padding = new Padding(12, 8, 12, 12),
+            Margin = new Padding(0, 3, 0, 6)
+        };
+        resultArea.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        resultArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        resultArea.Controls.Add(new Label {
+            Text = "Update results and verification details",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 11f),
+            ForeColor = UiStyle.Navy, TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
         _output.Dock = DockStyle.Fill;
+        _output.BackColor = Color.White;
+        _output.ForeColor = UiStyle.Foreground;
+        _output.BorderStyle = BorderStyle.FixedSingle;
         _output.ReadOnly = true;
         _output.Multiline = true;
         _output.WordWrap = true;
         _output.ScrollBars = ScrollBars.Vertical;
-        _output.Text = "Select Check for updates to query published GitHub Releases." +
+        _output.Font = new Font("Segoe UI", 10f);
+        _output.Text = "Check for updates to compare your installed version with GitHub Releases." +
             Environment.NewLine + Environment.NewLine +
-            "Public GitHub Releases work without a token. For private repositories only, " +
-            "an optional read-only token is scoped to api.github.com and never saved." +
+            "1. Check for updates (Stable or Preview)." + Environment.NewLine +
+            "2. Download & verify the matching architecture-specific package." +
+            Environment.NewLine +
+            "3. Install & restart after explicit confirmation. The old EXE is backed up." +
             Environment.NewLine + Environment.NewLine +
-            "Download & verify works with published assets whose name, SHA-256 digest, " +
-            "ZIP structure and EXE architecture match the pinned release profile. " +
-            "After verification, use Install & restart for a portable user-profile EXE. " +
-            "Admin-owned/gMSA copies cannot be modified by the in-app updater.";
-        layout.Controls.Add(_output, 0, 3);
+            "Updating the portable EXE never modifies GPO or gMSA installations.";
+        resultArea.Controls.Add(_output, 0, 1);
+        layout.Controls.Add(resultArea, 0, 2);
+
+        var statusPanel = new Panel {
+            Dock = DockStyle.Fill, BackColor = UiStyle.SoftBlue,
+            Padding = new Padding(13, 5, 13, 5),
+            Margin = new Padding(0, 0, 0, 5)
+        };
         _state.Dock = DockStyle.Fill;
         _state.AutoEllipsis = true;
-        _state.Text = "Idle — no network request until Check for updates.";
-        layout.Controls.Add(_state, 0, 4);
-        var buttons = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true
+        _state.TextAlign = ContentAlignment.MiddleLeft;
+        _state.ForeColor = UiStyle.Navy;
+        _state.Text = "Ready. No network request has been made.";
+        statusPanel.Controls.Add(_state);
+        layout.Controls.Add(statusPanel, 0, 3);
+
+        var buttons = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Padding = new Padding(4, 5, 4, 0)
         };
-        Configure(_check, "Check for updates", 180);
-        Configure(_download, "Download & verify", 180);
-        Configure(_install, "Install & restart", 170);
-        Configure(_releases, "Open releases", 143);
-        Configure(_backupStatus, "Backup status", 151);
-        Configure(_close, "Close", 110);
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+
+        var primary = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
+        };
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.4f));
+        Configure(_check, "1  Check for updates", 180);
+        Configure(_download, "2  Download & verify", 190);
+        Configure(_install, "3  Install & restart", 190);
+        _check.Tag = _download.Tag = _install.Tag = "NoIcon";
+        _check.BackColor = _install.BackColor = UiStyle.Accent;
+        _check.ForeColor = _install.ForeColor = Color.White;
         _download.Enabled = false;
         _install.Enabled = false;
-        buttons.Controls.AddRange(new Control[] {
-            _check, _download, _install, _backupStatus, _releases, _close
-        });
-        layout.Controls.Add(buttons, 0, 5);
+        primary.Controls.Add(_check, 0, 0);
+        primary.Controls.Add(_download, 1, 0);
+        primary.Controls.Add(_install, 2, 0);
+        buttons.Controls.Add(primary, 0, 0);
+
+        var secondary = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1
+        };
+        secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        secondary.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 1));
+        Configure(_releases, "Open releases", 155);
+        Configure(_backupStatus, "Backup status", 155);
+        Configure(_close, "Close", 125);
+        _releases.Tag = _backupStatus.Tag = _close.Tag = "NoIcon";
+        secondary.Controls.Add(_releases, 0, 0);
+        secondary.Controls.Add(_backupStatus, 1, 0);
+        secondary.Controls.Add(_close, 2, 0);
+        buttons.Controls.Add(secondary, 0, 1);
+        layout.Controls.Add(buttons, 0, 4);
         Controls.Add(layout);
 
         _check.Click += async (_, _) => await CheckAsync();
@@ -188,13 +249,31 @@ internal sealed class UniversalUpdaterWindow : Form
         UiWindowPlacement.Attach(this, "updater");
     }
 
+    private static TableLayoutPanel Field(string caption, Control control)
+    {
+        var holder = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(4, 1, 12, 3)
+        };
+        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        holder.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        holder.Controls.Add(new Label {
+            Text = caption, Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
+            AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        control.Dock = DockStyle.Fill;
+        control.Margin = new Padding(0, 1, 0, 1);
+        holder.Controls.Add(control, 0, 1);
+        return holder;
+    }
+
     private static void Configure(Button button, string title, int width)
     {
         button.Text = title;
-        button.Width = width;
-        button.Height = 35;
+        button.Dock = DockStyle.Fill;
+        button.Height = 39;
         button.AutoEllipsis = true;
-        button.Margin = new Padding(2, 3, 8, 0);
+        button.Margin = new Padding(4, 3, 8, 3);
     }
 
     internal static UpdateOptions PinnedOptions(UpdateChannel channel)
