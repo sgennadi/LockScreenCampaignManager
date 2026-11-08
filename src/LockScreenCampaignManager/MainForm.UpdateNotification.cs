@@ -139,7 +139,7 @@ public sealed partial class MainForm
         _updateNotice.ForeColor = Color.FromArgb(89, 55, 9);
         _updateNotice.FlatAppearance.BorderColor = Color.FromArgb(206, 145, 43);
         _updateNotice.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 211, 124);
-        _updateNotice.Tag = "NoIcon";
+        _updateNotice.Tag = "UpdateNotice";
     }
 
     private void FitUpdateNotice()

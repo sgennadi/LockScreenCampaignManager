@@ -259,9 +259,12 @@ internal static class UiStyle
 
     private static void Decorate(Button b, UiPreferences preferences)
     {
-        bool primary = Equals(b.Tag, "PrimaryAction") || b.ForeColor == Color.White ||
-            b.BackColor == Color.FromArgb(24,102,190) || b.BackColor == Accent;
+        bool isUpdate = Equals(b.Tag, "UpdateNotice");
+        bool primary = !isUpdate && (Equals(b.Tag, "PrimaryAction") ||
+            b.ForeColor == Color.White ||
+            b.BackColor == Color.FromArgb(24,102,190) || b.BackColor == Accent);
         if (b.Image is null && !Equals(b.Tag, "NoIcon") &&
+            !isUpdate &&
             !string.IsNullOrWhiteSpace(b.Text) &&
             b.Text is not "↑" and not "↓")
         {
@@ -272,10 +275,14 @@ internal static class UiStyle
         b.FlatStyle = FlatStyle.Flat;
         b.UseVisualStyleBackColor = false;
         b.FlatAppearance.BorderSize = 1;
-        b.BackColor = primary ? Accent : Surface;
-        b.ForeColor = primary ? Color.White : Foreground;
-        b.FlatAppearance.BorderColor = primary ? Accent : Border;
-        b.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(12,70,180) : SoftBlue;
+        b.BackColor = isUpdate ? Color.FromArgb(255, 230, 173) :
+            primary ? Accent : Surface;
+        b.ForeColor = isUpdate ? Color.FromArgb(89, 55, 9) :
+            primary ? Color.White : Foreground;
+        b.FlatAppearance.BorderColor = isUpdate ? Color.FromArgb(206, 145, 43) :
+            primary ? Accent : Border;
+        b.FlatAppearance.MouseOverBackColor = isUpdate ? Color.FromArgb(255, 211, 124) :
+            primary ? Color.FromArgb(12,70,180) : SoftBlue;
         int needed = TextRenderer.MeasureText(b.Text, b.Font).Width +
             (b.Image is null ? 24 : 52);
         if (b.Dock is not (DockStyle.Top or DockStyle.Bottom or DockStyle.Fill))

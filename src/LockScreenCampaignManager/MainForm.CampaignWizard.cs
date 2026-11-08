@@ -64,6 +64,7 @@ public sealed partial class MainForm
         private readonly Button _next = new();
         private readonly Button _close = new();
         private readonly Button _updateAvailable = new();
+        private readonly ToolTip _updateHelp = new() { AutoPopDelay = 20000 };
         private readonly Label _footnote = new();
         private ListBox? _images;
         private RadioButton? _connectChoice;
@@ -237,11 +238,9 @@ public sealed partial class MainForm
             _updateAvailable.Visible = version is not null;
             if (version is null) return;
             _updateAvailable.Text = "Update " + version;
-            _updateAvailable.BackColor = Color.FromArgb(255, 230, 173);
-            _updateAvailable.ForeColor = Color.FromArgb(89, 55, 9);
-            _updateAvailable.FlatAppearance.BorderColor = Color.FromArgb(206, 145, 43);
-            new ToolTip { AutoPopDelay = 20000 }.SetToolTip(
-                _updateAvailable, _owner.AvailableUpdateSummary);
+            _updateAvailable.Tag = "UpdateNotice";
+            UiStyle.Apply(_updateAvailable);
+            _updateHelp.SetToolTip(_updateAvailable, _owner.AvailableUpdateSummary);
         }
 
         internal void ShowPageForSmokeTest(int page)
@@ -379,6 +378,7 @@ public sealed partial class MainForm
                     _owner._project.ImagePaths.Count + " image(s) selected";
                 _host.ResumeLayout(true);
                 UiStyle.Apply(this);
+                UpdateAvailableNotice();
                 FitHeader();
             }
             finally { _editingPage = false; }
