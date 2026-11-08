@@ -168,6 +168,53 @@ internal static class UiStyle
         }
         finally { form.ResumeLayout(true); }
     }
+    // Keep both rows of a dark Wizard header independently DPI-aware.
+    // The parent table's absolute header row must grow together with the
+    // child rows; growing only the child caused the subtitle to be clipped.
+    internal static void FitWizardHeader(TableLayoutPanel parent,
+        TableLayoutPanel header, Label title, Label subtitle, int minimumHeight)
+    {
+        if (parent.IsDisposed || header.IsDisposed ||
+            title.IsDisposed || subtitle.IsDisposed) return;
+        if (parent.RowStyles.Count == 0 || header.RowStyles.Count < 2) return;
+
+        static int Required(Label label, int extra) =>
+            TextRenderer.MeasureText("Agpqy", label.Font,
+                new Size(4096, 4096),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+            label.Margin.Vertical + label.Padding.Vertical + extra;
+
+        int titleHeight = Math.Max(Required(title, 17), 45);
+        int subtitleHeight = Math.Max(Required(subtitle, 15), 34);
+        int totalHeight = Math.Max(minimumHeight,
+            titleHeight + subtitleHeight + header.Padding.Vertical +
+            header.Margin.Vertical + 10);
+        if (header.RowStyles[0].SizeType != SizeType.Absolute ||
+            header.RowStyles[0].Height < titleHeight)
+        {
+            header.RowStyles[0].SizeType = SizeType.Absolute;
+            header.RowStyles[0].Height = titleHeight;
+        }
+        if (header.RowStyles[1].SizeType != SizeType.Absolute ||
+            header.RowStyles[1].Height < subtitleHeight)
+        {
+            header.RowStyles[1].SizeType = SizeType.Absolute;
+            header.RowStyles[1].Height = subtitleHeight;
+        }
+        if (parent.RowStyles[0].SizeType != SizeType.Absolute ||
+            parent.RowStyles[0].Height < totalHeight)
+        {
+            parent.RowStyles[0].SizeType = SizeType.Absolute;
+            parent.RowStyles[0].Height = totalHeight;
+        }
+    }
+
+    internal static void DecorateForWizard(Button button, bool primary)
+    {
+        button.Tag = primary ? "PrimaryAction" : "NoIcon";
+        Decorate(button, Preferences);
+    }
+
     private static void Decorate(Button b, UiPreferences preferences)
     {
         bool primary = Equals(b.Tag, "PrimaryAction") || b.ForeColor == Color.White ||
