@@ -363,7 +363,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 226));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 153));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -813,6 +813,7 @@ internal sealed class AdConnectionStartDialog : Form
             ? "Selected AD account: " + (string.IsNullOrWhiteSpace(_user.Text)
                 ? "Not configured" : _user.Text.Trim())
             : "Signed-in Windows identity: " + CurrentWindowsIdentity();
+        _tips.SetToolTip(_activeIdentity, _activeIdentity.Text);
         if (!_alternate.Checked) _password.Clear();
     }
 
