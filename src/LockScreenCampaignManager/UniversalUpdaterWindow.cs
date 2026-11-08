@@ -41,6 +41,7 @@ internal sealed class UniversalUpdaterWindow : Form
     private readonly Label _state = new();
     private readonly Button _check = new();
     private readonly Button _download = new();
+    private readonly Button _install = new();
     private readonly Button _releases = new();
     private readonly Button _backupStatus = new();
     private readonly Button _close = new();
@@ -48,6 +49,7 @@ internal sealed class UniversalUpdaterWindow : Form
     private UpdateOptions? _options;
     private CancellationTokenSource? _operation;
     private string? _stagedPath;
+    private StagedPackage? _staged;
 
     internal UniversalUpdaterWindow()
     {
@@ -67,13 +69,13 @@ internal sealed class UniversalUpdaterWindow : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 91));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
 
         layout.Controls.Add(new Label {
             Dock = DockStyle.Fill, AutoSize = false,
             Text = "UniversalUpdater 0.1.0-rc.1 — manual release check and verified staging." +
                 Environment.NewLine +
-                "Repository is fixed; no unattended EXE replacement, password storage or changes to GPO/gMSA."
+                "Operator-approved portable EXE installation, rollback on failure; no automatic GPO/gMSA changes."
         }, 0, 0);
         var channelRow = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true
@@ -89,7 +91,9 @@ internal sealed class UniversalUpdaterWindow : Form
             _options = null;
             _available = null;
             _stagedPath = null;
+            _staged = null;
             _download.Enabled = false;
+            _install.Enabled = false;
             _state.Text = "Channel changed. Select Check for updates.";
         };
         channelRow.Controls.Add(_channel);
@@ -138,7 +142,8 @@ internal sealed class UniversalUpdaterWindow : Form
             Environment.NewLine + Environment.NewLine +
             "Download & verify works with published assets whose name, SHA-256 digest, " +
             "ZIP structure and EXE architecture match the pinned release profile. " +
-            "The verified package is staged locally, never automatically installed.";
+            "After verification, use Install & restart for a portable user-profile EXE. " +
+            "Admin-owned/gMSA copies cannot be modified by the in-app updater.";
         layout.Controls.Add(_output, 0, 3);
         _state.Dock = DockStyle.Fill;
         _state.AutoEllipsis = true;
@@ -149,18 +154,21 @@ internal sealed class UniversalUpdaterWindow : Form
         };
         Configure(_check, "Check for updates", 180);
         Configure(_download, "Download & verify", 180);
+        Configure(_install, "Install & restart", 170);
         Configure(_releases, "Open releases", 143);
         Configure(_backupStatus, "Backup status", 151);
         Configure(_close, "Close", 110);
         _download.Enabled = false;
+        _install.Enabled = false;
         buttons.Controls.AddRange(new Control[] {
-            _check, _download, _backupStatus, _releases, _close
+            _check, _download, _install, _backupStatus, _releases, _close
         });
         layout.Controls.Add(buttons, 0, 5);
         Controls.Add(layout);
 
         _check.Click += async (_, _) => await CheckAsync();
         _download.Click += async (_, _) => await DownloadAsync();
+        _install.Click += (_, _) => InstallAndRestart();
         _releases.Click += (_, _) => OpenReleases();
         _backupStatus.Click += async (_, _) => await InspectBackupAsync();
         _close.Click += (_, _) => {
@@ -214,6 +222,7 @@ internal sealed class UniversalUpdaterWindow : Form
         options.Validate();
         _available = null;
         _stagedPath = null;
+        _staged = null;
         _options = options;
         SetWorking("Checking GitHub Releases...");
         try
@@ -242,7 +251,7 @@ internal sealed class UniversalUpdaterWindow : Form
                     Environment.NewLine + Environment.NewLine +
                     "Release notes:" + Environment.NewLine +
                     (found.ReleaseNotes.Length > 6000 ? found.ReleaseNotes[..6000] : found.ReleaseNotes);
-                _state.Text = "New release available. Download is optional; installation is manual.";
+                _state.Text = "New release available. Download and verify before installing.";
             }
         }
         catch (OperationCanceledException)
@@ -285,6 +294,7 @@ internal sealed class UniversalUpdaterWindow : Form
                 options, selected, progress, _operation!.Token,
                 _sessionToken.Text.Length == 0 ? null : _sessionToken.Text);
             _stagedPath = staged.ArchivePath;
+            _staged = staged;
             var signature = staged.ExtractedExecutablePath is not null
                 ? await Task.Run(() => WindowsAuthenticodeAudit.Inspect(
                     staged.ExtractedExecutablePath))
@@ -299,17 +309,16 @@ internal sealed class UniversalUpdaterWindow : Form
                 Environment.NewLine + "Archive SHA-256: " + staged.ArchiveSha256 +
                 Environment.NewLine + "EXE SHA-256: " + staged.ExtractedExecutableSha256 +
                 Environment.NewLine + Environment.NewLine +
-                "Nothing was installed. GitHub SHA-256 checks integrity, not publisher trust. " +
-                "Even a trusted Authenticode signature requires a pinned publisher for unattended installation." +
-                Environment.NewLine + "Use an approved offline install process after stopping gMSA. " +
-                "Then open Configure gMSA > Install / Repair and run readiness checks.";
+                "Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
+                "For a user-profile portable EXE, click Install & restart and approve the unsigned publisher warning. " +
+                "Administrator-owned and gMSA copies require a separate maintenance window.";
             _state.Text = signature.Trusted
-                ? "Staged and Authenticode verified; publisher pinning / installation is manual."
-                : "Hash verified, but Authenticode untrusted; DO NOT auto-install.";
-            MessageBox.Show(this, "The local staging folder contains a SHA-256-verified package." +
+                ? "Verified package ready: choose Install & restart."
+                : "Unsigned/untrusted publisher: installation requires explicit operator approval.";
+            MessageBox.Show(this, "Verified update package is ready. Choose Install & restart to apply it." +
                 Environment.NewLine + "Authenticode: " +
                 (signature.Trusted ? "trusted" : "not verified") +
-                ". Installation remains manual.",
+                ". No update is applied without your approval.",
                 "UniversalUpdater", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
@@ -326,6 +335,47 @@ internal sealed class UniversalUpdaterWindow : Form
                 "For public releases no token is needed; private assets require a scoped read-only token.";
         }
         finally { FinishWorking(); }
+    }
+
+    private void InstallAndRestart()
+    {
+        if (_operation is not null || _staged is null || _options is null) return;
+        string exe = Application.ExecutablePath;
+        var answer = MessageBox.Show(this,
+            "Install this verified update and restart LockScreen Campaign Manager?" +
+            Environment.NewLine + Environment.NewLine +
+            "The current portable EXE will be saved as .bak. The updater waits " +
+            "until the manager exits, checks SHA-256, replaces the EXE, runs the " +
+            "offline self-test and restores the backup on failure." +
+            Environment.NewLine + Environment.NewLine +
+            "GitHub release hashes do NOT prove publisher identity. These preview builds " +
+            "are unsigned. Continue only if you trust the official project release." +
+            Environment.NewLine + Environment.NewLine +
+            "Existing gMSA tasks and administrator-owned installations are NOT updated. " +
+            "Save your campaign first; any unsaved changes will be confirmed on closing.",
+            "Install verified portable update?", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes) return;
+        try
+        {
+            PortableUpdateCoordinator.Launch(_staged, _options);
+            _state.Text = "Update helper launched. Closing manager for replacement...";
+            BeginInvoke(new Action(() => {
+                Close();
+                Application.Exit();
+            }));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex, "Portable updater launch");
+            _state.Text = "Installation not started: " +
+                UniversalDiagnosticsEmbedded.Clean(ex.Message, 230);
+            MessageBox.Show(this,
+                "In-app updates require a writable portable EXE in your user profile. " +
+                "Administrator-owned/gMSA installations must be updated separately." +
+                Environment.NewLine + UniversalDiagnosticsEmbedded.Clean(ex.Message, 220),
+                "Update was not installed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private async Task InspectBackupAsync()
@@ -380,6 +430,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _state.Text = state;
         _check.Enabled = false;
         _download.Enabled = false;
+        _install.Enabled = false;
         _channel.Enabled = false;
         _sessionToken.Enabled = false;
         _backupStatus.Enabled = false;
@@ -393,6 +444,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _check.Enabled = true;
         _download.Enabled = _available is not null && _options is not null &&
             string.IsNullOrEmpty(_stagedPath);
+        _install.Enabled = _staged is not null && _options is not null;
         _channel.Enabled = true;
         _sessionToken.Enabled = true;
         _backupStatus.Enabled = true;
