@@ -69,12 +69,19 @@ assert 'RunImpersonated' in multi_dc and 'LOGON_NETCREDENTIALS_ONLY' in multi_dc
 assignment = (project / 'NativeComputerGroupAssignment.cs').read_text(encoding='utf-8')
 assert 'NativeComputerGroupAssignment.Execute(mode, request, credentials)' in runner
 assert 'LockScreenCampaignManager.ComputerGroupAssignment.ps1' not in csproj
-# The lightweight read-only inherited GPO candidate Scan is native C#;
-# Effective/VerifyEndpoint/VerifyEvidence retain legacy security scope.
+# All conflict scans, scoped effective candidates and read-only
+# endpoint/evidence modes are now native. Reference PS1 stays outside EXE.
 native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='utf-8')
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
-assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+assert 'NativeGpoEffectiveAudit.Execute(mode, request, credentials)' in runner
+assert 'NativeGpoEndpointAudit.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.GpoConflictScan.ps1' not in csproj
+native_endpoint = (project / 'NativeGpoEndpointAudit.cs').read_text(encoding='utf-8')
+for guard in ('VerifyEndpoint', 'VerifyEvidence', 'RegistryView.Registry64',
+              'ReadRsop', 'ReadImage', 'RunImpersonated',
+              'SHA256.HashData', 'NativeGpoEffectiveAudit.Execute'):
+    assert guard in native_endpoint, guard
 # Deployment Plan and guarded Apply are now native C# and Windows GPO COM.
 # Both must validate the selected DC, OU, security group and package hashes.
 native_deploy_plan = (project / 'NativeGpoDeploymentPlan.cs').read_text(encoding='utf-8')
