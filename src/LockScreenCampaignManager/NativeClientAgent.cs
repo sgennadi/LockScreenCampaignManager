@@ -525,6 +525,7 @@ internal static partial class NativeClientAgent
             completed ? "Completed" :
             missing.Count > 0 || corrupt.Count > 0 || !manifestOk || !agentOk ||
             taskPresent == false || (index >= 0 && registryMatches == false) ||
+            (index >= 0 && (backupStatus != "Valid" || ownerStatus != "Owned")) ||
             ownerStatus == "AnotherCampaign" ? "RepairNeeded" :
             taskPresent is null || (index >= 0 && registryMatches is null)
                 ? "Unknown" : "Healthy";
