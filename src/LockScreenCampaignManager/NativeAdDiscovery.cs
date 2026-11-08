@@ -308,33 +308,53 @@ internal static class NativeAdDiscovery
         string key = effectiveLogin.Contains('@') ? "userPrincipalName" : "sAMAccountName";
         string filter = "(&(objectCategory=person)(objectClass=user)(" +
             key + "=" + EscapeFilter(effectiveLogin) + "))";
-        var users = Search(ldap, baseDn, filter, 2, "objectSid", "tokenGroups");
+        var users = Search(ldap, baseDn, filter, 2, "objectSid", "distinguishedName");
         if (users.Count != 1)
             throw new InvalidOperationException("Cannot resolve exactly one AD account for permission checks.");
 
+        // tokenGroups is a computed attribute: request it directly on the
+        // resolved user (BASE search), not on a subtree enumeration. Without
+        // complete group SIDs the result must remain UNKNOWN rather than DENIED.
+        var tokenRequest = new SearchRequest(users[0].DistinguishedName,
+            "(objectClass=user)", SearchScope.Base, "tokenGroups");
+        var tokenResponse = (SearchResponse)ldap.SendRequest(tokenRequest);
+        bool tokensComplete = tokenResponse.Entries.Count == 1 &&
+            tokenResponse.Entries[0].Attributes.Contains("tokenGroups");
         var principals = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "S-1-1-0", "S-1-5-11" };
         principals.Add(new SecurityIdentifier(BinaryAttr(users[0], "objectSid"), 0).Value);
-        if (users[0].Attributes.Contains("tokenGroups"))
+        if (tokensComplete)
         {
-            var tokens = users[0].Attributes["tokenGroups"];
-            if (tokens is not null)
+            var tokens = tokenResponse.Entries[0].Attributes["tokenGroups"];
+            if (tokens is null) tokensComplete = false;
+            else
                 foreach (object token in tokens)
-                    if (token is byte[] binary)
-                        principals.Add(new SecurityIdentifier(binary, 0).Value);
+                {
+                    if (token is not byte[] binary)
+                    {
+                        tokensComplete = false;
+                        break;
+                    }
+                    principals.Add(new SecurityIdentifier(binary, 0).Value);
+                }
         }
 
-        var policiesAcl = ReadAcl(ldap, "CN=Policies,CN=System," + baseDn);
-        string create = EffectiveAclHint(policiesAcl, principals, 1,
-            Guid.Parse("f30e3bc2-9ff0-11d1-b603-0000f80367c1"));
-        string link = hasOu
-            ? EffectiveAclHint(ReadAcl(ldap, targetOu), principals, 32,
-                Guid.Parse("f30e3bc1-9ff0-11d1-b603-0000f80367c1"))
-            : "REQUIRES_OU_SELECTION";
+        string create = "UNKNOWN_INCOMPLETE_TOKEN";
+        string link = hasOu ? "UNKNOWN_INCOMPLETE_TOKEN" : "REQUIRES_OU_SELECTION";
+        if (tokensComplete)
+        {
+            var policiesAcl = ReadAcl(ldap, "CN=Policies,CN=System," + baseDn);
+            create = EffectiveAclHint(policiesAcl, principals, 1,
+                Guid.Parse("f30e3bc2-9ff0-11d1-b603-0000f80367c1"));
+            if (hasOu)
+                link = EffectiveAclHint(ReadAcl(ldap, targetOu), principals, 32,
+                    Guid.Parse("f30e3bc1-9ff0-11d1-b603-0000f80367c1"));
+        }
         return new
         {
             domain, dc, user = login, readOnly = true, dcWritable = writable,
             gpoCreateAce = create, ouGpoLinkAce = link,
+            groupTokenComplete = tokensComplete,
             sysvolWrite = "NOT_CHECKED_NO_WRITES", fullPermissionVerified = false,
             message = "Read-only ACE hints only; GPO COM and SYSVOL rights remain unverified."
         };
