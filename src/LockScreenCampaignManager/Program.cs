@@ -8,6 +8,21 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--self-test-exit-probe", StringComparer.OrdinalIgnoreCase))
+            return 37; // CI verifies that WinExe exit codes propagate to PowerShell.
+
+        if (args.Contains("--diagnostics-self-test", StringComparer.OrdinalIgnoreCase))
+        {
+            try { SelfTests.RunDiagnosticsOnly(); return 0; }
+            catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        }
+
+        if (args.Contains("--updater-self-test", StringComparer.OrdinalIgnoreCase))
+        {
+            try { SelfTests.RunUpdaterOnly(); return 0; }
+            catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        }
+
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             try { SelfTests.Run(); return 0; }
