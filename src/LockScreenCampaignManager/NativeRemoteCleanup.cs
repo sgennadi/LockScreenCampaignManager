@@ -79,9 +79,7 @@ internal static class NativeRemoteCleanup
             if (problem is not null) return Finish("NeedsReview", problem);
             receipt = true;
 
-            tasks = !TaskExists(host, "LockScreen-LS-" + campaignId) &&
-                    !TaskExists(host, "LockScreen-LS-Feedback-" + campaignId) &&
-                    !TaskExists(host, "LSCM-Now-" + campaignId);
+            tasks = TasksGone(host, campaignId);
             if (!tasks) return Finish("Pending", "CampaignTaskStillPresent");
 
             using var registry = RegistryKey.OpenRemoteBaseKey(
@@ -219,7 +217,7 @@ internal static class NativeRemoteCleanup
         return System.Text.Encoding.UTF8.GetString(bytes);
     }
 
-    private static bool TaskExists(string host, string name)
+    private static bool TasksGone(string host, string campaignId)
     {
         object? service = null;
         object? root = null;
@@ -230,15 +228,35 @@ internal static class NativeRemoteCleanup
             service = Activator.CreateInstance(server) ??
                 throw new InvalidOperationException("Cannot activate Task Scheduler COM.");
             Call(service, "Connect", host);
-            root = Call(service, "GetFolder", @"\");
+            root = Call(service, "GetFolder", @"\\");
             if (root is null) throw new InvalidDataException("Task Scheduler root unavailable.");
-            try { return Call(root, "GetTask", name) is not null; }
-            catch (TargetInvocationException ex) when
-                (ex.InnerException is COMException com &&
-                 unchecked((uint)com.HResult) == 0x80070002)
+            foreach (string task in new[]
             {
-                return false; // Task genuinely missing, not RPC inaccessible.
+                "LockScreen-LS-" + campaignId,
+                "LockScreen-LS-Feedback-" + campaignId,
+                "LSCM-Now-" + campaignId
+            })
+            {
+                object? found = null;
+                try
+                {
+                    found = Call(root, "GetTask", task);
+                    if (found is not null) return false;
+                }
+                catch (TargetInvocationException ex) when
+                    (ex.InnerException is COMException com &&
+                     unchecked((uint)com.HResult) == 0x80070002)
+                {
+                    // Genuine not found from Task Scheduler, not an RPC error.
+                }
+                catch (COMException ex) when
+                    (unchecked((uint)ex.HResult) == 0x80070002)
+                {
+                    // Some COM dispatchers propagate the HRESULT directly.
+                }
+                finally { Release(found); }
             }
+            return true;
         }
         finally
         {
