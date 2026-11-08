@@ -72,11 +72,10 @@ public sealed partial class MainForm
         var result = dialog.ShowDialog(this);
         if (result == DialogResult.Yes)
         {
-            _workflowStep = NextWizardPreparationStep();
-            SetWorkflowMode(false);
-            _status.Text = _workflowStep == 0
-                ? "Wizard: connect to AD first, or choose Skip AD to prepare locally."
-                : "Wizard: arrange imported images, then set the schedule.";
+            // Enter the full six-page Campaign Wizard rather than exposing
+            // in-editor controls as an incomplete second navigation route.
+            StartGuidedCampaignWizard();
+            _status.Text = "Campaign Wizard closed. Reopen it using Wizard.";
         }
         else if (result == DialogResult.No)
         {

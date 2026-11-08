@@ -77,7 +77,7 @@ public sealed partial class MainForm : Form
         }
         RestoreWindow();
         UiStyle.Apply(this);
-        SetWorkflowMode(false);
+        SetWorkflowMode(true);
         // Start guided onboarding after the main form is visible. Cancel keeps
         // the local editor open; no automatic AD authentication is attempted.
         Shown += (_, _) => {
@@ -173,7 +173,7 @@ public sealed partial class MainForm : Form
         _wizardMode.Text = "Wizard";
         _wizardMode.Width = 95;
         _wizardMode.Height = 35;
-        _wizardMode.Click += (_, _) => { _workflowStep = NextWizardPreparationStep(); SetWorkflowMode(false); };
+        _wizardMode.Click += (_, _) => StartGuidedCampaignWizard();
         _advancedModeButton.Text = "Advanced";
         _advancedModeButton.Width = 110;
         _advancedModeButton.Height = 35;
@@ -635,7 +635,7 @@ public sealed partial class MainForm : Form
         {
             // Edit the schedule after choosing images; preserve the selected order.
             using var editor = new CampaignScheduleDialog(_project);
-            if (editor.ShowDialog(this) != DialogResult.OK ||
+            if (editor.ShowDialog(CampaignDialogOwner) != DialogResult.OK ||
                 editor.ResultProject is not { } edited) return;
             _project = edited;
             _loading = true;
@@ -663,7 +663,7 @@ public sealed partial class MainForm : Form
             Title = "Add multiple lock screen image files", Multiselect = true,
             Filter = "Images (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp"
         };
-        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        if (picker.ShowDialog(CampaignDialogOwner) != DialogResult.OK) return;
         try { AppendImages(picker.FileNames); }
         catch (Exception ex) { UiErrorDialog.Show(this, "Add image files", ex); }
     }
@@ -674,13 +674,13 @@ public sealed partial class MainForm : Form
             Description = "Select a folder containing lock screen JPG, PNG or BMP images.",
             UseDescriptionForTitle = true, ShowNewFolderButton = false
         };
-        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        if (picker.ShowDialog(CampaignDialogOwner) != DialogResult.OK) return;
         try
         {
             var files = ImageFilenameMatcher.ScanFolder(picker.SelectedPath);
             int before = _project.ImagePaths.Count;
             AppendImages(files);
-            if (_project.ImagePaths.Count > before &&
+            if (_project.ImagePaths.Count > before && _activeCampaignWizard is null &&
                 MessageBox.Show(this,
                     "Images imported. Arrange their order now before setting the schedule?",
                     "Next: arrange images", MessageBoxButtons.YesNo,
@@ -804,7 +804,7 @@ public sealed partial class MainForm : Form
             Title = "Save campaign project", Filter = "Campaign project (*.json)|*.json",
             FileName = CampaignSchedule.BuildId(_project) + ".project.json"
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return false;
+        if (dialog.ShowDialog(CampaignDialogOwner) != DialogResult.OK) return false;
         try
         {
             File.WriteAllText(dialog.FileName,
@@ -900,7 +900,7 @@ public sealed partial class MainForm : Form
         try
         {
             using var dialog = new AdConnectionStartDialog(_company);
-            if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Snapshot is { } incoming)
+            if (dialog.ShowDialog(CampaignDialogOwner) == DialogResult.OK && dialog.Snapshot is { } incoming)
             {
                 SetAdSnapshot(incoming);
                 _sessionAdCredentials = dialog.ConnectedCredentials;
@@ -947,7 +947,7 @@ public sealed partial class MainForm : Form
             };
             using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot,
                 advanced, _sessionAdCredentials);
-            wizard.ShowDialog(this);
+            wizard.ShowDialog(CampaignDialogOwner);
         }
         catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
         catch (FileNotFoundException) {

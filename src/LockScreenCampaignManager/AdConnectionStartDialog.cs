@@ -296,7 +296,7 @@ internal sealed class AdConnectionStartDialog : Form
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 206));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
         Controls.Add(root);
@@ -305,21 +305,35 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, RowCount = 2, BackColor = UiStyle.Navy,
             Padding = new Padding(20, 12, 16, 8)
         };
+        title.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
         title.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-        title.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        title.Controls.Add(new Label {
+        var headerTitle = new Label {
+            Name = "AdWizardHeaderTitle",
             Text = "LockScreen Campaign Manager  |  AD Connection Wizard",
             Dock = DockStyle.Fill, ForeColor = Color.White,
+            TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI Semibold", 17f, FontStyle.Bold),
-            AutoEllipsis = false
-        }, 0, 0);
-        title.Controls.Add(new Label {
+            AutoEllipsis = true
+        };
+        var headerSubtitle = new Label {
+            Name = "AdWizardHeaderSubtitle",
             Text = "Read-only LDAP inventory first. No GPO changes, RSAT or WinRM.",
             Dock = DockStyle.Fill, ForeColor = Color.FromArgb(223,238,255),
-            Font = new Font("Segoe UI", 10f)
-        }, 0, 1);
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 10f),
+            AutoEllipsis = true
+        };
+        title.Controls.Add(headerTitle, 0, 0);
+        title.Controls.Add(headerSubtitle, 0, 1);
         root.Controls.Add(title, 0, 0);
         root.SetColumnSpan(title, 2);
+        void FitAdHeader() => UiStyle.FitWizardHeader(root, title,
+            headerTitle, headerSubtitle, 128);
+        headerTitle.FontChanged += (_, _) => FitAdHeader();
+        headerSubtitle.FontChanged += (_, _) => FitAdHeader();
+        Shown += (_, _) => FitAdHeader();
+        DpiChanged += (_, _) => BeginInvoke(new Action(FitAdHeader));
+        FitAdHeader();
 
         var rail = new TableLayoutPanel {
             Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1,

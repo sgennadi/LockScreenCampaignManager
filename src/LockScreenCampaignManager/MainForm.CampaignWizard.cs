@@ -21,7 +21,9 @@ public sealed partial class MainForm
             return;
         }
         _workflowStep = 0;
-        SetWorkflowMode(false);
+        // The editor remains in Advanced so the old six-step inline strip
+        // cannot compete with the modal Wizard navigation.
+        SetWorkflowMode(true);
         using var wizard = new CampaignWizardDialog(this);
         _activeCampaignWizard = wizard;
         try
@@ -37,7 +39,12 @@ public sealed partial class MainForm
 
     // Allows offline UI smoke tests to validate all six wizard pages
     // without ShowDialog, LDAP access or filesystem changes.
-    internal Form CreateCampaignWizardForSmokeTest() => new CampaignWizardDialog(this);
+    internal Form CreateCampaignWizardForSmokeTest(int page = 0)
+    {
+        var wizard = new CampaignWizardDialog(this);
+        wizard.ShowPageForSmokeTest(page);
+        return wizard;
+    }
 
     private sealed class CampaignWizardDialog : Form
     {
@@ -207,6 +214,12 @@ public sealed partial class MainForm
             RenderPage();
         }
 
+        internal void ShowPageForSmokeTest(int page)
+        {
+            _step = Math.Clamp(page, 0, 5);
+            RenderPage();
+        }
+
         private void FitHeader()
         {
             if (IsDisposed || _root.IsDisposed || _header.IsDisposed) return;
@@ -224,7 +237,11 @@ public sealed partial class MainForm
                 _offlineChoice = null;
                 _deployChoice = null;
                 _host.SuspendLayout();
-                _host.Controls.Clear();
+                foreach (Control old in _host.Controls.Cast<Control>().ToArray())
+                {
+                    _host.Controls.Remove(old);
+                    old.Dispose();
+                }
                 _subheading.Text = "Step " + (_step + 1) + " of 6  -  " + StepNames[_step][3..];
                 for (int i = 0; i < _rail.Length; i++)
                 {
@@ -240,9 +257,9 @@ public sealed partial class MainForm
                     Padding = new Padding(10, 7, 10, 9),
                     BackColor = UiStyle.Surface
                 };
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 77));
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
                 _host.Controls.Add(page);
@@ -328,8 +345,9 @@ public sealed partial class MainForm
                 _next.Enabled = _step is 0 or 5 || _owner._project.ImagePaths.Count > 0;
                 _footnote.Text = _step == 0 ? "AD sign-in is optional" :
                     _owner._project.ImagePaths.Count + " image(s) selected";
-                FitHeader();
                 _host.ResumeLayout(true);
+                UiStyle.Apply(this);
+                FitHeader();
             }
             finally { _editingPage = false; }
         }
