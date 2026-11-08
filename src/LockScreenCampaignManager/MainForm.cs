@@ -97,8 +97,8 @@ public sealed partial class MainForm : Form
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
             Location = Point.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 201));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
         viewport.Controls.Add(root);
@@ -107,8 +107,8 @@ public sealed partial class MainForm : Form
         {
             if (viewport.IsDisposed || root.IsDisposed) return;
             var visible = viewport.ClientSize;
-            var required = new Size(Math.Max(1030, visible.Width),
-                Math.Max(790, visible.Height));
+            var required = new Size(Math.Max(1070, visible.Width),
+                Math.Max(870, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -116,9 +116,9 @@ public sealed partial class MainForm : Form
         FitContentToViewport();
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 61));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(new Label {
             Text = "LockScreen Campaign Manager", AutoSize = false,
@@ -128,12 +128,16 @@ public sealed partial class MainForm : Form
         }, 0, 0);
         header.Controls.Add(new Label {
             Text = "1 Images    2 Arrange    3 Schedule    4 Save    5 Optional AD deployment",
-            AutoSize = true, ForeColor = UiStyle.Muted
+            AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
+            Margin = new Padding(3, 0, 0, 0)
         }, 0, 1);
         _companyLabel.Dock = DockStyle.Fill;
         _companyLabel.ForeColor = UiStyle.Accent;
         _companyLabel.Font = new Font("Segoe UI Semibold", 9.5f);
         _companyLabel.AutoEllipsis = true;
+        _companyLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _companyLabel.Margin = new Padding(3, 0, 0, 0);
         _companyLabel.Text = "LOCAL PROJECT — No organization selected; no AD privileges required";
         header.Controls.Add(_companyLabel, 0, 2);
         var adFirstStep = new TableLayoutPanel
@@ -189,7 +193,7 @@ public sealed partial class MainForm : Form
         var settings = PanelBox();
         var settingsFlow = new FlowLayoutPanel {
             Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true, Padding = new Padding(12, 12, 0, 4)
+            WrapContents = true, Padding = new Padding(12, 9, 0, 7)
         };
         settings.Controls.Add(settingsFlow);
         _name.Width = 235;
