@@ -3,7 +3,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$RequestPath,
     [Parameter(Mandatory=$true)][string]$ResponsePath,
-    [ValidateSet('Connect','DomainControllers','OUs','Groups','Users','Snapshot')]
+    [ValidateSet('Connect','DomainControllers','OUs','Groups','Users','Snapshot','Permissions')]
     [string]$Mode = 'Connect'
 )
 Set-StrictMode -Version 2.0
@@ -55,6 +55,77 @@ function Search-Entries {
         }
     } while ($cookie.Length -gt 0)
     return @($entries.ToArray())
+}
+# Read-only, conservative effective rights hints. The final SYSVOL/GPO COM
+# write cannot be proven without writing; never report FULLY AUTHORIZED.
+function Get-ReadOnlyDacl {
+    param($Connection,[string]$DistinguishedName)
+    $request = [System.DirectoryServices.Protocols.SearchRequest]::new(
+        $DistinguishedName,'(objectClass=*)',
+        [System.DirectoryServices.Protocols.SearchScope]::Base,
+        [string[]]@('nTSecurityDescriptor'))
+    [void]$request.Controls.Add(
+        [System.DirectoryServices.Protocols.SecurityDescriptorFlagControl]::new(
+            [System.DirectoryServices.Protocols.SecurityMasks]::Dacl))
+    $response = [System.DirectoryServices.Protocols.SearchResponse]$Connection.SendRequest($request)
+    if ($response.Entries.Count -ne 1 -or
+        -not $response.Entries[0].Attributes.Contains('nTSecurityDescriptor')) {
+        throw 'Directory security descriptor could not be inspected.'
+    }
+    $bytes = [byte[]]$response.Entries[0].Attributes['nTSecurityDescriptor'][0]
+    return [Security.AccessControl.RawSecurityDescriptor]::new($bytes,0)
+}
+function Get-PrincipalSids {
+    param($Connection,[string]$BaseDn,[string]$Login)
+    $name = $Login.Trim()
+    if ($name.Contains('\')) { $name = $name.Split('\')[-1] }
+    $filter = if ($name.Contains('@')) {
+        '(userPrincipalName=' + (Escape-Filter $name) + ')'
+    } else {
+        '(sAMAccountName=' + (Escape-Filter $name) + ')'
+    }
+    $users = @(Search-Entries $Connection $BaseDn
+        ('(&(objectCategory=person)(objectClass=user)' + $filter + ')')
+        @('objectSid','tokenGroups') 2)
+    if ($users.Count -ne 1) { throw 'Cannot resolve exact account to inspect permissions.' }
+    $sids = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    [void]$sids.Add('S-1-1-0')
+    [void]$sids.Add('S-1-5-11')
+    foreach ($key in @('objectSid','tokenGroups')) {
+        $attr = $users[0].Attributes[$key]
+        if ($null -eq $attr) { continue }
+        foreach ($raw in $attr) {
+            try {
+                $sid = [Security.Principal.SecurityIdentifier]::new([byte[]]$raw,0)
+                [void]$sids.Add($sid.Value)
+            } catch { }
+        }
+    }
+    return $sids
+}
+function Test-PotentialDirectoryAccess {
+    param($Descriptor,$Sids,[int]$DesiredMask,[guid]$ObjectType)
+    $allow=$false; $deny=$false
+    foreach ($ace in $Descriptor.DiscretionaryAcl) {
+        if ($ace -isnot [Security.AccessControl.QualifiedAce] -or
+            -not $Sids.Contains($ace.SecurityIdentifier.Value)) { continue }
+        $mask=[int64]$ace.AccessMask
+        $matching=(($mask -band 0x10000000) -ne 0) -or
+            (($mask -band $DesiredMask) -ne 0)
+        if (-not $matching) { continue }
+        if ($ace -is [Security.AccessControl.ObjectAce] -and
+            ($ace.ObjectAceFlags -band [Security.AccessControl.ObjectAceFlags]::ObjectAceTypePresent) -ne 0 -and
+            $ace.ObjectAceType -ne $ObjectType) { continue }
+        if ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessDenied) {
+            $deny=$true
+        } elseif ($ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed) {
+            $allow=$true
+        }
+    }
+    if ($deny) { return 'POSSIBLE_DENY' }
+    if ($allow) { return 'POTENTIAL_ALLOW' }
+    return 'NO_MATCHING_ALLOW'
 }
 function Escape-Filter {
     param([string]$Value)
@@ -179,6 +250,30 @@ try {
                 $result = @(Search-Entries $conn $baseDn '(&(objectCategory=group)(groupType:1.2.840.113556.1.4.803:=2147483648))' @('name','sAMAccountName','distinguishedName') 5000 | ForEach-Object {
                     [pscustomobject]@{ name=(Get-Attribute $_ 'name'); sam=(Get-Attribute $_ 'sAMAccountName'); dn=$_.DistinguishedName }
                 } | Sort-Object name)
+            }
+            'Permissions' {
+                $user = ([string]$req.user).Trim()
+                if (-not $user) { $user = [string]$env:USERNAME }
+                $ouDn = ([string]$req.ouDn).Trim()
+                if (-not $ouDn -or $ouDn -notlike ('*,' + $baseDn)) {
+                    throw 'Select an OU within this domain before rights preflight.'
+                }
+                $sids = Get-PrincipalSids $conn $baseDn $user
+                $policies = Get-ReadOnlyDacl $conn ('CN=Policies,CN=System,' + $baseDn)
+                $ouAcl = Get-ReadOnlyDacl $conn $ouDn
+                # Schema GUIDs: groupPolicyContainer and gPLink attribute.
+                $create = Test-PotentialDirectoryAccess $policies $sids 1 (
+                    [guid]'f30e3bc2-9ff0-11d1-b603-0000f80367c1')
+                $link = Test-PotentialDirectoryAccess $ouAcl $sids 32 (
+                    [guid]'f30e3bc1-9ff0-11d1-b603-0000f80367c1')
+                $result = [pscustomobject]@{
+                    domain=$resolvedDomain;dc=$actualDc
+                    user=$user;readOnly=$true;dcWritable=(-not $isRODC)
+                    gpoCreateAce=$create;ouGpoLinkAce=$link
+                    sysvolWrite='NOT_CHECKED_NO_WRITES'
+                    fullPermissionVerified=$false
+                    message='ACL hints only; nested/deny inheritance, GPO COM and SYSVOL writes need final verification.'
+                }
             }
             'Users' {
                 $search = ([string]$req.search).Trim()
