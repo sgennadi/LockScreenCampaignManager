@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace LockScreenCampaignManager;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     private CampaignProject _project = new();
     private CompanyProfile? _company;
@@ -27,6 +27,17 @@ public sealed class MainForm : Form
     private readonly Label _previewName = new();
     private readonly Label _summary = new();
     private readonly Label _status = new();
+    private readonly Label _workflowHint = new();
+    private readonly FlowLayoutPanel _workflowButtons = new();
+    private readonly FlowLayoutPanel _advancedButtons = new();
+    private readonly Button _wizardMode = new();
+    private readonly Button _advancedModeButton = new();
+    private readonly Button _workflowNext = new();
+    private readonly Button _workflowBack = new();
+    private readonly Button _workflowAction = new();
+    private int _workflowStep;
+    private bool _advancedMode;
+
     private bool _loading;
     private static Color Blue => UiStyle.Accent;
     private static Color Bg => UiStyle.Canvas;
@@ -38,8 +49,8 @@ public sealed class MainForm : Form
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(1100, 720);
-        Size = new Size(1390, 850);
+        MinimumSize = new Size(1120, 780);
+        Size = new Size(1430, 910);
         BackColor = Bg;
         ConfigureLayout();
         try
@@ -57,6 +68,7 @@ public sealed class MainForm : Form
         }
         RestoreWindow();
         UiStyle.Apply(this);
+        SetWorkflowMode(false);
         // The first interactive action is DC connection/inventory, not image selection.
         // CLI self-tests and headless UI smoke only construct forms, never Show().
         Shown += (_, _) =>
@@ -77,7 +89,7 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 186));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
@@ -106,7 +118,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(5, 5, 7, 4)
         };
-        _adConnectButton.Text = "1  Connect to DC & Read AD";
+        _adConnectButton.Text = "Connect / Change AD account";
         _adConnectButton.MinimumSize = new Size(218, 36);
         _adConnectButton.AutoSize = true;
         _adConnectButton.BackColor = UiStyle.Accent;
@@ -119,6 +131,16 @@ public sealed class MainForm : Form
         _adConnectionStatus.TextAlign = ContentAlignment.MiddleLeft;
         _adConnectionStatus.Margin = new Padding(7, 2, 0, 0);
         adFirstStep.Controls.Add(_adConnectionStatus);
+        _wizardMode.Text = "Wizard";
+        _wizardMode.Width = 95;
+        _wizardMode.Height = 35;
+        _wizardMode.Click += (_, _) => SetWorkflowMode(false);
+        _advancedModeButton.Text = "Advanced";
+        _advancedModeButton.Width = 110;
+        _advancedModeButton.Height = 35;
+        _advancedModeButton.Click += (_, _) => SetWorkflowMode(true);
+        adFirstStep.Controls.Add(_wizardMode);
+        adFirstStep.Controls.Add(_advancedModeButton);
         UiStyle.ApplyStatus(_adConnectionStatus,
             "NOT CONNECTED — offline editing only.", UiStatusKind.Neutral);
         header.Controls.Add(adFirstStep, 0, 3);
@@ -222,14 +244,49 @@ public sealed class MainForm : Form
         _previewName.AutoEllipsis = true;
         rightLayout.Controls.Add(_previewName, 0, 2);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
-        _summary.ForeColor = Color.FromArgb(50, 62, 77);
+        _summary.ForeColor = UiStyle.Foreground;
         _summary.Font = new Font("Segoe UI Semibold", 9.5f);
         footer.Controls.Add(_summary, 0, 0);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
+
+        var flowBar = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Padding = new Padding(8, 5, 8, 4), BackColor = UiStyle.SoftBlue
+        };
+        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 405));
+        _workflowHint.Dock = DockStyle.Fill;
+        _workflowHint.TextAlign = ContentAlignment.MiddleLeft;
+        _workflowHint.AutoEllipsis = true;
+        _workflowHint.ForeColor = UiStyle.Navy;
+        flowBar.Controls.Add(_workflowHint, 0, 0);
+        _workflowButtons.Dock = DockStyle.Fill;
+        _workflowButtons.WrapContents = false;
+        _workflowButtons.FlowDirection = FlowDirection.RightToLeft;
+        _workflowNext.Text = "Next >";
+        _workflowNext.Width = 95;
+        _workflowNext.Height = 36;
+        _workflowNext.Click += (_, _) => AdvanceWorkflow();
+        _workflowBack.Text = "< Back";
+        _workflowBack.Width = 90;
+        _workflowBack.Height = 36;
+        _workflowBack.Click += (_, _) => { _workflowStep = Math.Max(0, _workflowStep - 1); UpdateWorkflow(); };
+        _workflowAction.Width = 177;
+        _workflowAction.Height = 36;
+        _workflowAction.Click += (_, _) => RunWorkflowAction();
+        _workflowButtons.Controls.Add(_workflowNext);
+        _workflowButtons.Controls.Add(_workflowBack);
+        _workflowButtons.Controls.Add(_workflowAction);
+        flowBar.Controls.Add(_workflowButtons, 1, 0);
+        footer.Controls.Add(flowBar, 0, 1);
+        _advancedButtons.Dock = DockStyle.Fill;
+        _advancedButtons.WrapContents = true;
+        _advancedButtons.AutoScroll = true;
+        var actions = _advancedButtons;
         actions.Controls.Add(MakeButton("Companies", OpenCompanyProfiles, 142));
         actions.Controls.Add(MakeButton("New campaign", StartNewCampaign, 163));
         actions.Controls.Add(MakeButton("Save project", SaveProject, 158));
@@ -237,7 +294,7 @@ public sealed class MainForm : Form
         actions.Controls.Add(MakeButton("Schedule", OpenScheduleEditor, 128));
         actions.Controls.Add(MakeButton("Validate", ValidateCurrent, 110));
         actions.Controls.Add(MakeButton("Export for GPO", ExportPackage, 165));
-        actions.Controls.Add(MakeButton("3  GPO Preview / Deploy", OpenDomainDeployment, 205));
+        actions.Controls.Add(MakeButton("Deploy GPO (advanced)...", () => OpenDomainDeployment(true), 216));
         actions.Controls.Add(MakeButton("Client feedback", OpenFeedbackSettings, 164));
         actions.Controls.Add(MakeButton("Settings", OpenUiSettings, 124));
         actions.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
@@ -248,7 +305,7 @@ public sealed class MainForm : Form
         _status.AutoSize = true;
         _status.Margin = new Padding(22, 9, 0, 0);
         actions.Controls.Add(_status);
-        footer.Controls.Add(actions, 0, 1);
+        footer.Controls.Add(actions, 0, 2);
         root.Controls.Add(footer, 0, 3);
     }
 
@@ -372,6 +429,7 @@ public sealed class MainForm : Form
             _table.CurrentCell = _table.Rows[selected].Cells[0];
         }
         UpdatePreview();
+        UpdateWorkflow();
         string end;
         try { end = _project.ImagePaths.Count == 0
             ? "—" : CampaignSchedule.End(_project).ToString("dd.MM.yyyy HH:mm"); }
@@ -624,6 +682,7 @@ public sealed class MainForm : Form
             UiStyle.ApplyStatus(_adConnectionStatus,
                 "NOT CONNECTED — select Step 1 before GPO deployment.",
                 UiStatusKind.Warning);
+            UpdateWorkflow();
             return;
         }
         UiStyle.ApplyStatus(_adConnectionStatus,
@@ -633,6 +692,7 @@ public sealed class MainForm : Form
             (snapshot.Capped ? " | PARTIAL INVENTORY" : ""),
             snapshot.Capped ? UiStatusKind.Warning : UiStatusKind.Success);
         _status.Text = "AD discovery complete (read-only). Continue with campaign configuration.";
+        UpdateWorkflow();
     }
 
     private void ConnectAndReadAd()
@@ -659,7 +719,7 @@ public sealed class MainForm : Form
         catch (Exception ex) { UiErrorDialog.Show(this, "Connect and read AD", ex); }
     }
 
-    private void OpenDomainDeployment()
+    private void OpenDomainDeployment(bool advanced = false)
     {
         if (!_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow))
         {
@@ -684,7 +744,7 @@ public sealed class MainForm : Form
                 RandomizePerDevice = _project.RandomizePerDevice,
                 IntervalMinutes = _project.IntervalMinutes
             };
-            using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot);
+            using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot, advanced);
             wizard.ShowDialog(this);
         }
         catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
