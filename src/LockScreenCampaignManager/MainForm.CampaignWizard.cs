@@ -239,7 +239,7 @@ public sealed partial class MainForm
             if (version is null) return;
             _updateAvailable.Text = "Update " + version;
             _updateAvailable.Tag = "UpdateNotice";
-            UiStyle.Apply(_updateAvailable);
+            UiStyle.DecorateForUpdateNotice(_updateAvailable);
             _updateHelp.SetToolTip(_updateAvailable, _owner.AvailableUpdateSummary);
         }
 

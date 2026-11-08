@@ -251,6 +251,12 @@ internal static class UiStyle
             parent.RowStyles[0].Height = total;
     }
 
+    internal static void DecorateForUpdateNotice(Button button)
+    {
+        button.Tag = "UpdateNotice";
+        Decorate(button, Preferences);
+    }
+
     internal static void DecorateForWizard(Button button, bool primary)
     {
         button.Tag = primary ? "PrimaryAction" : "NoIcon";
