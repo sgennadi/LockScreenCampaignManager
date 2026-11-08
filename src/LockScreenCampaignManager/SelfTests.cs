@@ -345,6 +345,9 @@ StartExecutePSFirst=true
 
     private static void TestNativeGpoLifecyclePreviewContracts()
     {
+        Check(NativeGpoLifecyclePreview.DomainFromDnPreserveCase(
+                "DC=Example,DC=COM") == "Example.COM",
+            "Native lifecycle Preview uses legacy RootDSE domain casing in approval hash");
         string gpoDn = NativeGpoLifecycleList.PolicyDn(
             Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"), "DC=example,DC=com");
         string ou = "OU=Clients,DC=example,DC=com";
