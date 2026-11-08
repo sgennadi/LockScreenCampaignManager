@@ -173,7 +173,7 @@ public sealed partial class MainForm : Form
         _wizardMode.Text = "Wizard";
         _wizardMode.Width = 95;
         _wizardMode.Height = 35;
-        _wizardMode.Click += (_, _) => { _workflowStep = AdReady ? 1 : 0; SetWorkflowMode(false); };
+        _wizardMode.Click += (_, _) => { _workflowStep = NextWizardPreparationStep(); SetWorkflowMode(false); };
         _advancedModeButton.Text = "Advanced";
         _advancedModeButton.Width = 110;
         _advancedModeButton.Height = 35;
@@ -566,6 +566,7 @@ public sealed partial class MainForm : Form
         _startDate.Enabled = _startTime.Enabled =
             project.ScheduleMode != CampaignScheduleMode.SpecificDates;
         _projectDirty = false;
+        _wizardScheduleConfigured = false;
         _workflowStep = 0;
         UpdateCompanyBanner();
         UpdateRows();
@@ -649,9 +650,9 @@ public sealed partial class MainForm : Form
                 edited.ScheduleMode != CampaignScheduleMode.SpecificDates;
             _projectDirty = true;
             UpdateRows();
-            if (!_advancedMode && _workflowStep == 3) _workflowStep = 4;
-            UpdateWorkflow();
-            _status.Text = "Schedule saved. Next step: validate and save the campaign, then optional GPO deployment.";
+            WizardScheduleSaved();
+            if (_advancedMode)
+                _status.Text = "Schedule saved locally. Validate and save the project when ready.";
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Campaign Schedule", ex); }
     }
@@ -727,7 +728,7 @@ public sealed partial class MainForm : Form
         _projectDirty = true;
         UpdateRows(originalCount);
         _status.Text = $"{selected.Length} image(s) imported. Next: Arrange / edit, then Schedule.";
-        if (!_advancedMode && _workflowStep == 1) _workflowStep = 2;
+        WizardImagesImported();
         UpdateWorkflow();
     }
 
@@ -810,7 +811,9 @@ public sealed partial class MainForm : Form
                 JsonSerializer.Serialize(_project, CampaignExporter.JsonOptions) +
                 Environment.NewLine, new UTF8Encoding(false));
             _projectDirty = false;
-            _status.Text = "Project saved. You may deploy through AD or continue working offline.";
+            if (!_advancedMode && _workflowStep == 4) _workflowStep = 5;
+            _status.Text = "Project saved. You may deploy through AD or finish offline.";
+            UpdateWorkflow();
             return true;
         }
         catch (Exception ex)
@@ -901,6 +904,8 @@ public sealed partial class MainForm : Form
             {
                 SetAdSnapshot(incoming);
                 _sessionAdCredentials = dialog.ConnectedCredentials;
+                if (!_advancedMode && _workflowStep == 0)
+                    _workflowStep = NextWizardPreparationStep();
                 _status.Text = "AD read complete. GPO write permissions must be checked before deployment.";
             }
             else
