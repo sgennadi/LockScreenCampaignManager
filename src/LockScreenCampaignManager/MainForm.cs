@@ -791,18 +791,30 @@ public sealed partial class MainForm : Form
         catch (Exception ex) { UiErrorDialog.Show(this, "Campaign editor", ex); }
     }
 
-    private void SaveProject()
+    private void SaveProject() => TrySaveProject();
+
+    private bool TrySaveProject()
     {
         ReadControls();
-        using var dialog = new SaveFileDialog { Title = "Save project", Filter = "Campaign project (*.json)|*.json", FileName = CampaignSchedule.BuildId(_project) + ".project.json" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        using var dialog = new SaveFileDialog {
+            Title = "Save campaign project", Filter = "Campaign project (*.json)|*.json",
+            FileName = CampaignSchedule.BuildId(_project) + ".project.json"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return false;
         try
         {
-            File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(_project, CampaignExporter.JsonOptions) + Environment.NewLine, new UTF8Encoding(false));
+            File.WriteAllText(dialog.FileName,
+                JsonSerializer.Serialize(_project, CampaignExporter.JsonOptions) +
+                Environment.NewLine, new UTF8Encoding(false));
             _projectDirty = false;
-            _status.Text = "Project saved";
+            _status.Text = "Project saved. You may deploy through AD or continue working offline.";
+            return true;
         }
-        catch (Exception ex) { UiErrorDialog.Show(this, "Campaign editor", ex); }
+        catch (Exception ex)
+        {
+            UiErrorDialog.Show(this, "Save campaign project", ex);
+            return false;
+        }
     }
 
     private void OpenProject()
