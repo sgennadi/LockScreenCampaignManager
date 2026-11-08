@@ -1084,7 +1084,7 @@ public sealed partial class MainForm : Form
                 _sessionAdCredentials = dialog.ConnectedCredentials;
                 if (!_advancedMode && _workflowStep == 0)
                     _workflowStep = NextWizardPreparationStep();
-                _status.Text = "AD read complete. GPO write permissions must be checked before deployment.";
+                _status.Text = "AD connected. Initial ACL assessment is in Connection Review; scoped write checks run before deployment.";
             }
             else
             {
