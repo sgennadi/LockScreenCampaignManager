@@ -22,6 +22,9 @@ internal static class UiLayoutSmokeTests
 
     private static readonly (string Name, Func<Form> Factory, string[] ExpectedButtons)[] Windows =
     {
+        ("Campaign editor - offline Wizard", () => new MainForm(),
+            new[] { "Wizard", "Advanced", "Next", "Back", "1  Add files...",
+                "Add folder...", "2  Schedule...", "Project  ▾", "Help / tools  ▾" }),
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
