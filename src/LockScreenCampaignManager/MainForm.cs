@@ -101,7 +101,7 @@ public sealed partial class MainForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 171));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 106));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         viewport.Controls.Add(root);
@@ -113,7 +113,7 @@ public sealed partial class MainForm : Form
             // Avoid forcing a tall virtual canvas on normal laptop windows:
             // this used to push the entire wizard footer below the viewport.
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(720, visible.Height));
+                Math.Max(790, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -148,7 +148,7 @@ public sealed partial class MainForm : Form
         var adFirstStep = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
-            BackColor = UiStyle.Navy, Padding = new Padding(7, 5, 7, 5)
+            BackColor = UiStyle.SoftBlue, Padding = new Padding(7, 5, 7, 5)
         };
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -158,9 +158,9 @@ public sealed partial class MainForm : Form
         _adConnectButton.MinimumSize = Size.Empty;
         _adConnectButton.Dock = DockStyle.Fill;
         _adConnectButton.Margin = new Padding(6, 1, 14, 1);
-        _adConnectButton.BackColor = UiStyle.Accent;
-        _adConnectButton.ForeColor = Color.White;
-        _adConnectButton.Tag = "PrimaryAction";
+        _adConnectButton.BackColor = UiStyle.Surface;
+        _adConnectButton.ForeColor = UiStyle.Navy;
+        _adConnectButton.Tag = "NoIcon";
         _adConnectButton.Click += (_, _) => ConnectAndReadAd();
         adFirstStep.Controls.Add(_adConnectButton, 0, 0);
         _adConnectionStatus.AutoSize = false;
@@ -173,7 +173,7 @@ public sealed partial class MainForm : Form
         _wizardMode.Text = "Wizard";
         _wizardMode.Width = 95;
         _wizardMode.Height = 35;
-        _wizardMode.Click += (_, _) => SetWorkflowMode(false);
+        _wizardMode.Click += (_, _) => { _workflowStep = AdReady ? 1 : 0; SetWorkflowMode(false); };
         _advancedModeButton.Text = "Advanced";
         _advancedModeButton.Width = 110;
         _advancedModeButton.Height = 35;
@@ -338,22 +338,26 @@ public sealed partial class MainForm : Form
         footer.Controls.Add(_summary, 0, 0);
 
         var flowBar = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-            Padding = new Padding(8, 5, 8, 4), BackColor = UiStyle.SoftBlue
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Padding = new Padding(14, 8, 14, 8), BackColor = UiStyle.SoftBlue,
+            Margin = new Padding(0, 3, 0, 8)
         };
+        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
         _workflowBar = flowBar;
         flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400));
         _workflowHint.Dock = DockStyle.Fill;
         _workflowHint.TextAlign = ContentAlignment.MiddleLeft;
         _workflowHint.AutoEllipsis = true;
         _workflowHint.ForeColor = UiStyle.Navy;
+        _workflowHint.Font = new Font("Segoe UI Semibold", 11f);
+        _workflowHint.Padding = new Padding(7, 0, 0, 0);
         flowBar.Controls.Add(_workflowHint, 0, 0);
         _workflowButtons.Dock = DockStyle.Fill;
         _workflowButtons.ColumnCount = 3;
         _workflowButtons.RowCount = 1;
-        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 89));
-        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 114));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 152));
         _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _workflowNext.Text = "Next";
         _workflowNext.Width = 83;
@@ -363,7 +367,7 @@ public sealed partial class MainForm : Form
         _workflowBack.Width = 75;
         _workflowBack.Height = 36;
         _workflowBack.Click += (_, _) => { _workflowStep = Math.Max(0, _workflowStep - 1); UpdateWorkflow(); };
-        _workflowAction.Width = 175;
+        _workflowAction.Width = 215;
         _workflowAction.Height = 36;
         _workflowAction.Click += (_, _) => RunWorkflowAction();
         foreach (var button in new[] { _workflowBack, _workflowNext, _workflowAction })
@@ -375,7 +379,7 @@ public sealed partial class MainForm : Form
         _workflowButtons.Controls.Add(_workflowBack, 0, 0);
         _workflowButtons.Controls.Add(_workflowNext, 1, 0);
         _workflowButtons.Controls.Add(_workflowAction, 2, 0);
-        flowBar.Controls.Add(_workflowButtons, 1, 0);
+        flowBar.Controls.Add(_workflowButtons, 0, 1);
         root.Controls.Add(flowBar, 0, 2);
         _advancedButtons.Dock = DockStyle.Fill;
         _advancedButtons.WrapContents = true;
