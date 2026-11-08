@@ -968,6 +968,42 @@ internal sealed class AdConnectionStartDialog : Form
             finally { _mutating = false; }
 
             _inventory.Text = BuildInventory(snapshot);
+            // Advisory, read-only ACL assessment. Never mistake an ACL hint
+            // for an authorization to deploy: COM/SYSVOL and scoped rights
+            // still require fresh deployment preflight.
+            string permissionSummary;
+            if (!snapshot.Writable)
+                permissionSummary = "GPO CREATION: Unavailable on a read-only DC." +
+                    Environment.NewLine + "OU LINKING: Requires a selected writable DC and OU.";
+            else
+            {
+                try
+                {
+                    var permissionResult = await Task.Run(() =>
+                        DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Permissions",
+                            new { domain = snapshot.Domain, dc = snapshot.Dc, ouDn = "" },
+                            credential));
+                    var permissionData = permissionResult.GetProperty("data");
+                    string creationHint = permissionData.GetProperty("gpoCreateAce").GetString()
+                        ?? "UNKNOWN";
+                    permissionSummary = "GPO CREATION ACL: " + creationHint +
+                        " (advisory only)" + Environment.NewLine +
+                        "OU LINKING: Requires OU selection" + Environment.NewLine +
+                        "GPO EDIT / DELETE: Requires target GPO selection" +
+                        Environment.NewLine +
+                        "SYSVOL WRITE: Not verified (no test files created)";
+                }
+                catch (Exception permissionError)
+                {
+                    AppLog.Write(permissionError, "AD permission assessment");
+                    permissionSummary = "GPO CREATION ACL: Unknown (assessment unavailable)" +
+                        Environment.NewLine + "OU LINKING: Requires OU selection" +
+                        Environment.NewLine + "SYSVOL WRITE: Not verified" +
+                        Environment.NewLine +
+                        "Check Diagnostics for permission assessment details.";
+                }
+            }
+            if (IsDisposed || Disposing) return;
             _review.Text = "DOMAIN: " + snapshot.Domain + Environment.NewLine +
                 "CONNECTED DC: " + snapshot.Dc + Environment.NewLine +
                 "DC WRITABLE: " + (snapshot.Writable ? "Yes" : "No (RODC)") +
@@ -982,9 +1018,11 @@ internal sealed class AdConnectionStartDialog : Form
                 Environment.NewLine + Environment.NewLine +
                 "You can edit and save campaigns locally without administrator rights." +
                 Environment.NewLine +
-                "GPO write permissions have NOT been verified. " +
-                "The deployment wizard checks the selected OU/GPO scope before changes; " +
-                "insufficient delegation will require an administrator.";
+                Environment.NewLine + "PERMISSION ASSESSMENT (READ-ONLY)" +
+                Environment.NewLine + permissionSummary +
+                Environment.NewLine + Environment.NewLine +
+                "ACL hints are not proof of effective write rights. " +
+                "Deployment independently verifies the exact OU/GPO and SYSVOL scope.";
             // Commit persistence only after successful signed+sealed LDAP authentication.
             if (_alternate.Checked)
             {
