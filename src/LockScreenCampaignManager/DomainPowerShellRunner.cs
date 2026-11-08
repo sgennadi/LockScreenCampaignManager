@@ -60,15 +60,15 @@ internal static class DomainPowerShellRunner
             return NativeGpoLifecycleList.Execute(mode, request, credentials);
         if (operation == DomainOperation.Lifecycle && mode == "Preview")
             return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
-        // Incremental PS1 migration: link-only lifecycle Apply is native.
-        // Delete/Reuse still use the audited legacy code path.
+        // Lifecycle link operations and guarded deletion are native C#.
+        // Only multi-file Reuse remains on the audited legacy code path.
         if (operation == DomainOperation.Lifecycle && mode == "Apply")
         {
             var lifecycleRequest = JsonSerializer.SerializeToElement(request, Json);
             string action = lifecycleRequest.TryGetProperty("action", out var actionProperty)
                 && actionProperty.ValueKind == JsonValueKind.String
                 ? actionProperty.GetString() ?? "" : "";
-            if (action is "Disable" or "Enable" or "Unlink" or "Relink")
+            if (action is "Disable" or "Enable" or "Unlink" or "Relink" or "Delete")
                 return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
         }
 
