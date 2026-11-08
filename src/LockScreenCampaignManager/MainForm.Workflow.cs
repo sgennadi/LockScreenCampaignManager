@@ -30,13 +30,14 @@ public sealed partial class MainForm
             "1 / 4  Choose images first. No AD permissions needed.",
             "2 / 4  Set image order, days and time.",
             "3 / 4  Review and save project locally (no admin needed).",
-            "4 / 4  Optional: deploy with delegated GPO permissions."
+            "4 / 4  Optional deployment. Your local project is ready without AD."
         ];
         _workflowHint.Text = _advancedMode
             ? "Advanced mode  •  All tools available; GPO actions still require fresh AD verification."
             : hints[Math.Clamp(_workflowStep, 0, 3)] +
               $"  Images: {_project.ImagePaths.Count}";
         _workflowBack.Enabled = _workflowStep > 0;
+        _workflowNext.Text = _workflowStep == 2 ? "Optional AD" : "Next";
         _workflowNext.Visible = _workflowStep < 3;
         _workflowNext.Enabled = _workflowStep switch
         {
