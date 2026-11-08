@@ -368,7 +368,6 @@ internal sealed class AdConnectionStartDialog : Form
         _dc.DropDownWidth = 750;
         _dc.MaxDropDownItems = 18;
         _dc.IntegralHeight = false;
-        _dc.PlaceholderText = "Automatic (recommended)";
         _serverOptions.Dock = DockStyle.Fill;
         _serverOptions.ColumnCount = 2;
         _serverOptions.RowCount = 2;
