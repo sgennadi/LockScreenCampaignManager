@@ -76,7 +76,8 @@ jobs:
             'tools/test_effective_gpo.ps1',
             'tools/lab_ad_integration.ps1',
             'tools/lab_win11_probe.ps1',
-            'tools/test_hosted_agent_lifecycle.ps1'
+            'tools/test_hosted_agent_lifecycle.ps1',
+            'tools/test_windows_client_compat.ps1'
           )
           foreach ($script in $scripts) {
             $tokens = $null
@@ -114,6 +115,12 @@ jobs:
         shell: powershell
         run: |
           & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_hosted_agent_lifecycle.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Windows 10 and Windows 11 client agent compatibility
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_windows_client_compat.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify read-only post-cleanup registry comparison and no remote task execution
