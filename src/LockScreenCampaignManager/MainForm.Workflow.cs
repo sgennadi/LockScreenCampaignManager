@@ -85,7 +85,7 @@ public sealed partial class MainForm
         }
         else
         {
-            _status.Text = "Wizard cancelled. Local editor remains available.";
+            _status.Text = "Wizard cancelled. Select Advanced to open the manual editor.";
         }
         UpdateWorkflow();
     }
@@ -120,17 +120,23 @@ public sealed partial class MainForm
     private void SetWorkflowMode(bool advanced)
     {
         _advancedMode = advanced;
+        // The full campaign wizard owns its navigation and preview. Do not
+        // leave the Advanced image editor visible behind its modal dialog.
         _advancedButtons.Visible = advanced;
-        _quickButtons.Visible = !advanced;
-        _workflowButtons.Visible = !advanced;
-        if (_footerLayout is not null && _workflowBar is not null)
+        _quickButtons.Visible = false;
+        _workflowButtons.Visible = false;
+        if (_workflowBar is not null)
         {
-            // Advanced mode doesn't show a blank, reserved Wizard navigation strip.
-            // Give its full height back to the grouped manual menus.
-            _workflowBar.Visible = !advanced;
-            // Reclaim the wizard row in Advanced; keep it pinned above images in Wizard.
+            _workflowBar.Visible = false;
             if (_workflowBar.Parent is TableLayoutPanel owner)
-                owner.RowStyles[2].Height = advanced ? 0 : 132;
+                owner.RowStyles[2].Height = 0;
+        }
+        if (_mainEditorViewport is not null && !_mainEditorViewport.IsDisposed)
+            _mainEditorViewport.AutoScroll = advanced;
+        if (_wizardLanding is not null && !_wizardLanding.IsDisposed)
+        {
+            _wizardLanding.Visible = !advanced;
+            if (!advanced) _wizardLanding.BringToFront();
         }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
