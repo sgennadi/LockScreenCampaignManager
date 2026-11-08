@@ -1,3 +1,5 @@
+> **0.4.0-preview.59 — AD connection permission assessment:** After a signed/sealed read-only AD inventory, Connection Review performs a native C# LDAP ACL preflight for GPO creation and, when configured, the profile's default OU link permission. It resolves the selected AD account's SID and computed `tokenGroups` using a direct base-scope query. Incomplete group-token data is shown as **Unknown**, never as a confirmed denial; ACL matches are advisory, not effective access proof. No test policies, directory changes, or SYSVOL writes occur. The deployment wizard still independently verifies selected OU/GPO scope and write access before making changes. Remaining administrative PS1 Apply paths have not yet been converted and are not claimed as native. Windows CI and live domain validation are still required.
+
 # LockScreen Campaign Manager
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
