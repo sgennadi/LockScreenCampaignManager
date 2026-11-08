@@ -116,6 +116,8 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly CompanyProfile? _company;
     private readonly TextBox _domain = new();
     private readonly ComboBox _dc = new();
+    private readonly Button _refreshDc = new();
+    private readonly Label _dcDiscoveryStatus = new();
     private readonly RadioButton _current = new();
     private readonly RadioButton _alternate = new();
     private readonly TextBox _user = new();
@@ -319,7 +321,17 @@ internal sealed class AdConnectionStartDialog : Form
         _dc.IntegralHeight = false;
         _dc.Text = "";
         servers.Controls.Add(Field("AD DNS domain (detected automatically)", _domain, 380));
-        servers.Controls.Add(Field("Domain controller (DNS SRV auto-discovery)", _dc, 475));
+        servers.Controls.Add(Field("Domain controller (DNS SRV + Windows locator)", _dc, 475));
+        _refreshDc.Text = "Find DCs";
+        _refreshDc.AutoSize = true;
+        _refreshDc.MinimumSize = new Size(110, 34);
+        _refreshDc.Click += async (_, _) => await DiscoverDcListAsync();
+        servers.Controls.Add(_refreshDc);
+        _dcDiscoveryStatus.AutoSize = true;
+        _dcDiscoveryStatus.ForeColor = UiStyle.Muted;
+        _dcDiscoveryStatus.Text = "Detecting domain controllers...";
+        _dcDiscoveryStatus.Margin = new Padding(8, 12, 0, 0);
+        servers.Controls.Add(_dcDiscoveryStatus);
         connection.Controls.Add(servers, 0, 1);
 
         var authentication = new FlowLayoutPanel {
@@ -480,6 +492,8 @@ internal sealed class AdConnectionStartDialog : Form
         if (string.IsNullOrWhiteSpace(expected)) return;
         try
         {
+            _refreshDc.Enabled = false;
+            _dcDiscoveryStatus.Text = "Searching DNS and Windows DC Locator...";
             var candidates = await Task.Run(() => DcDnsDiscovery.FindControllers(expected));
             if (IsDisposed || Disposing || _busy || revision != _discoveryRevision ||
                 !string.Equals(_domain.Text.Trim(), expected, StringComparison.OrdinalIgnoreCase))
@@ -505,12 +519,20 @@ internal sealed class AdConnectionStartDialog : Form
                 _dc.EndUpdate();
                 _mutating = false;
             }
+            _dcDiscoveryStatus.Text = candidates.Count > 0
+                ? $"{candidates.Count} controller(s) discovered. Select one or enter another DC."
+                : "No DC found. Check DNS / network / VPN, or enter an explicit DC FQDN.";
             if (candidates.Count == 0)
-                _tips.SetToolTip(_dc, "No DC DNS SRV answers. Check DNS or enter a DC manually.");
+                _tips.SetToolTip(_dc, "No DNS SRV / Netlogon DC result. Check DNS and domain reachability.");
         }
         catch (Exception ex)
         {
+            _dcDiscoveryStatus.Text = "Discovery failed. Check DNS/network or enter DC manually.";
             AppLog.Write(ex, "DNS domain controller discovery");
+        }
+        finally
+        {
+            if (!IsDisposed && !Disposing) _refreshDc.Enabled = true;
         }
     }
 
