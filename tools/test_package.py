@@ -75,11 +75,24 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
-# Lifecycle List is native C#; protected Preview/Apply retain their
-# shared legacy plan hash and write engine.
+# Lifecycle List and read-only Preview run natively in C#.
+# Apply remains a PowerShell engine that rehashes the same fresh evidence.
 native_lifecycle = (project / 'NativeGpoLifecycleList.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Lifecycle && mode == "List"' in runner
 assert 'NativeGpoLifecycleList.Execute(mode, request, credentials)' in runner
+assert 'operation == DomainOperation.Lifecycle && mode == "Preview"' in runner
+assert 'NativeGpoLifecyclePreview.Execute(mode, request, credentials)' in runner
+native_preview = (project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
+legacy_fixture = (ROOT / 'tools/test_native_gpo_lifecycle_preview.ps1').read_text(encoding='utf-8')
+for guard in ('LegacyPlanHash', 'CheckAction', 'FileSha256', 'CollectLinks',
+              'ValidateReusePackage', 'SameController', 'RunImpersonated',
+              'ReadManagedGpo', 'GetProperty("schemaVersion")',
+              'TimeZoneInfo.ConvertTimeFromUtc', 'SessionOptions.ReferralChasing',
+              'GptVersionPattern', 'gptVersion != gpo.Version'):
+    assert guard in native_preview, guard
+for fixture in ('FunctionDefinitionAst', "'Hash', 'Plan'",
+                '59909b422c6b7158', 'a84a855068f2db24'):
+    assert fixture in legacy_fixture, fixture
 assert 'LockScreenCampaignManager.GpoLifecycle.ps1' in csproj
 for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',
               'ReadManagedGpo', 'ReadRootDse', 'configurationNamingContext',
