@@ -75,8 +75,8 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
-# Deployment Plan is read-only native C#; actual Deploy remains the
-# independently guarded ADSI/gpedit.dll PowerShell write engine.
+# Deployment Plan and guarded Apply are now native C# and Windows GPO COM.
+# Both must validate the selected DC, OU, security group and package hashes.
 native_deploy_plan = (project / 'NativeGpoDeploymentPlan.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Deployment && mode == "Plan"' in runner
 assert 'NativeGpoDeploymentPlan.Execute(mode, request, credentials)' in runner
@@ -134,14 +134,13 @@ assert 'Check updates' in update_notice
 assert 'ShowUpdateCheckError' in update_notice
 assert 'DownloadAsync' not in update_notice and 'InstallSelectedAsync' not in update_notice
 
-# Lifecycle List and read-only Preview run natively in C#.
-# Apply remains a PowerShell engine that rehashes the same fresh evidence.
+# Lifecycle List, Preview and guarded Apply now run in native C#.
 native_lifecycle = (project / 'NativeGpoLifecycleList.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Lifecycle && mode == "List"' in runner
 assert 'NativeGpoLifecycleList.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.Lifecycle && mode == "Preview"' in runner
 assert 'NativeGpoLifecyclePreview.Execute(mode, request, credentials)' in runner
-assert '"Disable" or "Enable" or "Unlink" or "Relink" or "Delete"' in runner
+assert '"Disable" or "Enable" or "Unlink" or "Relink" or "Delete" or "Reuse"' in runner
 assert 'NativeGpoCom.DeleteManagedUnlinkedGpo' in (
     project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
 native_preview = (project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
@@ -164,7 +163,7 @@ for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',
               'ReadAllText(ini, Encoding.Unicode)', 'LOGON_NETCREDENTIALS_ONLY'):
     assert guard in native_lifecycle, guard
 
-# SYSVOL Scan and Preview are native; the write/Deletion Cleanup remains PS1.
+# SYSVOL Scan, Preview and guarded Cleanup are now native.
 native_storage = (project / 'NativeSysvolStorage.cs').read_text(encoding='utf-8')
 assert 'mode is ("Scan" or "Preview" or "Cleanup")' in runner
 assert 'NativeSysvolStorage.Execute(mode, request, credentials)' in runner
