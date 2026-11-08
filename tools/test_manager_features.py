@@ -349,7 +349,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("CompanyProfile? company = null", first)
         self.assertNotIn("BeginInvoke(new Action(ConnectAndReadAd))", main)
         self.assertIn("ShowStartupWizardChoice", main)
-        self.assertIn("No automatic AD authentication", main)
+        self.assertIn("no automatic AD authentication is attempted", main)
         self.assertIn('if (!_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow))', main)
         self.assertIn('TestAdConnectionScope()', tests)
         self.assertIn("new DomainDeploymentForm(snapshot, _company, _adSnapshot, advanced)", main)
