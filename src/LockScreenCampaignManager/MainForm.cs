@@ -562,7 +562,7 @@ public sealed partial class MainForm : Form
             new Size(4096, 4096),
             TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
         int neededWidth = Math.Max(originalWidth,
-            Math.Max(textWidth + title.Padding.Horizontal + 17, field.Width + 10));
+            textWidth + title.Padding.Horizontal + 17);
         if (box.Width != neededWidth) box.Width = neededWidth;
         int neededHeight = titleHeight + fieldHeight + box.Padding.Vertical + 4;
         if (box.Height != neededHeight) box.Height = neededHeight;
