@@ -302,32 +302,24 @@ internal static class NativeGpoLifecycleList
         }
         else
         {
-            string command = @"\\" + domain + @"\SYSVOL\" + domain +
-                @"\Policies\{" + id.ToString("D").ToUpperInvariant() +
-                @"}\Machine\Scripts\Startup\Start-LockScreen-Agent.cmd";
-            string expectedIni = "[Startup]\r\n0CmdLine=" + command +
-                "\r\n0Parameters=\r\n";
-            if (!string.Equals(startup, expectedIni, StringComparison.Ordinal))
+            // scripts.ini names the executable directly with a separate,
+            // fixed --client-agent Install argument, as specified by
+            // Microsoft MS-GPSCR. No intermediate CMD is accepted.
+            var pathMatch = Regex.Match(startup,
+                @"(?im)^0CmdLine=(?<file>\\\\[^\r\n]+\\LockScreenCampaigns\\(?<id>[a-z0-9_-]+)\\LockScreen-Agent\.exe)\s*$",
+                RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            if (!pathMatch.Success ||
+                !Regex.IsMatch(startup, @"(?im)^0Parameters=--client-agent Install\s*$"))
                 return null;
-            string cmd = Path.Combine(scripts, "Startup", "Start-LockScreen-Agent.cmd");
-            if ((File.GetAttributes(cmd) &
-                    (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0 ||
-                new FileInfo(cmd).Length is < 40 or > 2048)
-                throw new InvalidDataException("EXE startup CMD is missing or unsafe.");
-            string launcher = File.ReadAllText(cmd, Encoding.ASCII);
-            var match = Regex.Match(launcher,
-                @"\\scripts\\LockScreenCampaigns\\(?<id>[a-z0-9_-]+)\\LockScreen-Agent\.exe",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                TimeSpan.FromSeconds(1));
-            campaignId = match.Success ? match.Groups["id"].Value : "";
+            campaignId = pathMatch.Groups["id"].Value;
             if (!NativeSysvolStorage.ValidCampaignId(campaignId))
                 return null;
             string exe = @"\\" + domain + @"\SYSVOL\" + domain +
                 @"\scripts\LockScreenCampaigns\" + campaignId +
                 @"\LockScreen-Agent.exe";
-            string expectedCmd = "@echo off\r\n\"" + exe +
-                "\" --client-agent Install\r\nexit /b %ERRORLEVEL%\r\n";
-            if (!string.Equals(launcher, expectedCmd, StringComparison.OrdinalIgnoreCase))
+            string expectedIni = "[Startup]\r\n0CmdLine=" + exe +
+                "\r\n0Parameters=--client-agent Install\r\n";
+            if (!string.Equals(startup, expectedIni, StringComparison.OrdinalIgnoreCase))
                 return null;
         }
 
