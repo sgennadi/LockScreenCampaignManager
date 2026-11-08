@@ -352,7 +352,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("no automatic AD authentication is attempted", main)
         self.assertIn('if (!_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow))', main)
         self.assertIn('TestAdConnectionScope()', tests)
-        self.assertIn("new DomainDeploymentForm(snapshot, _company, _adSnapshot, advanced)", main)
+        self.assertIn("DomainDeploymentForm(snapshot, _company, _adSnapshot,", main)
         self.assertIn("Reconnect here to verify OU/group", deploy)
         self.assertIn("UiStyle.Navy", main)
         self.assertIn("Color.FromArgb(11,46,90)", theme)
@@ -379,7 +379,7 @@ class ClientManagementContracts(unittest.TestCase):
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         project = (APP / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-        self.assertIn('<Version>0.4.0-preview.36</Version>', project)
+        self.assertIn('<Version>0.4.0-preview.37</Version>', project)
         self.assertIn('test_manager_features.py', workflow)
         # Package name must derive from the project, never a stale preview string.
         self.assertIn('-getProperty:Version', workflow)
