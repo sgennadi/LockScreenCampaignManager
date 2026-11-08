@@ -155,9 +155,8 @@ internal static class NativeComputerGroupAssignment
             !(actualDc.Equals(dc, StringComparison.OrdinalIgnoreCase) ||
               actualDc.Split('.')[0].Equals(dc, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Selected AD controller identity does not match the requested domain.");
-        // Missing isRODC is not proof of a writable DC.
-        bool writable = NativeAdDiscovery.Attr(root, "isRODC")
-            .Equals("FALSE", StringComparison.OrdinalIgnoreCase);
+        // Query the actual NTDS Settings object; unknown is never writable.
+        bool writable = NativeAdDiscovery.ReadDcWritable(ldap, root) == true;
 
         if (!ouDn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
             !Inside(ouDn, baseDn) ||
