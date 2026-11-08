@@ -518,6 +518,10 @@ public sealed partial class MainForm
             button.Click += (_, _) => click();
             host.Controls.Add(button);
             UiStyle.DecorateForWizard(button, primary);
+            // Keep the guided controls text-only. Some default glyphs collide
+            // with captions at high DPI in fixed-width wizard action strips.
+            button.Image = null;
+            button.Tag = "NoIcon";
             return button;
         }
 
