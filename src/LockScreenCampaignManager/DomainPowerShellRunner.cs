@@ -93,13 +93,10 @@ internal static class DomainPowerShellRunner
         bool legacyAllowed = operation switch
         {
             DomainOperation.Deployment => mode == "Deploy",
-            // All supported lifecycle actions now have native Apply paths.
-            DomainOperation.Lifecycle => false,
             DomainOperation.ConflictScan =>
                 mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
             DomainOperation.Immediate =>
                 mode is "Push" or "Cleanup" or "Report" or "Repair",
-            DomainOperation.Storage => false,
             _ => false
         };
         if (!legacyAllowed)
@@ -113,19 +110,15 @@ internal static class DomainPowerShellRunner
             string asset = operation switch
             {
                 DomainOperation.Deployment => "LockScreenCampaignManager.GPODeploy.ps1",
-                DomainOperation.Lifecycle => "LockScreenCampaignManager.GpoLifecycle.ps1",
-                DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
+                    DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
                 DomainOperation.Immediate => "LockScreenCampaignManager.CampaignPushNow.ps1",
-                DomainOperation.Storage => "LockScreenCampaignManager.SysvolStorage.ps1",
-                _ => throw new ArgumentOutOfRangeException(nameof(operation))
+                    _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
             string script = Path.Combine(root, operation switch
             {
                 DomainOperation.Deployment => "GPO-Deploy.ps1",
-                DomainOperation.Lifecycle => "Gpo-Lifecycle.ps1",
                 DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
                 DomainOperation.Immediate => "Campaign-PushNow.ps1",
-                DomainOperation.Storage => "Sysvol-Storage.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             });
             using (var resource = typeof(DomainPowerShellRunner).Assembly.GetManifestResourceStream(asset)
