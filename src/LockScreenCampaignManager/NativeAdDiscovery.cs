@@ -41,8 +41,12 @@ internal static class NativeAdDiscovery
             throw new InvalidOperationException("Selected domain controller belongs to another AD domain.");
         if (string.IsNullOrWhiteSpace(actualDc))
             throw new InvalidOperationException("LDAP RootDSE did not return a controller DNS name.");
-        // Unknown RODC metadata must never be reported as write-capable.
-        bool writable = Attr(root, "isRODC").Equals("FALSE", StringComparison.OrdinalIgnoreCase);
+        // RootDSE does not guarantee an "isRODC" attribute. Determine the
+        // actual DC's write capability via its NTDS Settings msDS-isRODC.
+        // Unknown must remain unknown, never be mislabeled as an RODC.
+        bool? dcWritable = ReadDcWritable(ldap, root);
+        bool writable = dcWritable == true;
+        bool writableKnown = dcWritable.HasValue;
 
         object data = mode switch
         {
@@ -52,9 +56,10 @@ internal static class NativeAdDiscovery
                 credentialContext = credentials.IsAlternate ? credentials.UserName : Environment.UserName,
                 gpoToolsAvailable = true, rsatRequired = false,
                 deploymentMode = "Native .NET LDAP read-only discovery (no RSAT/WinRM)",
-                dcWritable = writable
+                dcWritable = writable, dcWritableKnown = writableKnown
             },
-            "Snapshot" => Snapshot(ldap, discoveredDomain, actualDc, baseDn, writable),
+            "Snapshot" => Snapshot(ldap, discoveredDomain, actualDc, baseDn,
+                writable, writableKnown),
             "DomainControllers" => Controllers(ldap, baseDn, actualDc, writable),
             "OUs" => OrganizationalUnits(ldap, baseDn),
             "Groups" => Groups(ldap, baseDn),
@@ -152,11 +157,35 @@ internal static class NativeAdDiscovery
     {
         var response = (SearchResponse)ldap.SendRequest(new SearchRequest("",
             "(objectClass=*)", SearchScope.Base,
-            "defaultNamingContext", "dnsHostName", "isRODC", "currentTime",
-            "configurationNamingContext"));
+            "defaultNamingContext", "dnsHostName", "currentTime",
+            "configurationNamingContext", "dsServiceName"));
         if (response.Entries.Count != 1)
             throw new InvalidOperationException("RootDSE did not return exactly one directory root.");
         return response.Entries[0];
+    }
+
+    // A normal writable DC exposes FALSE and an RODC exposes TRUE on
+    // CN=NTDS Settings,... via the constructed msDS-isRODC attribute.
+    // Never infer writable status from missing RootDSE data or a failed
+    // LDAP lookup. This is a READ-ONLY check, not an actual write probe.
+    internal static bool? ReadDcWritable(LdapConnection ldap, SearchResultEntry root)
+    {
+        string settingsDn = Attr(root, "dsServiceName");
+        if (!settingsDn.StartsWith("CN=NTDS Settings,CN=", StringComparison.OrdinalIgnoreCase))
+            return null;
+        try
+        {
+            var request = new SearchRequest(settingsDn,
+                "(objectClass=*)", SearchScope.Base, "msDS-isRODC");
+            var response = (SearchResponse)ldap.SendRequest(request);
+            if (response.Entries.Count != 1) return null;
+            string rodc = Attr(response.Entries[0], "msDS-isRODC");
+            if (rodc.Equals("FALSE", StringComparison.OrdinalIgnoreCase)) return true;
+            if (rodc.Equals("TRUE", StringComparison.OrdinalIgnoreCase)) return false;
+        }
+        catch (DirectoryOperationException) { }
+        catch (LdapException) { }
+        return null;
     }
 
     internal static string Attr(SearchResultEntry entry, string name)
@@ -253,7 +282,7 @@ internal static class NativeAdDiscovery
     }
 
     private static object Snapshot(LdapConnection ldap, string domain,
-        string dc, string baseDn, bool writable)
+        string dc, string baseDn, bool writable, bool writableKnown)
     {
         var computers = Search(ldap, baseDn,
             "(&(objectCategory=computer)(|(primaryGroupID=516)(primaryGroupID=521)))",
@@ -276,7 +305,7 @@ internal static class NativeAdDiscovery
             new object[] { new { name = dc, writable } };
         return new
         {
-            domain, dc, baseDn, dcWritable = writable,
+            domain, dc, baseDn, dcWritable = writable, dcWritableKnown = writableKnown,
             readOnly = true, observedUtc = DateTimeOffset.UtcNow.ToString("O"),
             capped = computers.Count >= QueryLimit || ous.Count >= QueryLimit ||
                 groups.Count >= QueryLimit || policies.Count >= QueryLimit,
