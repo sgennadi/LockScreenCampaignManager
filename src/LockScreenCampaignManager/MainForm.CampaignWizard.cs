@@ -229,10 +229,10 @@ public sealed partial class MainForm
             footer.Controls.Add(_footnote, 0, 0);
 
             _updateAvailable.Name = "WizardUpdateNoticeButton";
-            _updateAvailable.Text = "New update...";
+            _updateAvailable.Text = "Check updates";
             _updateAvailable.Dock = DockStyle.Fill;
             _updateAvailable.Tag = "NoIcon";
-            _updateAvailable.Visible = false;
+            _updateAvailable.Visible = true;
             _updateAvailable.AutoEllipsis = true;
             _updateAvailable.Margin = new Padding(4, 2, 4, 2);
             _updateAvailable.Click += (_, _) => _owner.OpenUniversalUpdaterFromNotice();
@@ -273,16 +273,25 @@ public sealed partial class MainForm
         {
             if (IsDisposed) return;
             string? version = _owner.AvailableUpdateVersion;
-            _updateAvailable.Visible = version is not null;
-            if (version is null)
+            // Keep Check updates visible even if no newer release is known.
+            // An unavailable API is NOT the same as an up-to-date install.
+            _updateAvailable.Visible = true;
+            _updateAvailable.Text = version is not null
+                ? "Update " + version : _owner.UpdateNoticeCaption;
+            if (_owner.UpdateNoticeWarning)
             {
-                FitFooter();
-                return;
+                _updateAvailable.Tag = "UpdateNotice";
+                UiStyle.DecorateForUpdateNotice(_updateAvailable);
             }
-            _updateAvailable.Text = "Update " + version;
-            _updateAvailable.Tag = "UpdateNotice";
-            UiStyle.DecorateForUpdateNotice(_updateAvailable);
-            _updateHelp.SetToolTip(_updateAvailable, _owner.AvailableUpdateSummary);
+            else
+            {
+                _updateAvailable.Tag = "NoIcon";
+                UiStyle.DecorateForWizard(_updateAvailable, false);
+            }
+            _updateHelp.SetToolTip(_updateAvailable,
+                _owner.AvailableUpdateSummary.Length > 0
+                    ? _owner.AvailableUpdateSummary
+                    : "Check GitHub Releases in Updater (Check -> Install).");
             FitFooter();
         }
 
