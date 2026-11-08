@@ -75,8 +75,7 @@ internal static class NativeGpoLifecycleList
                     "Connected controller identity does not match the requested AD domain/DC.");
             // Preserve the legacy lifecycle requirement. Unknown RODC state
             // is not evidence of a writable controller.
-            if (!NativeAdDiscovery.Attr(root, "isRODC").Equals("FALSE",
-                    StringComparison.OrdinalIgnoreCase))
+            if (NativeAdDiscovery.ReadDcWritable(ldap, root) != true)
                 throw new InvalidOperationException("A writable AD controller must be verified.");
 
             var timer = Stopwatch.StartNew();
