@@ -111,7 +111,9 @@ internal static partial class NativeClientAgent
         }
         catch (Exception ex)
         {
-            WriteError(ex);
+            if (mode == "Status")
+                Console.Error.WriteLine("Native client Status unavailable: " + ex.GetType().Name);
+            else WriteError(ex);
             return 1;
         }
     }
@@ -446,29 +448,102 @@ internal static partial class NativeClientAgent
 
     private static object Status(Context ctx)
     {
-        int missing = 0, corrupt = 0;
+        // Status never performs repairs, writes receipts or infers missing
+        // values when ACLs prevent reading the required evidence.
+        var missing = new List<string>();
+        var corrupt = new List<string>();
+        string observationError = "";
         foreach (CampaignSlide slide in ctx.Config.Slides)
         {
             string path = Path.Combine(ctx.Images, slide.FileName);
-            if (!File.Exists(path)) missing++;
-            else if (!Verified(path, slide.Sha256)) corrupt++;
+            try
+            {
+                if (!File.Exists(path)) missing.Add(slide.FileName);
+                else if (!Verified(path, slide.Sha256)) corrupt.Add(slide.FileName);
+            }
+            catch (Exception ex)
+            {
+                observationError = ex.GetType().Name;
+                break;
+            }
         }
-        SourceRecord? state = GetState(ctx);
-        bool manifest = state is not null && Verified(ctx.LocalManifest, state.ManifestSha256);
-        bool exe = state is not null && Verified(ctx.LocalExe, state.AgentSha256);
+
+        SourceRecord? state = null;
+        string sourceStatus = "Missing";
+        try
+        {
+            state = GetState(ctx);
+            sourceStatus = state is null ? "Missing" : "Verified";
+        }
+        catch (Exception ex) { sourceStatus = "Unavailable: " + ex.GetType().Name; }
+
+        bool manifestOk = state is not null && Verified(ctx.LocalManifest, state.ManifestSha256);
+        bool agentOk = state is not null && Verified(ctx.LocalExe, state.AgentSha256);
+        bool completed = File.Exists(ctx.CompletedPath);
+        bool? taskPresent = null;
+        string taskStatus = "Unavailable";
+        try
+        {
+            taskPresent = TaskExists(ctx);
+            taskStatus = taskPresent.Value ? "Present" : "Missing";
+        }
+        catch (Exception) { /* ACL/RPC failure cannot prove a task is absent. */ }
+
+        string ownerStatus = "Unknown";
+        try
+        {
+            var owner = ReadOptional<OwnerRecord>(ctx.OwnerPath);
+            ownerStatus = owner is null ? "Unclaimed" :
+                owner.CampaignId == ctx.Id ? "Owned" : "AnotherCampaign";
+        }
+        catch (Exception) { /* Do not interpret a corrupt owner as unclaimed. */ }
+
+        string backupStatus = "Missing";
+        try { if (ReadBackup(ctx) is not null) backupStatus = "Valid"; }
+        catch (Exception) { backupStatus = "Invalid"; }
+
+        int index = ExpectedIndex(ctx);
+        string expected = index >= 0 ? ctx.Config.Slides[index].FileName : "";
+        string currentImage = "";
+        bool? registryMatches = null;
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+            currentImage = Convert.ToString(key?.GetValue("LockScreenImage", "",
+                RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
+            if (index >= 0)
+                registryMatches = currentImage.Equals(
+                    Path.Combine(ctx.Images, expected), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception) { /* Unknown, not a confirmed absence. */ }
+
+        string stage = completed ? "Completed" :
+            index < 0 ? "Pending" : "Active";
+        string health = sourceStatus.StartsWith("Unavailable", StringComparison.Ordinal) ||
+            observationError.Length > 0 || backupStatus == "Invalid" ||
+            ownerStatus == "Unknown" ? "Unknown" :
+            completed ? "Completed" :
+            missing.Count > 0 || corrupt.Count > 0 || !manifestOk || !agentOk ||
+            taskPresent == false || (index >= 0 && registryMatches == false) ||
+            ownerStatus == "AnotherCampaign" ? "RepairNeeded" :
+            taskPresent is null || (index >= 0 && registryMatches is null)
+                ? "Unknown" : "Healthy";
+
         return new
         {
             AgentVersion = "0.4.0-preview.64-native",
-            CampaignId = ctx.Id,
-            ClientType = "Executable",
-            Health = missing + corrupt > 0 || !manifest || !exe
-                ? "RepairNeeded" : "Healthy",
+            CampaignId = ctx.Id, ClientType = "Executable",
+            Health = health, Stage = stage,
             Installed = File.Exists(ctx.LocalExe),
             MissingImages = missing, CorruptImages = corrupt,
-            ConfigHashOK = manifest, AgentHashOK = exe,
-            ExpectedImage = ExpectedIndex(ctx) >= 0
-                ? ctx.Config.Slides[ExpectedIndex(ctx)].FileName : "",
-            Completed = File.Exists(ctx.CompletedPath)
+            ConfigHashOK = manifestOk, AgentHashOK = agentOk,
+            SourceStatus = sourceStatus, TaskStatus = taskStatus,
+            TaskPresent = taskPresent, BackupStatus = backupStatus,
+            ActiveOwner = ownerStatus, ExpectedImage = expected,
+            CurrentRegistryImage = currentImage,
+            RegistryMatches = registryMatches,
+            ObservationError = observationError,
+            Completed = completed
         };
     }
 
