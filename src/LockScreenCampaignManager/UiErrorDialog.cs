@@ -62,7 +62,7 @@ internal static class UiErrorDialog
             RowCount = 3, ColumnCount = 1 };
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 75));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 75));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         panel.Controls.Add(new Label { Dock = DockStyle.Fill,
             Text = "Error: " + UniversalDiagnosticsEmbedded.Clean(error.GetType().Name) + "\n" +
                 "No reports are sent automatically. Review the sanitized data." }, 0, 0);
@@ -70,7 +70,7 @@ internal static class UiErrorDialog
             ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9f),
             Text = UniversalDiagnosticsEmbedded.Preview(payload) };
         panel.Controls.Add(detail, 0, 1);
-        var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
+        var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
         Button B(string text, Action act, int width)
         {
             var b = new Button { Text = text, Width = width, Height = 42, Margin = new Padding(0, 4, 10, 0) };
@@ -133,7 +133,8 @@ internal sealed class DiagnosticsWindow : Form
         };
         void Add(string title, Action act)
         {
-            var b = new Button { Text = title, Width = 148, Height = 38 };
+            var b = new Button { Text = title, Width = title.StartsWith("Report") ? 178 : 148,
+                Height = 38, Margin = new Padding(4, 4, 4, 4), Tag = "NoIcon" };
             b.Click += (_, _) => act(); buttons.Controls.Add(b);
         }
         Add("Refresh", Reload);
