@@ -103,8 +103,9 @@ public sealed partial class MainForm
             // Advanced mode doesn't show a blank, reserved Wizard navigation strip.
             // Give its full height back to the grouped manual menus.
             _workflowBar.Visible = !advanced;
-            // The Wizard bar now has its own fixed top-level row and never
-            // competes with the bottom project and tools menus.
+            // Reclaim the wizard row in Advanced; keep it pinned above images in Wizard.
+            if (_workflowBar.Parent is TableLayoutPanel owner)
+                owner.RowStyles[2].Height = advanced ? 0 : 64;
         }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
