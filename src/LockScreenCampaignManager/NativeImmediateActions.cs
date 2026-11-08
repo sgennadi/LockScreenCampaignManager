@@ -142,7 +142,7 @@ internal static class NativeImmediateActions
             var zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
             if (zone.IsAmbiguousTime(endLocal) || zone.IsInvalidTime(endLocal))
                 throw new InvalidDataException("Managed campaign has an invalid end time.");
-            if (purpose is "Push" or "Repair" &&
+            if ((purpose is "Push" or "Repair") &&
                 TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone) >= endLocal)
                 throw new InvalidOperationException(
                     "Campaign has ended; reuse the GPO with a new campaign.");
@@ -283,7 +283,7 @@ internal static class NativeImmediateActions
             FileAccess.Read, FileShare.Read);
         if (stream.Length != info.Length)
             throw new InvalidDataException("Campaign manifest changed during read.");
-        byte[] bytes = new byte[info.Length];
+        byte[] bytes = new byte[checked((int)info.Length)];
         stream.ReadExactly(bytes);
         if (stream.Length != info.Length)
             throw new InvalidDataException("Campaign manifest changed during read.");
