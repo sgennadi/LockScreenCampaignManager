@@ -59,7 +59,7 @@ assert 'Get-DomainInfo' in gpo and 'Get-ExistingGpoByName' in gpo
 assert 'New-NativeGpo' in gpo and 'Add-GpoLinkToOu' in gpo
 assert 'Remote-GPO-Deploy.ps1' not in (project / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
 assert 'CreateProcessWithLogonW' in (project / 'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
-assert 'Connect / Change AD account' in (project / 'MainForm.cs').read_text(encoding='utf-8')
+assert 'Connect AD (optional)' in (project / 'MainForm.cs').read_text(encoding='utf-8')
 assert 'GPO deploy...' in (project / 'MainForm.cs').read_text(encoding='utf-8')
 assert 'SetWorkflowMode' in (project / 'MainForm.Workflow.cs').read_text(encoding='utf-8')
 assert 'AD Connection Wizard' in (project / 'AdConnectionStartDialog.cs').read_text(encoding='utf-8')
