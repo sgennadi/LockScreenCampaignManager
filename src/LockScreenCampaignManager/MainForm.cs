@@ -96,14 +96,15 @@ public sealed partial class MainForm : Form
         var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         var root = new TableLayoutPanel
         {
-            Dock = DockStyle.None, ColumnCount = 1, RowCount = 4,
+            Dock = DockStyle.None, ColumnCount = 1, RowCount = 5,
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
             Location = Point.Empty
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 171));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         viewport.Controls.Add(root);
         Controls.Add(viewport);
         void FitContentToViewport()
@@ -113,7 +114,7 @@ public sealed partial class MainForm : Form
             // Avoid forcing a tall virtual canvas on normal laptop windows:
             // this used to push the entire wizard footer below the viewport.
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(650, visible.Height));
+                Math.Max(720, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -251,7 +252,7 @@ public sealed partial class MainForm : Form
             if (available > 0) _savedSplitPercent = Math.Clamp(
                 (int)Math.Round(100.0 * middle.SplitterDistance / available), 30, 80);
         };
-        root.Controls.Add(middle, 0, 2);
+        root.Controls.Add(middle, 0, 3);
         var left = PanelBox();
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
@@ -327,10 +328,9 @@ public sealed partial class MainForm : Form
         _previewName.AutoEllipsis = true;
         rightLayout.Controls.Add(_previewName, 0, 2);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         _footerLayout = footer;
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
@@ -377,7 +377,7 @@ public sealed partial class MainForm : Form
         _workflowButtons.Controls.Add(_workflowNext, 1, 0);
         _workflowButtons.Controls.Add(_workflowAction, 2, 0);
         flowBar.Controls.Add(_workflowButtons, 1, 0);
-        footer.Controls.Add(flowBar, 0, 1);
+        root.Controls.Add(flowBar, 0, 2);
         _advancedButtons.Dock = DockStyle.Fill;
         _advancedButtons.WrapContents = true;
         _advancedButtons.Padding = new Padding(4, 8, 4, 0);
@@ -440,9 +440,9 @@ public sealed partial class MainForm : Form
         var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
-        footer.Controls.Add(_status, 0, 2);
-        footer.Controls.Add(toolsHost, 0, 3);
-        root.Controls.Add(footer, 0, 3);
+        footer.Controls.Add(_status, 0, 1);
+        footer.Controls.Add(toolsHost, 0, 2);
+        root.Controls.Add(footer, 0, 4);
     }
 
     private static Panel PanelBox() => new() {
