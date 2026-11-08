@@ -285,6 +285,8 @@ internal static partial class NativeClientAgent
     private static void ProtectDirectory(string path)
     {
         Directory.CreateDirectory(path);
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Campaign state directory must not be a reparse point.");
         var acl = new DirectorySecurity();
         acl.SetAccessRuleProtection(true, false);
         var principals = new[]
@@ -335,7 +337,13 @@ internal static partial class NativeClientAgent
         ProtectDirectory(ctx.Local);
         ProtectDirectory(ctx.Images);
         if (File.Exists(ctx.CompletedPath))
-            throw new InvalidOperationException("This campaign already completed; use a new ID.");
+        {
+            // A mapped EXE cannot delete itself on Windows. On the next
+            // startup the GPO launcher reenters here to complete the
+            // deferred-delete receipt, never to reinstall a finished ID.
+            FinalizeCleanup(ctx);
+            return;
+        }
         EnsureNoOtherOwner(ctx);
 
         SourceRecord? prior = GetState(ctx);
