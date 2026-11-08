@@ -805,7 +805,12 @@ internal sealed class AdConnectionStartDialog : Form
                         MessageBoxIcon.Warning);
                 }
             }
-            _password.Clear();
+            // Clearing the transient password is NOT a change of AD scope.
+            // Suppress TextChanged invalidation so the freshly verified
+            // directory snapshot stays valid for Review and Finish.
+            _mutating = true;
+            try { _password.Clear(); }
+            finally { _mutating = false; }
             ShowPage(1);
             UiStyle.ApplyStatus(_state,
                 $"CONNECTED / READ ONLY — {snapshot.Domain} | {snapshot.Dc} | " +
