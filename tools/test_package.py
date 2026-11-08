@@ -80,7 +80,13 @@ assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
 native_deploy_plan = (project / 'NativeGpoDeploymentPlan.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Deployment && mode == "Plan"' in runner
 assert 'NativeGpoDeploymentPlan.Execute(mode, request, credentials)' in runner
-assert 'LockScreenCampaignManager.GPODeploy.ps1' in csproj
+assert 'LockScreenCampaignManager.GPODeploy.ps1' not in csproj
+assert 'NativeGpoDeploymentApply.Execute(mode, request, credentials)' in runner
+native_deploy_apply = (project / 'NativeGpoDeploymentApply.cs').read_text(encoding='utf-8')
+for guard in ('NativeGpoDeploymentPlan.Execute', 'RestrictApplyToGroup',
+              'NativeGpoCom.CreateNewGpo', 'RegisterStartup',
+              'LinkNewGpo', 'Verify', 'CopyAndVerify'):
+    assert guard in native_deploy_apply, guard
 for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
               'VerifyLocalPackageForTest', 'WindowsIdentity.RunImpersonated',
               'TimeZoneInfo.FindSystemTimeZoneById', 'CountDirectMembers',
