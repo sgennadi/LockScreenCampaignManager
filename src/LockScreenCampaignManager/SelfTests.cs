@@ -14,6 +14,13 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 4)) == "2026-11-12T14:00:00", "day 5");
         Check(CampaignSchedule.Format(CampaignSchedule.End(p)) == "2026-11-13T14:00:00", "cleanup");
         Check(CampaignSchedule.BuildId(p) == "test-campaign-202611081400", "id");
+        Check(CampaignSchedule.DefaultGpoName(p) == "LockScreen - 20261108-1400",
+            "compact default GPO name");
+        Check(CampaignSchedule.DefaultGpoName(new CampaignProject {
+            StartLocal = new DateTime(2026, 11, 9, 14, 0),
+            CompanyProfileId = "01234567-89ab-cdef-0123-456789abcdef"
+        }) == "LockScreen - 20261109-1400-c01234567",
+            "company-specific compact GPO name");
         p.LastImageHours = 12;
         Check(CampaignSchedule.Format(CampaignSchedule.End(p)) == "2026-11-13T02:00:00", "short last image");
         p.StartLocal = new DateTime(2028, 2, 28, 14, 0, 0);
