@@ -189,7 +189,11 @@ internal sealed class AdConnectionStartDialog : Form
         _user.TextChanged += (_, _) => InvalidateSnapshot();
         _password.TextChanged += (_, _) => InvalidateSnapshot();
         _current.CheckedChanged += (_, _) => { SetCredentialMode(); InvalidateSnapshot(); };
-        _alternate.CheckedChanged += (_, _) => { SetCredentialMode(); InvalidateSnapshot(); };
+        _alternate.CheckedChanged += (_, _) => {
+            SetCredentialMode();
+            if (_alternate.Checked && _password.Text.Length == 0) LoadSavedCredentials();
+            InvalidateSnapshot();
+        };
         _rememberUsername.CheckedChanged += (_, _) => {
             if (!_rememberUsername.Checked) _saveEncryptedPassword.Checked = false;
             SetCredentialMode();
@@ -664,7 +668,7 @@ internal sealed class AdConnectionStartDialog : Form
             _saveEncryptedPassword.Checked = saved.HasPassword;
             // Never automatically switch the Windows identity to a stored one.
             // The operator must explicitly choose "Use another AD account".
-            if (saved.HasPassword) _password.Text = saved.Password;
+            if (saved.HasPassword && _alternate.Checked) _password.Text = saved.Password;
         }
         catch (Exception ex)
         {
