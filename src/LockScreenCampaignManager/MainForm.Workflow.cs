@@ -41,9 +41,10 @@ public sealed partial class MainForm
         }, 0, 0);
         panel.Controls.Add(new Label
         {
-            Text = "Wizard guides you through images, arranging their order, schedule and saving. " +
-                "Active Directory deployment is optional. Advanced opens all tools. " +
-                "Cancel keeps the editor open.",
+            Text = "The Wizard first offers AD sign-in (or Skip AD), then guides you " +
+                "through images, ordering, schedule, saving, and optional GPO deployment. " +
+                "Deployment checks GPO permissions for your selected OU and group. " +
+                "Cancel leaves the editor available.",
             Dock = DockStyle.Fill,
             ForeColor = UiStyle.Foreground
         }, 0, 1);
@@ -241,12 +242,29 @@ public sealed partial class MainForm
                 OpenScheduleEditor();
                 break;
             case 4:
-                ValidateCurrent();
-                SaveProject();
+                try
+                {
+                    ReadControls();
+                    CampaignSchedule.Validate(_project, requireImages: true);
+                    if (TrySaveProject())
+                    {
+                        _workflowStep = 5;
+                        _status.Text = "Campaign saved. Final step: choose AD deployment, or finish offline.";
+                    }
+                }
+                catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
+                catch (FileNotFoundException)
+                {
+                    ShowCampaignValidation("A selected image no longer exists.");
+                }
+                catch (Exception ex)
+                {
+                    UiErrorDialog.Show(this, "Validate before saving", ex);
+                }
                 break;
             case 5:
+                if (!AdReady) ConnectAndReadAd();
                 if (AdReady) OpenDomainDeployment();
-                else ConnectAndReadAd();
                 break;
         }
         UpdateWorkflow();
