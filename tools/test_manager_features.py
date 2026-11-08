@@ -397,7 +397,7 @@ class ClientManagementContracts(unittest.TestCase):
         assert "Campaign Wizard - deploy" in smoke
         immediate = read("NativeImmediateActions.cs")
         runner = read("DomainPowerShellRunner.cs")
-        assert 'mode is ("List" or "Preview")' in runner
+        assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
         assert 'LegacyPlanHash' in immediate
         assert 'Task Scheduler RPC' in immediate
         deploy_plan = read("NativeGpoDeploymentPlan.cs")
