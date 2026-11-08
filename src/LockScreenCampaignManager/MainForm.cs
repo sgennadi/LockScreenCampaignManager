@@ -53,7 +53,7 @@ public sealed partial class MainForm : Form
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(1120, 780);
+        MinimumSize = new Size(1050, 720);
         Size = new Size(1430, 910);
         BackColor = Bg;
         ConfigureLayout();
@@ -86,7 +86,7 @@ public sealed partial class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 192));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
@@ -110,24 +110,30 @@ public sealed partial class MainForm : Form
         _companyLabel.AutoEllipsis = true;
         _companyLabel.Text = "LOCAL PROJECT — No organization selected; no AD privileges required";
         header.Controls.Add(_companyLabel, 0, 2);
-        var adFirstStep = new FlowLayoutPanel
+        var adFirstStep = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(5, 5, 7, 4)
+            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
+            BackColor = UiStyle.SoftBlue, Padding = new Padding(4, 2, 4, 2)
         };
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 103));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
         _adConnectButton.Text = "AD connection (optional)";
-        _adConnectButton.MinimumSize = new Size(218, 36);
-        _adConnectButton.AutoSize = true;
+        _adConnectButton.MinimumSize = Size.Empty;
+        _adConnectButton.Dock = DockStyle.Fill;
+        _adConnectButton.Margin = new Padding(2, 1, 6, 1);
         _adConnectButton.BackColor = UiStyle.Surface;
         _adConnectButton.ForeColor = UiStyle.Navy;
         _adConnectButton.Tag = "NoIcon";
         _adConnectButton.Click += (_, _) => ConnectAndReadAd();
-        adFirstStep.Controls.Add(_adConnectButton);
-        _adConnectionStatus.AutoSize = true;
-        _adConnectionStatus.MinimumSize = new Size(300, 31);
+        adFirstStep.Controls.Add(_adConnectButton, 0, 0);
+        _adConnectionStatus.AutoSize = false;
+        _adConnectionStatus.Dock = DockStyle.Fill;
+        _adConnectionStatus.MinimumSize = Size.Empty;
         _adConnectionStatus.TextAlign = ContentAlignment.MiddleLeft;
         _adConnectionStatus.Margin = new Padding(7, 2, 0, 0);
-        adFirstStep.Controls.Add(_adConnectionStatus);
+        adFirstStep.Controls.Add(_adConnectionStatus, 1, 0);
         _wizardMode.Text = "Wizard";
         _wizardMode.Width = 95;
         _wizardMode.Height = 35;
@@ -136,8 +142,12 @@ public sealed partial class MainForm : Form
         _advancedModeButton.Width = 110;
         _advancedModeButton.Height = 35;
         _advancedModeButton.Click += (_, _) => SetWorkflowMode(true);
-        adFirstStep.Controls.Add(_wizardMode);
-        adFirstStep.Controls.Add(_advancedModeButton);
+        _wizardMode.Dock = DockStyle.Fill;
+        _wizardMode.Margin = new Padding(2);
+        _advancedModeButton.Dock = DockStyle.Fill;
+        _advancedModeButton.Margin = new Padding(2);
+        adFirstStep.Controls.Add(_wizardMode, 2, 0);
+        adFirstStep.Controls.Add(_advancedModeButton, 3, 0);
         UiStyle.ApplyStatus(_adConnectionStatus,
             "NOT CONNECTED — offline editing only.", UiStatusKind.Neutral);
         header.Controls.Add(adFirstStep, 0, 3);
