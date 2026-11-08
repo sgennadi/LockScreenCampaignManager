@@ -367,6 +367,13 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("Add folder...", main)
         self.assertIn("AddActionMenu", main)
         self.assertIn("ImagePreviewSplitPercent", main)
+        self.assertIn("var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true }", main)
+        self.assertIn("var imageButtons = new TableLayoutPanel", main)
+        self.assertIn("imageButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50))", main)
+        self.assertIn("imageButtons.Controls.Add(_imageScheduleButton, 1, 1)", main)
+        self.assertIn('ShowStartupWizardChoice', workflow)
+        self.assertIn('Text = "Start Wizard"', workflow)
+        self.assertIn('Text = "Cancel"', workflow)
         self.assertIn("No organization selected; no AD privileges required", main)
 
     def test_windows_builder_exports_updated_version(self):
