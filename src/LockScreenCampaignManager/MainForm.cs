@@ -112,8 +112,12 @@ public sealed partial class MainForm : Form
             var visible = viewport.ClientSize;
             // Avoid forcing a tall virtual canvas on normal laptop windows:
             // this used to push the entire wizard footer below the viewport.
+            // The main header grows with DPI. Preserve the rest of the
+            // editor below it rather than squeezing or obscuring the steps.
+            int addedHeaderHeight = Math.Max(0,
+                (int)Math.Ceiling(root.RowStyles[0].Height) - 190);
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(855, visible.Height));
+                Math.Max(855 + addedHeaderHeight, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -125,18 +129,25 @@ public sealed partial class MainForm : Form
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        header.Controls.Add(new Label {
+        var mainTitle = new Label {
+            Name = "MainHeaderTitle",
             Text = "LockScreen Campaign Manager", AutoSize = false,
-            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(0, 6, 0, 8),
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(0, 7, 0, 8),
             AutoEllipsis = false, MinimumSize = new Size(530, 0),
-            Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
-        }, 0, 0);
-        header.Controls.Add(new Label {
+            Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold),
+            ForeColor = UiStyle.Navy
+        };
+        var mainSteps = new Label {
+            Name = "MainHeaderSteps",
             Text = "1 AD sign-in / Skip    2 Images    3 Arrange    4 Schedule    5 Save    6 Deploy",
             AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
             Margin = new Padding(3, 0, 0, 0)
-        }, 0, 1);
+        };
+        header.Controls.Add(mainTitle, 0, 0);
+        header.Controls.Add(mainSteps, 0, 1);
+        _companyLabel.Name = "MainHeaderCompany";
         _companyLabel.Dock = DockStyle.Fill;
         _companyLabel.ForeColor = UiStyle.Accent;
         _companyLabel.Font = new Font("Segoe UI Semibold", 9.5f);
@@ -194,6 +205,21 @@ public sealed partial class MainForm : Form
             "Active Directory is optional while creating and saving a campaign.");
         header.Controls.Add(adFirstStep, 0, 3);
         root.Controls.Add(header, 0, 0);
+        void FitMainHeader()
+        {
+            if (root.IsDisposed || header.IsDisposed) return;
+            UiStyle.FitEditorHeader(root, header, mainTitle, mainSteps,
+                _companyLabel, adFirstStep, 190);
+            FitContentToViewport();
+        }
+        mainTitle.FontChanged += (_, _) => FitMainHeader();
+        mainSteps.FontChanged += (_, _) => FitMainHeader();
+        _companyLabel.FontChanged += (_, _) => FitMainHeader();
+        _wizardMode.FontChanged += (_, _) => FitMainHeader();
+        _advancedModeButton.FontChanged += (_, _) => FitMainHeader();
+        Shown += (_, _) => FitMainHeader();
+        DpiChanged += (_, _) => BeginInvoke(new Action(FitMainHeader));
+        FitMainHeader();
 
         var settings = PanelBox();
         var settingsFlow = new FlowLayoutPanel {
