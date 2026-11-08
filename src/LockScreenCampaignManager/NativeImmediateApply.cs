@@ -61,16 +61,31 @@ internal static class NativeImmediateApply
                 hosts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != hosts.Length)
                 throw new InvalidDataException("Native approved client list is invalid.");
 
+            // Recheck the pinned client method on the selected DC.
+            // Never attempt to execute an EXE as a PowerShell script.
+            string dc = Get(args, "dc").Trim();
+            NativeAdDiscovery.ValidateNames(domain, dc);
+            string manifest = @"\\" + dc + @"\SYSVOL\" + domain +
+                @"\scripts\LockScreenCampaigns\" + id + @"\campaign.json";
+            using var doc = JsonDocument.Parse(File.ReadAllBytes(manifest),
+                new JsonDocumentOptions { MaxDepth = 12 });
+            if (doc.RootElement.GetProperty("campaignId").GetString() != id)
+                throw new InvalidDataException("Remote campaign identity mismatch.");
+            var clientType = NativeGpoDeploymentPlan.ParseClientType(
+                doc.RootElement.TryGetProperty("clientType", out var typeField) &&
+                typeField.ValueKind == JsonValueKind.String
+                    ? typeField.GetString() ?? "" : "");
+            string agentLeaf = clientType == CampaignClientType.Executable
+                ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
             string script = mode is "Push" or "Repair"
                 ? @"\\" + domain + @"\SYSVOL\" + domain +
-                    @"\scripts\LockScreenCampaigns\" + id + @"\LockScreen-Agent.ps1"
-                : @"C:\ProgramData\LockScreenCampaigns\" + id +
-                    @"\LockScreen-Agent.ps1";
+                    @"\scripts\LockScreenCampaigns\" + id + @"\" + agentLeaf
+                : @"C:\ProgramData\LockScreenCampaigns\" + id + @"\" + agentLeaf;
             string agentMode = mode == "Push" ? "Install" : mode;
             var answers = new List<Result>(hosts.Length);
             foreach (string host in hosts)
             {
-                try { answers.Add(ScheduleOne(host, script, agentMode, id)); }
+                try { answers.Add(ScheduleOne(host, script, agentMode, id, clientType)); }
                 catch (Exception ex)
                 {
                     bool offline = IsKnownOffline(ex);
@@ -120,7 +135,7 @@ internal static class NativeImmediateApply
     }
 
     private static Result ScheduleOne(string host, string agent, string agentMode,
-        string id)
+        string id, CampaignClientType clientType)
     {
         if (!Host.IsMatch(host) || !NativeSysvolStorage.ValidCampaignId(id))
             throw new ArgumentException("Invalid approved remote client identity.");
@@ -162,11 +177,19 @@ internal static class NativeImmediateApply
             definition.Settings.ExecutionTimeLimit = "PT10M";
             definition.Settings.DisallowStartIfOnBatteries = false;
             dynamic exec = definition.Actions.Create(0);
-            exec.Path = Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell",
-                "v1.0", "powershell.exe");
-            exec.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass " +
-                "-WindowStyle Hidden -File \"" + agent + "\" -Mode " + agentMode;
+            if (clientType == CampaignClientType.Executable)
+            {
+                exec.Path = agent;
+                exec.Arguments = "--client-agent " + agentMode;
+            }
+            else
+            {
+                exec.Path = Path.Combine(Environment.GetFolderPath(
+                    Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell",
+                    "v1.0", "powershell.exe");
+                exec.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass " +
+                    "-WindowStyle Hidden -File \"" + agent + "\" -Mode " + agentMode;
+            }
             Release(exec);
 
             // This is the irreversible boundary: a lost RPC response after
