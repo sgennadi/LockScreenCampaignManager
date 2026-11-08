@@ -149,26 +149,26 @@ public sealed partial class MainForm : Form
         var adFirstStep = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(4, 2, 4, 2)
+            BackColor = UiStyle.Navy, Padding = new Padding(7, 5, 7, 5)
         };
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 121));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 147));
-        _adConnectButton.Text = "Connect AD...";
+        _adConnectButton.Text = "Connect to AD...";
         _adConnectButton.MinimumSize = Size.Empty;
         _adConnectButton.Dock = DockStyle.Fill;
-        _adConnectButton.Margin = new Padding(10, 4, 13, 4);
-        _adConnectButton.BackColor = UiStyle.Surface;
-        _adConnectButton.ForeColor = UiStyle.Navy;
-        _adConnectButton.Tag = "NoIcon";
+        _adConnectButton.Margin = new Padding(6, 1, 14, 1);
+        _adConnectButton.BackColor = UiStyle.Accent;
+        _adConnectButton.ForeColor = Color.White;
+        _adConnectButton.Tag = "PrimaryAction";
         _adConnectButton.Click += (_, _) => ConnectAndReadAd();
         adFirstStep.Controls.Add(_adConnectButton, 0, 0);
         _adConnectionStatus.AutoSize = false;
         _adConnectionStatus.Dock = DockStyle.Fill;
         _adConnectionStatus.MinimumSize = Size.Empty;
         _adConnectionStatus.TextAlign = ContentAlignment.MiddleLeft;
-        _adConnectionStatus.Margin = new Padding(13, 4, 8, 4);
+        _adConnectionStatus.Margin = new Padding(9, 1, 14, 1);
         _adConnectionStatus.AutoEllipsis = true;
         adFirstStep.Controls.Add(_adConnectionStatus, 1, 0);
         _wizardMode.Text = "Wizard";
@@ -182,11 +182,11 @@ public sealed partial class MainForm : Form
         _wizardMode.Dock = DockStyle.Fill;
         _wizardMode.Tag = "NoIcon";
         _wizardMode.AutoEllipsis = true;
-        _wizardMode.Margin = new Padding(2);
+        _wizardMode.Margin = new Padding(5, 1, 5, 1);
         _advancedModeButton.Dock = DockStyle.Fill;
         _advancedModeButton.Tag = "NoIcon";
         _advancedModeButton.AutoEllipsis = true;
-        _advancedModeButton.Margin = new Padding(2);
+        _advancedModeButton.Margin = new Padding(5, 1, 3, 1);
         adFirstStep.Controls.Add(_wizardMode, 2, 0);
         adFirstStep.Controls.Add(_advancedModeButton, 3, 0);
         UiStyle.ApplyStatus(_adConnectionStatus,
