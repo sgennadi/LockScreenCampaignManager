@@ -99,9 +99,9 @@ public sealed partial class MainForm : Form
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
             Location = Point.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 171));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 106));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         viewport.Controls.Add(root);
@@ -113,7 +113,7 @@ public sealed partial class MainForm : Form
             // Avoid forcing a tall virtual canvas on normal laptop windows:
             // this used to push the entire wizard footer below the viewport.
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(790, visible.Height));
+                Math.Max(855, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -121,14 +121,14 @@ public sealed partial class MainForm : Form
         FitContentToViewport();
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(new Label {
             Text = "LockScreen Campaign Manager", AutoSize = false,
-            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = false, MinimumSize = new Size(530, 52),
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(0, 6, 0, 8),
+            AutoEllipsis = false, MinimumSize = new Size(530, 0),
             Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
@@ -339,11 +339,11 @@ public sealed partial class MainForm : Form
 
         var flowBar = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Padding = new Padding(14, 8, 14, 8), BackColor = UiStyle.SoftBlue,
+            Padding = new Padding(12, 7, 12, 7), BackColor = UiStyle.SoftBlue,
             Margin = new Padding(0, 3, 0, 8)
         };
-        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
-        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        flowBar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         _workflowBar = flowBar;
         flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _workflowHint.Dock = DockStyle.Fill;
@@ -351,7 +351,7 @@ public sealed partial class MainForm : Form
         _workflowHint.AutoEllipsis = true;
         _workflowHint.ForeColor = UiStyle.Navy;
         _workflowHint.Font = new Font("Segoe UI Semibold", 11f);
-        _workflowHint.Padding = new Padding(7, 0, 0, 0);
+        _workflowHint.Padding = new Padding(7, 5, 7, 5);
         flowBar.Controls.Add(_workflowHint, 0, 0);
         _workflowButtons.Dock = DockStyle.Fill;
         _workflowButtons.ColumnCount = 3;
