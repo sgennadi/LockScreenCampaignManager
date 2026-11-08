@@ -95,7 +95,7 @@ public sealed partial class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 192));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 208));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
@@ -255,6 +255,7 @@ public sealed partial class MainForm : Form
             ("Auto match dates / weekdays...", AutoMatchImageNames,
                 () => _project.ImagePaths.Count > 0)
         });
+        imageButtons.Controls.Add(_imageScheduleButton);
         leftLayout.Controls.Add(imageButtons, 0, 2);
 
         var right = PanelBox();
@@ -279,9 +280,10 @@ public sealed partial class MainForm : Form
         _previewName.AutoEllipsis = true;
         rightLayout.Controls.Add(_previewName, 0, 2);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
@@ -386,23 +388,11 @@ public sealed partial class MainForm : Form
             ("Check updates...", OpenUniversalUpdater, null),
             ("History...", OpenCampaignHistory, null)
         });
-        _quickButtons.Controls.Add(new Label {
-            Text = "Local editing works without administrator rights. GPO deployment is optional.",
-            ForeColor = UiStyle.Muted, AutoSize = true,
-            Margin = new Padding(16, 11, 0, 0)
-        });
         var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
-        var bottomBar = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-            Padding = new Padding(0, 2, 0, 0)
-        };
-        bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 305));
-        bottomBar.Controls.Add(toolsHost, 0, 0);
-        bottomBar.Controls.Add(_status, 1, 0);
-        footer.Controls.Add(bottomBar, 0, 2);
+        footer.Controls.Add(_status, 0, 2);
+        footer.Controls.Add(toolsHost, 0, 3);
         root.Controls.Add(footer, 0, 3);
     }
 
