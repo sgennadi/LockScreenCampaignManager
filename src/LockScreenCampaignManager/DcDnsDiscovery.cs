@@ -17,11 +17,13 @@ internal static class DcDnsDiscovery
         public uint Flags;
         public uint Ttl;
         public uint Reserved;
+        // DNS_SRV_DATA starts with PWSTR pNameTarget (pointer aligned).
+        // Priority/Weight/Port come AFTER the pointer, not before it.
+        public IntPtr Target;
         public ushort Priority;
         public ushort Weight;
         public ushort Port;
         public ushort Pad;
-        public IntPtr Target;
     }
 
     [DllImport("dnsapi.dll", EntryPoint = "DnsQuery_W", CharSet = CharSet.Unicode)]
@@ -30,6 +32,52 @@ internal static class DcDnsDiscovery
 
     [DllImport("dnsapi.dll", EntryPoint = "DnsRecordListFree")]
     private static extern void DnsRecordListFree(IntPtr records, int freeType);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DomainControllerInfo
+    {
+        public IntPtr DomainControllerName;
+        public IntPtr DomainControllerAddress;
+        public uint DomainControllerAddressType;
+        public Guid DomainGuid;
+        public IntPtr DomainName;
+        public IntPtr DnsForestName;
+        public uint Flags;
+        public IntPtr DcSiteName;
+        public IntPtr ClientSiteName;
+    }
+
+    [DllImport("netapi32.dll", EntryPoint = "DsGetDcNameW", CharSet = CharSet.Unicode)]
+    private static extern int DsGetDcName(string? computerName, string domainName,
+        IntPtr domainGuid, string? siteName, uint flags, out IntPtr dcInfo);
+
+    [DllImport("netapi32.dll", EntryPoint = "NetApiBufferFree")]
+    private static extern int NetApiBufferFree(IntPtr buffer);
+
+    // DC locator (Netlogon) complements DNS SRV and works without RSAT.
+    private static string? LocateDc(string domain)
+    {
+        const uint DS_DIRECTORY_SERVICE_REQUIRED = 0x00000010;
+        const uint DS_RETURN_DNS_NAME = 0x40000000;
+        IntPtr info = IntPtr.Zero;
+        try
+        {
+            if (DsGetDcName(null, domain, IntPtr.Zero, null,
+                DS_DIRECTORY_SERVICE_REQUIRED | DS_RETURN_DNS_NAME, out info) != 0 ||
+                info == IntPtr.Zero) return null;
+            var result = Marshal.PtrToStructure<DomainControllerInfo>(info);
+            string name = (Marshal.PtrToStringUni(result.DomainControllerName) ?? "")
+                .Trim().TrimStart('\\').TrimEnd('.');
+            return name.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase) &&
+                name.Length <= 255 && !name.Any(char.IsControl) ? name : null;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or
+            EntryPointNotFoundException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+        finally { if (info != IntPtr.Zero) NetApiBufferFree(info); }
+    }
 
     internal static string LocalDnsDomain() =>
         IPGlobalProperties.GetIPGlobalProperties().DomainName.Trim().TrimEnd('.');
@@ -66,9 +114,16 @@ internal static class DcDnsDiscovery
             catch (Exception ex) when (ex is DllNotFoundException or
                 EntryPointNotFoundException or System.ComponentModel.Win32Exception)
             {
-                return names.ToArray();
+                break;
             }
             finally { if (records != IntPtr.Zero) DnsRecordListFree(records, 1); }
+        }
+        // When a DNS server refuses SRV enumeration, let Windows Netlogon
+        // locate at least one controller. Never synthesize an unverified DC.
+        if (names.Count == 0)
+        {
+            var located = LocateDc(domain);
+            if (!string.IsNullOrEmpty(located)) names.Add(located);
         }
         return names.Take(100).ToArray();
     }
