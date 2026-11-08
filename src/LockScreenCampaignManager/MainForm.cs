@@ -34,6 +34,8 @@ public sealed partial class MainForm : Form
     private readonly FlowLayoutPanel _advancedButtons = new();
     private readonly FlowLayoutPanel _quickButtons = new();
     private readonly Button _imageScheduleButton = new();
+    private Button? _arrangeImagesButton;
+    private bool _startupWizardShown;
     private readonly Button _wizardMode = new();
     private readonly Button _advancedModeButton = new();
     private readonly Button _workflowNext = new();
@@ -73,7 +75,13 @@ public sealed partial class MainForm : Form
         RestoreWindow();
         UiStyle.Apply(this);
         SetWorkflowMode(false);
-        // Offline campaign editing works without AD; connect only if needed.
+        // Start guided onboarding after the main form is visible. Cancel keeps
+        // the local editor open; no automatic AD authentication is attempted.
+        Shown += (_, _) => {
+            if (_startupWizardShown) return;
+            _startupWizardShown = true;
+            BeginInvoke(new Action(ShowStartupWizardChoice));
+        };
     }
 
     private void ConfigureLayout()
@@ -83,7 +91,7 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 192));
@@ -115,11 +123,11 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(4, 2, 4, 2)
         };
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 215));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 103));
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
-        _adConnectButton.Text = "AD connection (optional)";
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 98));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        _adConnectButton.Text = "Connect AD...";
         _adConnectButton.MinimumSize = Size.Empty;
         _adConnectButton.Dock = DockStyle.Fill;
         _adConnectButton.Margin = new Padding(2, 1, 6, 1);
@@ -149,7 +157,7 @@ public sealed partial class MainForm : Form
         adFirstStep.Controls.Add(_wizardMode, 2, 0);
         adFirstStep.Controls.Add(_advancedModeButton, 3, 0);
         UiStyle.ApplyStatus(_adConnectionStatus,
-            "NOT CONNECTED — offline editing only.", UiStatusKind.Neutral);
+            "Offline — AD not connected", UiStatusKind.Neutral);
         header.Controls.Add(adFirstStep, 0, 3);
         root.Controls.Add(header, 0, 0);
 
@@ -229,12 +237,11 @@ public sealed partial class MainForm : Form
         };
         imageButtons.Controls.Add(MakeButton("1  Add files...", AddImages, 144, primary: true));
         imageButtons.Controls.Add(MakeButton("Add folder...", AddImagesFromFolder, 144));
-        _imageScheduleButton.Text = "2  Schedule...";
+        _imageScheduleButton.Text = "3  Schedule...";
         _imageScheduleButton.Width = 145;
         _imageScheduleButton.Height = 36;
         _imageScheduleButton.Click += (_, _) => OpenScheduleEditor();
-        imageButtons.Controls.Add(_imageScheduleButton);
-        AddActionMenu(imageButtons, "Arrange / edit", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+        _arrangeImagesButton = AddActionMenu(imageButtons, "2  Arrange / edit", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Replace selected image...", ReplaceImage, () => SelectedIndex >= 0),
             ("Remove selected image", RemoveImage, () => SelectedIndex >= 0),
             ("Move image up", () => MoveImage(-1), () => SelectedIndex > 0),
@@ -412,7 +419,7 @@ public sealed partial class MainForm : Form
         return box;
     }
 
-    private static void AddActionMenu(FlowLayoutPanel host, string title,
+    private static Button AddActionMenu(FlowLayoutPanel host, string title,
         (string Label, Action Execute, Func<bool>? Allowed)[] entries)
     {
         var button = new Button {
@@ -434,6 +441,7 @@ public sealed partial class MainForm : Form
         button.Click += (_, _) => menu.Show(button, 0, button.Height);
         button.ContextMenuStrip = menu;
         host.Controls.Add(button);
+        return button;
     }
 
     private static Button MakeButton(string label, Action action, int width, bool primary = false)
@@ -621,7 +629,14 @@ public sealed partial class MainForm : Form
         try
         {
             var files = ImageFilenameMatcher.ScanFolder(picker.SelectedPath);
+            int before = _project.ImagePaths.Count;
             AppendImages(files);
+            if (_project.ImagePaths.Count > before &&
+                MessageBox.Show(this,
+                    "Images imported. Arrange their order now before setting the schedule?",
+                    "Next: arrange images", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information) == DialogResult.Yes)
+                _arrangeImagesButton?.PerformClick();
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Add image folder", ex); }
     }
@@ -663,7 +678,7 @@ public sealed partial class MainForm : Form
         }
         _projectDirty = true;
         UpdateRows(originalCount);
-        _status.Text = $"{selected.Length} image(s) added. Next: review dates and time in Schedule.";
+        _status.Text = $"{selected.Length} image(s) imported. Next: Arrange / edit, then Schedule.";
         if (!_advancedMode && _workflowStep == 0) _workflowStep = 1;
         UpdateWorkflow();
     }
