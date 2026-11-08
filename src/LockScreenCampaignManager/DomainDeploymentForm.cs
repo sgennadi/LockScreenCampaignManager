@@ -581,7 +581,9 @@ internal sealed class DomainDeploymentForm : Form
             _connectedDomain = actualDomain;
             _connectedDc = actualDc;
             bool writable = connected.GetProperty("dcWritable").GetBoolean();
-            _connectedWritable = writable;
+            bool writableKnown = connected.TryGetProperty("dcWritableKnown", out var known)
+                && known.ValueKind == System.Text.Json.JsonValueKind.True;
+            _connectedWritable = writable && writableKnown;
             var dcRows = await RunBusy("Enumerating writable DCs...", () =>
                 DomainPowerShellRunner.Execute(DomainOperation.Discovery, "DomainControllers",
                     new { domain=actualDomain, dc=actualDc }, creds));
@@ -637,10 +639,13 @@ internal sealed class DomainDeploymentForm : Form
             UiStyle.ApplyStatus(_connectionStatus,
                 $"CONNECTED / LDAP: {actualDomain} | DC: {actualDc} | " +
                 $"OU: {_allOus.Count} | Groups: {_allGroups.Count}" +
-                (writable ? " | Writable" : " | Read-only DC"),
-                writable ? UiStatusKind.Success : UiStatusKind.Warning);
-            _progress.Text = !writable
-                ? "Read-only DC detected. Select a writable domain controller before deployment."
+                (!writableKnown ? " | Write capability UNKNOWN" :
+                    writable ? " | Writable DC" : " | Confirmed RODC"),
+                _connectedWritable ? UiStatusKind.Success : UiStatusKind.Warning);
+            _progress.Text = !writableKnown
+                ? "DC writable status could not be verified. Select another DC or inspect LDAP diagnostics."
+                : !writable
+                    ? "Confirmed read-only DC. Select a writable domain controller before deployment."
                 : _company is not null &&
                     ((_company.DefaultOuDn.Length > 0 && _ous.SelectedItem is null) ||
                      (_company.DefaultGroupDn.Length > 0 && _groups.SelectedItem is null))
