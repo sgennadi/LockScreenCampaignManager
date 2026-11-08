@@ -28,6 +28,8 @@ public sealed partial class MainForm : Form
     private readonly Label _previewName = new();
     private readonly Label _summary = new();
     private SplitContainer? _imagePreviewSplit;
+    private Panel? _mainEditorViewport;
+    private Panel? _wizardLanding;
     private int _savedSplitPercent = 61;
     private readonly Label _status = new();
     private readonly Label _workflowHint = new();
@@ -77,7 +79,7 @@ public sealed partial class MainForm : Form
         }
         RestoreWindow();
         UiStyle.Apply(this);
-        SetWorkflowMode(true);
+        SetWorkflowMode(false);
         // Start guided onboarding after the main form is visible. Cancel keeps
         // the local editor open; no automatic AD authentication is attempted.
         Shown += (_, _) => {
@@ -120,6 +122,7 @@ public sealed partial class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         viewport.Controls.Add(root);
+        _mainEditorViewport = viewport;
         shell.Controls.Add(viewport, 0, 0);
         Controls.Add(shell);
         void FitContentToViewport()
@@ -558,6 +561,67 @@ public sealed partial class MainForm : Form
         Shown += (_, _) => FitPinnedFooter();
         DpiChanged += (_, _) => BeginInvoke(new Action(FitPinnedFooter));
         FitPinnedFooter();
+
+        // The modal Campaign Wizard must not expose the Advanced editor or
+        // its picture preview behind the dialog. The main screen has a
+        // separate, explicit Wizard landing until Advanced is selected.
+        var landing = new Panel
+        {
+            Name = "CampaignWizardLanding", Dock = DockStyle.Fill,
+            BackColor = UiStyle.Canvas, Visible = false
+        };
+        var landingContent = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
+            Padding = new Padding(44, 35, 44, 20)
+        };
+        landingContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
+        landingContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        landingContent.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        landingContent.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        landingContent.Controls.Add(new Label
+        {
+            Text = "Campaign Wizard", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 21f, FontStyle.Bold),
+            AutoEllipsis = false
+        }, 0, 0);
+        landingContent.Controls.Add(new Label
+        {
+            Text = "Create a campaign through six guided steps: AD connection, " +
+                "images with live preview, arrangement, schedule, save and deploy. " +
+                "The Advanced editor is displayed only when Advanced is selected.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Foreground,
+            Font = new Font("Segoe UI", 11f),
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 1);
+        var landingButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight
+        };
+        var openWizard = new Button
+        {
+            Text = "Open Campaign Wizard", Width = 230, Height = 44,
+            Margin = new Padding(0, 4, 14, 4),
+            BackColor = UiStyle.Accent, ForeColor = Color.White,
+            Tag = "PrimaryAction"
+        };
+        openWizard.Click += (_, _) => StartGuidedCampaignWizard();
+        var openAdvanced = new Button
+        {
+            Text = "Advanced", Width = 150, Height = 44,
+            Margin = new Padding(0, 4, 8, 4), Tag = "NoIcon"
+        };
+        openAdvanced.Click += (_, _) => SetWorkflowMode(true);
+        landingButtons.Controls.Add(openWizard);
+        landingButtons.Controls.Add(openAdvanced);
+        landingContent.Controls.Add(landingButtons, 0, 2);
+        landing.Controls.Add(landingContent);
+        viewport.Controls.Add(landing);
+        landing.BringToFront();
+        _wizardLanding = landing;
     }
 
     private static Panel PanelBox() => new() {
