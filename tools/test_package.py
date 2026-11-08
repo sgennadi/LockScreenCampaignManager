@@ -149,7 +149,9 @@ for guard in ('LegacyPlanHash', 'CheckAction', 'FileSha256', 'CollectLinks',
 for fixture in ('FunctionDefinitionAst', "'Hash', 'ReadPackage', 'Plan'",
                 '4c552d75251cf093', '4ad6c02566f179a4'):
     assert fixture in legacy_fixture, fixture
-assert 'LockScreenCampaignManager.GpoLifecycle.ps1' in csproj
+assert 'LockScreenCampaignManager.GpoLifecycle.ps1' not in csproj
+assert 'NativeGpoCom.DeleteManagedUnlinkedGpo' in native_preview
+assert 'ApplyReuse(' in native_preview
 for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',
               'ReadManagedGpo', 'ReadRootDse', 'configurationNamingContext',
               'ParseLinks', 'CN=Sites,', 'WindowsIdentity.RunImpersonated',
@@ -158,9 +160,11 @@ for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',
 
 # SYSVOL Scan and Preview are native; the write/Deletion Cleanup remains PS1.
 native_storage = (project / 'NativeSysvolStorage.cs').read_text(encoding='utf-8')
-assert 'operation == DomainOperation.Storage && mode is ("Scan" or "Preview")' in runner
+assert 'mode is ("Scan" or "Preview" or "Cleanup")' in runner
 assert 'NativeSysvolStorage.Execute(mode, request, credentials)' in runner
-assert 'LockScreenCampaignManager.SysvolStorage.ps1' in csproj
+assert 'LockScreenCampaignManager.SysvolStorage.ps1' not in csproj
+assert 'Directory.Delete(now.path, recursive: true)' in (
+    project / 'NativeSysvolStorage.cs').read_text(encoding='utf-8')
 for guard in ('ReadVerifiedFolder', 'ReadGpoReferences', 'ExtractReferences',
               'SHA256.HashData', 'TimeZoneInfo.ConvertTimeToUtc',
               'RunImpersonated', 'gpoAuditComplete', 'cleanupEligible',
