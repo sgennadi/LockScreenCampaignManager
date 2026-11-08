@@ -18,6 +18,33 @@ internal static class ManualGitHubIssueHelp
         "YES: Copy the reviewed report and open GitHub Issues.\n" +
         "NO: Stay here; nothing is sent.\n\n" +
         "The local report stays pending: this application cannot confirm GitHub delivery.";
+    internal static void OpenReviewedReport(IWin32Window owner, string reviewedReport)
+    {
+        if (string.IsNullOrWhiteSpace(reviewedReport))
+        {
+            MessageBox.Show(owner, "Select a saved error report first.",
+                "Report an error", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        var choice = MessageBox.Show(owner, Explanation,
+            "Report an error — public GitHub repository", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (choice != DialogResult.Yes) return;
+        try
+        {
+            Clipboard.SetText(reviewedReport);
+            // The issue must be reviewed, pasted and submitted by the user.
+            Process.Start(new ProcessStartInfo { FileName = IssueUrl, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(owner,
+                "Cannot copy the report or open GitHub. Nothing was delivered." +
+                Environment.NewLine + UniversalDiagnosticsEmbedded.Clean(ex.Message),
+                "Error report was not sent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
 }
 
 /// <summary>UniversalDiagnostics v1 review / opt-in capture. No background upload.</summary>
@@ -57,27 +84,8 @@ internal static class UiErrorDialog
             } catch (Exception e) { MessageBox.Show(form, "Save error: " + UniversalDiagnosticsEmbedded.Clean(e.Message)); }
         }, 180));
         footer.Controls.Add(B("Copy", () => Clipboard.SetText(detail.Text), 115));
-        footer.Controls.Add(B("Report an error...", () => {
-            var choice = MessageBox.Show(form, ManualGitHubIssueHelp.Explanation,
-                "Manual GitHub Issue — public repository", MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-            if (choice != DialogResult.Yes) return;
-            try
-            {
-                Clipboard.SetText(detail.Text);
-                // Browser session, not the app, owns GitHub authentication.
-                Process.Start(new ProcessStartInfo {
-                    FileName = ManualGitHubIssueHelp.IssueUrl, UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(form,
-                    "Cannot open the browser or copy the report. Nothing was delivered.\n" +
-                    UniversalDiagnosticsEmbedded.Clean(ex.Message),
-                    "GitHub Issue not opened", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }, 190));
+        footer.Controls.Add(B("Report an error...", () =>
+            ManualGitHubIssueHelp.OpenReviewedReport(form, detail.Text), 190));
         footer.Controls.Add(B("Close", form.Close, 100));
         panel.Controls.Add(footer, 0, 2);
         form.Controls.Add(panel);
@@ -131,6 +139,7 @@ internal sealed class DiagnosticsWindow : Form
             trends.ShowDialog(this);
         });
         Add("Copy", () => { if (!string.IsNullOrEmpty(_detail.Text)) Clipboard.SetText(_detail.Text); });
+        Add("Report an error...", () => ManualGitHubIssueHelp.OpenReviewedReport(this, _detail.Text));
         Add("Open folder", () => {
             string path = UniversalDiagnosticsEmbedded.QueueDirectory(); Directory.CreateDirectory(path);
             Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
