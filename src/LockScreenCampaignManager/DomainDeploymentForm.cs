@@ -25,6 +25,8 @@ internal sealed class DomainDeploymentForm : Form
     private readonly Button _connectButton = new();
     private Button _planButton = new();
     private Button _deployButton = new();
+    private Button _rightsButton = new();
+    private string _rightsStatus = "NOT_CHECKED";
     private readonly Button _usersButton = new();
     private readonly Label _connectionStatus = new();
     private readonly Label _progress = new();
@@ -318,9 +320,11 @@ internal sealed class DomainDeploymentForm : Form
         _wizardNext.Text = "Next >";
         _wizardNext.Width = 110;
         _wizardNext.Height = 39;
-        _wizardNext.Click += (_, _) => NextDeploymentStep();
+        _wizardNext.Click += async (_, _) => await NextDeploymentStepAsync();
         buttons.Controls.Add(_wizardBack);
         buttons.Controls.Add(_wizardNext);
+        _rightsButton = Button("Check GPO rights", 178, () => _ = CheckRightsAsync());
+        buttons.Controls.Add(_rightsButton);
         buttons.Controls.Add(_planButton);
         buttons.Controls.Add(_deployButton);
         _gpoOperationsButton = Button("GPO operations...", 182, OpenGpoOperations);
@@ -353,7 +357,7 @@ internal sealed class DomainDeploymentForm : Form
         UpdateDeploymentSteps();
     }
 
-    private void NextDeploymentStep()
+    private async Task NextDeploymentStepAsync()
     {
         if (_running) return;
         if (_wizardStep == 0 && (string.IsNullOrEmpty(_connectedDomain) || !_connectedWritable))
@@ -366,7 +370,56 @@ internal sealed class DomainDeploymentForm : Form
             _progress.Text = "Select an OU, a computer group and a new GPO name.";
             return;
         }
+        if (_wizardStep == 1)
+        {
+            await CheckRightsAsync();
+            if (_rightsStatus is "POSSIBLE_DENY" or "NO_MATCHING_ALLOW" or "UNAVAILABLE")
+            {
+                if (MessageBox.Show(this,
+                        "The read-only check could not confirm the permissions needed to create and link a GPO. " +
+                        "You may continue previewing, but actual deployment can fail unless an administrator " +
+                        "delegates GPO creation, OU linking and SYSVOL write rights. Continue?",
+                        "GPO delegation may be insufficient", MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    return;
+            }
+        }
         _wizardStep = Math.Min(2, _wizardStep + 1);
+        UpdateDeploymentSteps();
+    }
+
+    private async Task CheckRightsAsync()
+    {
+        if (_running || !HasSelectedTargets) return;
+        try
+        {
+            var selected = (DirectoryRow)_ous.SelectedItem!;
+            string domain = _connectedDomain, dc = _connectedDc;
+            string login = _alternateRadio.Checked ? _userBox.Text.Trim() : "";
+            var credentials = Credentials();
+            var response = await RunBusy("Read-only: checking GPO creation and OU-link ACEs...", () =>
+                DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Permissions",
+                    new { domain, dc, ouDn = selected.Dn, user = login }, credentials));
+            var data = response.GetProperty("data");
+            string create = data.GetProperty("gpoCreateAce").GetString() ?? "UNKNOWN";
+            string link = data.GetProperty("ouGpoLinkAce").GetString() ?? "UNKNOWN";
+            _rightsStatus = create == "POTENTIAL_ALLOW" && link == "POTENTIAL_ALLOW"
+                ? "POTENTIAL_ALLOW" : create == "POSSIBLE_DENY" || link == "POSSIBLE_DENY"
+                ? "POSSIBLE_DENY" : "NO_MATCHING_ALLOW";
+            _progress.Text = "GPO create: " + create + " | OU link: " + link +
+                " | SYSVOL write: NOT TESTED. These are read-only ACL hints, not authorization.";
+            if (_rightsStatus != "POTENTIAL_ALLOW")
+                UiStyle.ApplyStatus(_connectionStatus,
+                    "WARNING: AD ACL check did not confirm both GPO create and OU link rights.",
+                    UiStatusKind.Warning);
+        }
+        catch (Exception ex)
+        {
+            _rightsStatus = "UNAVAILABLE";
+            _progress.Text = "GPO write permissions could not be determined without changing AD. " +
+                "Ask an administrator to verify delegation before deploying.";
+            AppLog.Write(ex, "Read-only GPO permission preflight");
+        }
         UpdateDeploymentSteps();
     }
 
@@ -399,6 +452,8 @@ internal sealed class DomainDeploymentForm : Form
         _wizardNext.Enabled = !_running && (_wizardStep == 0
             ? !string.IsNullOrEmpty(_connectedDomain) && _connectedWritable
             : HasSelectedTargets);
+        _rightsButton.Visible = _advancedMode || _wizardStep >= 1;
+        _rightsButton.Enabled = !_running && HasSelectedTargets;
         _planButton.Visible = _advancedMode || _wizardStep == 2;
         _planButton.Enabled = !_running && HasSelectedTargets;
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
@@ -465,6 +520,7 @@ internal sealed class DomainDeploymentForm : Form
     private void InvalidatePlan()
     {
         _lastPlanKey = null;
+        _rightsStatus = "NOT_CHECKED";
         _lastConflictHigh = 0;
         _lastConflictWarnings = 0;
         _deployButton.Enabled = false;
@@ -724,7 +780,8 @@ internal sealed class DomainDeploymentForm : Form
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
                 UpdateDeploymentSteps();
-                _progress.Text = "Preview passed. Click Deploy to create the GPO.";
+                _progress.Text = "Preview validated campaign and GPO scope. " +
+                    "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
