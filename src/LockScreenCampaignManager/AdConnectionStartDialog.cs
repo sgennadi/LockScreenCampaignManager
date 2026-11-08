@@ -385,8 +385,9 @@ internal sealed class AdConnectionStartDialog : Form
         authentication.Controls.Add(ConnectionField("AD username", _user), 0, 1);
         authentication.Controls.Add(ConnectionField("Password (session only)", _password), 1, 1);
         _domain.PlaceholderText = "example.com";
-        authentication.Controls.Add(ConnectionField("Active Directory DNS domain", _domain), 0, 2);
-        authentication.SetColumnSpan(authentication.GetControlFromPosition(0, 2), 2);
+        var domainField = ConnectionField("Active Directory DNS domain", _domain);
+        authentication.Controls.Add(domainField, 0, 2);
+        authentication.SetColumnSpan(domainField, 2);
         var remember = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = true,
             Padding = new Padding(0, 0, 0, 0), AutoScroll = true
