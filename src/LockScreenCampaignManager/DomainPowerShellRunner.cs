@@ -1,47 +1,43 @@
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Json;
 
 namespace LockScreenCampaignManager;
 
-internal enum DomainOperation { Discovery, Deployment, Lifecycle, ConflictScan, Immediate, Assignment, Storage, DcConsistency }
+internal enum DomainOperation
+{
+    Discovery, Deployment, Lifecycle, ConflictScan,
+    Immediate, Assignment, Storage, DcConsistency
+}
 
 internal sealed record DomainCredentials(string Domain, string UserName, string Password)
 {
     public bool IsAlternate => !string.IsNullOrWhiteSpace(UserName);
 }
 
+/// <summary>
+/// Native Windows administrative operation router. The historical class name
+/// is retained solely for call-site/API compatibility. This class NEVER
+/// launches powershell.exe, creates temporary PS1 files or executes scripts.
+/// The separately deployed client LockScreen-Agent.ps1 is not run here.
+/// </summary>
 internal static class DomainPowerShellRunner
 {
-    private const int LogonNetCredentialsOnly = 0x00000002;
-    private const int CreateUnicodeEnvironment = 0x00000400;
-    private const int CreateNoWindow = 0x08000000;
-    private const uint WaitObject0 = 0;
-    private const uint WaitTimeout = 258;
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = false };
-
-    internal static JsonElement Execute(DomainOperation operation, string mode, object request,
-        DomainCredentials credentials, int timeoutMilliseconds = 180000)
+    internal static JsonElement Execute(DomainOperation operation, string mode,
+        object request, DomainCredentials credentials, int timeoutMilliseconds = 180000)
     {
-        // Read-only directory discovery runs entirely in C#, even for alternate
-        // credentials. No temporary PS1 and no powershell.exe are launched.
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(credentials);
+        if (string.IsNullOrWhiteSpace(mode))
+            throw new ArgumentException("Select a supported operation mode.", nameof(mode));
+
         if (operation == DomainOperation.Discovery)
             return NativeAdDiscovery.Execute(mode, request, credentials);
 
-        // Explicitly selected DC consistency audits also use native C# and
-        // reuse the same authenticated LDAP library. SMB reads are read-only.
         if (operation == DomainOperation.DcConsistency)
             return NativeDcConsistency.Execute(mode, request, credentials);
 
-        // Computer and Group Assignment is now native LDAP for Search,
-        // Preview and Apply. Guarded writes never spawn powershell.exe.
         if (operation == DomainOperation.Assignment)
             return NativeComputerGroupAssignment.Execute(mode, request, credentials);
 
-        // Basic OU conflict Scan and exact per-computer Effective analysis
-        // use native signed LDAP, SYSVOL, security token and GPO DACL checks.
         if (operation == DomainOperation.ConflictScan && mode == "Scan")
             return NativeGpoConflictScan.Execute(mode, request, credentials);
         if (operation == DomainOperation.ConflictScan && mode == "Effective")
@@ -50,35 +46,24 @@ internal static class DomainPowerShellRunner
             mode is ("VerifyEndpoint" or "VerifyEvidence"))
             return NativeGpoEndpointAudit.Execute(mode, request, credentials);
 
-        // SYSVOL Scan, Preview and explicitly approved Cleanup run in native
-        // C#. Cleanup re-audits every policy and the exact source files.
         if (operation == DomainOperation.Storage &&
             mode is ("Scan" or "Preview" or "Cleanup"))
             return NativeSysvolStorage.Execute(mode, request, credentials);
 
-        // Read-only Lifecycle List and Preview use signed LDAP and
-        // selected-DC SYSVOL without launching PowerShell. The legacy
-        // Apply independently recomputes the exact same preview hash from
-        // fresh AD/SYSVOL data before any write.
         if (operation == DomainOperation.Lifecycle && mode == "List")
             return NativeGpoLifecycleList.Execute(mode, request, credentials);
         if (operation == DomainOperation.Lifecycle && mode == "Preview")
             return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
-        // Lifecycle link, guarded deletion and staged campaign Reuse are
-        // native C#. Every Apply rebuilds the exact approved preview hash.
         if (operation == DomainOperation.Lifecycle && mode == "Apply")
         {
-            var lifecycleRequest = JsonSerializer.SerializeToElement(request, Json);
-            string action = lifecycleRequest.TryGetProperty("action", out var actionProperty)
-                && actionProperty.ValueKind == JsonValueKind.String
-                ? actionProperty.GetString() ?? "" : "";
+            JsonElement data = JsonSerializer.SerializeToElement(request);
+            string action = data.ValueKind == JsonValueKind.Object &&
+                data.TryGetProperty("action", out var value) &&
+                value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
             if (action is "Disable" or "Enable" or "Unlink" or "Relink" or "Delete" or "Reuse")
                 return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
         }
 
-        // Remote host lookup, Preview and VerifyCleanup are native read-only;
-        // Push, Repair, Report and Cleanup use native Scheduler RPC with
-        // exact fresh plan approval and conservative pending/offline statuses.
         if (operation == DomainOperation.Immediate &&
             mode is ("List" or "Preview" or "VerifyCleanup"))
             return NativeImmediateActions.Execute(mode, request, credentials);
@@ -86,217 +71,13 @@ internal static class DomainPowerShellRunner
             mode is ("Push" or "Repair" or "Report" or "Cleanup"))
             return NativeImmediateApply.Execute(mode, request, credentials);
 
-        // Deployment Plan is read-only. Deploy independently reruns the
-        // entire native Plan, stages hashes, creates only a new GPO through
-        // Windows COM, removes broad Apply rights and links the chosen OU last.
         if (operation == DomainOperation.Deployment && mode == "Plan")
             return NativeGpoDeploymentPlan.Execute(mode, request, credentials);
         if (operation == DomainOperation.Deployment && mode == "Deploy")
             return NativeGpoDeploymentApply.Execute(mode, request, credentials);
 
-        // Explicit migration boundary: only these audited legacy operations
-        // may execute an embedded PS1. All other modes must fail closed.
-        // Keep this in sync with the native dispatch above and the embedded
-        // scripts' ValidateSet declarations as each operation moves to C#.
-        bool legacyAllowed = operation switch
-        {
-
-
-            _ => false
-        };
-        if (!legacyAllowed)
-            throw new NotSupportedException(
-                "Unsupported or migrated AD operation: " + operation + "/" + mode);
-
-        var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            string asset = operation switch
-            {
-                    DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
-                    _ => throw new ArgumentOutOfRangeException(nameof(operation))
-            };
-            string script = Path.Combine(root, operation switch
-            {
-                DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
-                _ => throw new ArgumentOutOfRangeException(nameof(operation))
-            });
-            using (var resource = typeof(DomainPowerShellRunner).Assembly.GetManifestResourceStream(asset)
-                   ?? throw new InvalidOperationException("Embedded domain tool missing: " + asset))
-            using (var dest = File.Create(script)) resource.CopyTo(dest);
-            string reqPath = Path.Combine(root, "request.json");
-            string resPath = Path.Combine(root, "response.json");
-            File.WriteAllText(reqPath, JsonSerializer.Serialize(request, Json), new UTF8Encoding(false));
-            string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-                @"System32\WindowsPowerShell\v1.0\powershell.exe");
-            if (!File.Exists(powershell)) throw new FileNotFoundException("Windows PowerShell 5.1 is missing.", powershell);
-            var arguments = new[] {
-                "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-File", script, "-Mode", mode, "-RequestPath", reqPath, "-ResponsePath", resPath
-            };
-            int exit;
-            if (credentials.IsAlternate)
-                exit = RunWithNetworkCredentials(powershell, arguments, credentials, timeoutMilliseconds);
-            else
-                exit = RunNormally(powershell, arguments, timeoutMilliseconds);
-            if (!File.Exists(resPath))
-                throw new InvalidOperationException("Domain command did not return a result (exit " + exit + "). Check Windows PowerShell/AppLocker, LDAP, COM/GPO, SMB and permissions.");
-            using var doc = JsonDocument.Parse(File.ReadAllText(resPath));
-            var response = doc.RootElement.Clone();
-            if (!response.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True)
-                throw new InvalidOperationException(response.TryGetProperty("message", out var error)
-                    ? error.GetString() ?? "Domain command failed" : "Domain command failed");
-            if (exit != 0) throw new InvalidOperationException("Domain command unexpectedly failed with exit code " + exit);
-            return response;
-        }
-        finally
-        {
-            try { Directory.Delete(root, recursive: true); }
-            catch (Exception ex) { AppLog.Write(ex); }
-        }
+        // No compatibility fallback may silently launch an untested PS1.
+        throw new NotSupportedException(
+            "Unsupported native AD operation: " + operation + "/" + mode);
     }
-
-    private static int RunNormally(string program, IEnumerable<string> args, int timeoutMilliseconds)
-    {
-        var start = new ProcessStartInfo(program) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
-        foreach (var arg in args) start.ArgumentList.Add(arg);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start Windows PowerShell.");
-        if (!process.WaitForExit(timeoutMilliseconds))
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("Active Directory operation timed out.");
-        }
-        return process.ExitCode;
-    }
-
-    private static int RunWithNetworkCredentials(string program, string[] args,
-        DomainCredentials credentials, int timeoutMilliseconds)
-    {
-        ParseIdentity(credentials, out var user, out var domain);
-        var commandLine = new StringBuilder(QuoteArgument(program));
-        foreach (var arg in args) commandLine.Append(' ').Append(QuoteArgument(arg));
-        var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-        if (!CreateProcessWithLogonW(user, domain, credentials.Password,
-                LogonNetCredentialsOnly, program, commandLine,
-                CreateUnicodeEnvironment | CreateNoWindow, IntPtr.Zero,
-                Path.GetDirectoryName(program), ref startup, out var proc))
-            throw new Win32Exception(Marshal.GetLastWin32Error(),
-                "Unable to start a network-authenticated domain session. Check Secondary Logon service and credentials.");
-        try
-        {
-            uint wait = WaitForSingleObject(proc.ProcessHandle, (uint)timeoutMilliseconds);
-            if (wait == WaitTimeout)
-            {
-                TerminateProcess(proc.ProcessHandle, 1);
-                throw new TimeoutException("Active Directory operation timed out.");
-            }
-            if (wait != WaitObject0) throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot wait for PowerShell result.");
-            if (!GetExitCodeProcess(proc.ProcessHandle, out uint code))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot read PowerShell exit code.");
-            return unchecked((int)code);
-        }
-        finally
-        {
-            if (proc.ProcessHandle != IntPtr.Zero) CloseHandle(proc.ProcessHandle);
-            if (proc.ThreadHandle != IntPtr.Zero) CloseHandle(proc.ThreadHandle);
-        }
-    }
-
-    private static void ParseIdentity(DomainCredentials credentials, out string user, out string? domain)
-    {
-        var input = credentials.UserName.Trim();
-        int slash = input.IndexOf('\\');
-        if (slash > 0 && slash < input.Length - 1)
-        {
-            domain = input[..slash];
-            user = input[(slash + 1)..];
-        }
-        else if (input.Contains('@')) { user = input; domain = null; }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(credentials.Domain))
-                throw new InvalidOperationException("Enter a DNS domain with an alternate account.");
-            user = input + "@" + credentials.Domain.Trim();
-            domain = null;
-        }
-        if (string.IsNullOrEmpty(credentials.Password))
-            throw new InvalidOperationException("Enter the alternate account password; it is never saved.");
-    }
-
-    // Command line is built only from known flags and temporary paths. The password is
-    // passed to CreateProcessWithLogonW, never to a command-line argument or a file.
-    private static string QuoteArgument(string value)
-    {
-        var result = new StringBuilder("\"");
-        int slashes = 0;
-        foreach (char ch in value)
-        {
-            if (ch == '\\') { slashes++; continue; }
-            if (ch == '"')
-            {
-                result.Append('\\', slashes * 2 + 1).Append('"');
-                slashes = 0;
-                continue;
-            }
-            result.Append('\\', slashes).Append(ch);
-            slashes = 0;
-        }
-        result.Append('\\', slashes * 2).Append('"');
-        return result.ToString();
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct StartupInfo
-    {
-        public int Size;
-        public string? Reserved;
-        public string? Desktop;
-        public string? Title;
-        public int X;
-        public int Y;
-        public int XSize;
-        public int YSize;
-        public int XCountChars;
-        public int YCountChars;
-        public int FillAttribute;
-        public int Flags;
-        public short ShowWindow;
-        public short Reserved2;
-        public IntPtr Reserved2Pointer;
-        public IntPtr StdInput;
-        public IntPtr StdOutput;
-        public IntPtr StdError;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ProcessInformation
-    {
-        public IntPtr ProcessHandle;
-        public IntPtr ThreadHandle;
-        public uint ProcessId;
-        public uint ThreadId;
-    }
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CreateProcessWithLogonW(string userName, string? domain, string password,
-        int logonFlags, string applicationName, StringBuilder commandLine,
-        int creationFlags, IntPtr environment, string? currentDirectory,
-        ref StartupInfo startupInfo, out ProcessInformation processInformation);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetExitCodeProcess(IntPtr handle, out uint code);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TerminateProcess(IntPtr handle, uint exitCode);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseHandle(IntPtr handle);
 }
