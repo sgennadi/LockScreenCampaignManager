@@ -13,11 +13,10 @@ using Microsoft.Win32.SafeHandles;
 namespace LockScreenCampaignManager;
 
 /// <summary>
-/// Native eligible listing, guarded remote action Preview/Apply and cleanup
-/// verification. Remote actions recheck OU/group, managed GPO identity,
-/// exact computers and the approved plan hash before Task Scheduler RPC.
-/// No PowerShell process runs in the manager; the trusted client agent may
-/// be launched as SYSTEM by the registered task on the remote computer.
+/// Read-only eligible listing, guarded action Preview and cleanup verification.
+/// The actual remote Push/Repair/Report/Cleanup are handled separately by
+/// NativeImmediateApply with independent AD/SYSVOL revalidation.
+/// This class only reads AD, SYSVOL and (for VerifyCleanup) clients.
 /// </summary>
 internal static class NativeImmediateActions
 {
@@ -36,9 +35,8 @@ internal static class NativeImmediateActions
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Windows signed/sealed LDAP is required.");
-        if (mode is not ("List" or "Preview" or "VerifyCleanup" or
-                         "Push" or "Repair" or "Report" or "Cleanup"))
-            throw new ArgumentException("Unsupported native immediate action.");
+        if (mode is not ("List" or "Preview" or "VerifyCleanup"))
+            throw new ArgumentException("Only read-only List, Preview and VerifyCleanup are native.");
         JsonElement args = JsonSerializer.SerializeToElement(request, Json);
         string domain = Text(args, "domain").Trim().ToLowerInvariant();
         string selectedDc = Text(args, "dc").Trim();
@@ -172,48 +170,6 @@ internal static class NativeImmediateActions
             string manifestHash = Convert.ToHexString(SHA256.HashData(content));
             string digest = LegacyPlanHash(dns, dc, ouDn, groupDn, gpoId,
                 managed.campaignId, purpose, manifestHash, selected);
-            if (mode is "Push" or "Repair" or "Report" or "Cleanup")
-            {
-                string approved = Text(args, "approveGuid");
-                string signedHash = Text(args, "planHash");
-                if (mode != purpose ||
-                    !Guid.TryParse(approved, out Guid approvedId) ||
-                    approvedId != gpoId ||
-                    !string.Equals(signedHash, digest, StringComparison.Ordinal))
-                    throw new InvalidOperationException(
-                        "Remote action confirmation, scope or plan hash changed. Refresh Preview.");
-
-                // No remote commands can point at arbitrary file paths.
-                // Push/Repair use the validated domain source, while Cleanup
-                // and Report use only the trusted local campaign copy.
-                string remoteScript = (mode is "Push" or "Repair")
-                    ? @"\\" + dns + @"\SYSVOL\" + dns +
-                      @"\scripts\LockScreenCampaigns\" + managed.campaignId +
-                      @"\LockScreen-Agent.ps1"
-                    : @"C:\ProgramData\LockScreenCampaigns\" + managed.campaignId +
-                      @"\LockScreen-Agent.ps1";
-                string clientMode = mode == "Push" ? "Install" : mode;
-                var results = new List<NativeRemoteTaskScheduler.Result>();
-                foreach (string host in selected)
-                    results.Add(NativeRemoteTaskScheduler.Run(host,
-                        remoteScript, clientMode, managed.campaignId));
-                return JsonSerializer.SerializeToElement(new
-                {
-                    success = true,
-                    message = "Native Task Scheduler RPC actions completed or were left pending for review.",
-                    data = new
-                    {
-                        results,
-                        successful = results.Count(x => x.status == "success"),
-                        pending = results.Count(x => x.status == "pending"),
-                        offline = results.Count(x => x.status == "offline"),
-                        failed = results.Count(x => x.status == "failed"),
-                        note = "Task Scheduler status is recorded per host. " +
-                            "The visible lock screen may update at the next lock/logon."
-                    }
-                }, Json);
-            }
-
             string note = purpose switch
             {
                 "Push" => "Push installs immediately, but the image only appears when scheduled start has passed.",
