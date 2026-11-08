@@ -38,8 +38,8 @@ public sealed class MainForm : Form
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        MinimumSize = new Size(1020, 660);
-        Size = new Size(1260, 790);
+        MinimumSize = new Size(1100, 720);
+        Size = new Size(1390, 850);
         BackColor = Bg;
         ConfigureLayout();
         try
@@ -74,19 +74,21 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 61));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(new Label {
-            Text = "LockScreen Campaign Manager", AutoSize = true,
+            Text = "LockScreen Campaign Manager", AutoSize = false,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = false, MinimumSize = new Size(530, 52),
             Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
@@ -176,7 +178,7 @@ public sealed class MainForm : Form
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
         left.Controls.Add(leftLayout);
         middle.Panel1.Controls.Add(left);
         leftLayout.Controls.Add(new Label {
@@ -185,9 +187,13 @@ public sealed class MainForm : Form
         }, 0, 0);
         ConfigureGrid();
         leftLayout.Controls.Add(_table, 0, 1);
-        var imageButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = false, Padding = new Padding(0, 9, 0, 0) };
+        var imageButtons = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
+            Padding = new Padding(0, 7, 0, 0)
+        };
         imageButtons.Controls.Add(MakeButton("Schedule...", OpenScheduleEditor, 156, primary: true));
-        imageButtons.Controls.Add(MakeButton("Add", AddImages, 115));
+        imageButtons.Controls.Add(MakeButton("Add Files...", AddImages, 133));
+        imageButtons.Controls.Add(MakeButton("Add Folder...", AddImagesFromFolder, 147));
         imageButtons.Controls.Add(MakeButton("Replace", ReplaceImage, 105));
         imageButtons.Controls.Add(MakeButton("Remove", RemoveImage, 90));
         imageButtons.Controls.Add(MakeButton("↑", () => MoveImage(-1), 40));
@@ -217,7 +223,7 @@ public sealed class MainForm : Form
         rightLayout.Controls.Add(_previewName, 0, 2);
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = Color.FromArgb(50, 62, 77);
@@ -428,18 +434,57 @@ public sealed class MainForm : Form
     private void AddImages()
     {
         using var picker = new OpenFileDialog {
-            Title = "Select lock screen images", Multiselect = true,
+            Title = "Add multiple lock screen image files", Multiselect = true,
             Filter = "Images (*.jpg;*.jpeg;*.png;*.bmp)|*.jpg;*.jpeg;*.png;*.bmp"
         };
         if (picker.ShowDialog(this) != DialogResult.OK) return;
-        if (_project.ImagePaths.Count + picker.FileNames.Length > CampaignSchedule.MaxImages)
-        { ShowError($"Maximum {CampaignSchedule.MaxImages} images."); return; }
+        try { AppendImages(picker.FileNames); }
+        catch (Exception ex) { UiErrorDialog.Show(this, "Add image files", ex); }
+    }
+
+    private void AddImagesFromFolder()
+    {
+        using var picker = new FolderBrowserDialog {
+            Description = "Select a folder containing lock screen JPG, PNG or BMP images.",
+            UseDescriptionForTitle = true, ShowNewFolderButton = false
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var files = ImageFilenameMatcher.ScanFolder(picker.SelectedPath);
+            AppendImages(files);
+        }
+        catch (Exception ex) { UiErrorDialog.Show(this, "Add image folder", ex); }
+    }
+
+    private void AppendImages(IEnumerable<string> files)
+    {
+        string[] selected = files.ToArray();
+        if (selected.Length == 0) return;
+        if (_project.ImagePaths.Count + selected.Length > CampaignSchedule.MaxImages)
+        {
+            ShowError($"Maximum {CampaignSchedule.MaxImages} images per campaign.");
+            return;
+        }
+        var known = new HashSet<string>(_project.ImagePaths,
+            StringComparer.OrdinalIgnoreCase);
+        if (selected.Any(path =>
+                !ImageFilenameMatcher.IsSupportedImage(path) ||
+                !File.Exists(path) || !known.Add(Path.GetFullPath(path))))
+            throw new InvalidDataException(
+                "Selected images contain a missing, unsupported or duplicate file.");
+        var unsafeFile = selected.Select(path => new FileInfo(path))
+            .FirstOrDefault(file => file.Length == 0 ||
+                (file.Attributes & FileAttributes.ReparsePoint) != 0);
+        if (unsafeFile is not null)
+            throw new InvalidDataException(
+                "Empty files and filesystem links cannot be imported.");
         int originalCount = _project.ImagePaths.Count;
-        _project.ImagePaths.AddRange(picker.FileNames);
+        _project.ImagePaths.AddRange(selected);
         if (_project.ScheduleMode == CampaignScheduleMode.SpecificDates)
         {
             _project.SpecificDatesLocal ??= new();
-            for (int i = 0; i < picker.FileNames.Length; i++)
+            for (int i = 0; i < selected.Length; i++)
             {
                 DateTime next = _project.SpecificDatesLocal.Count > 0
                     ? _project.SpecificDatesLocal[^1].AddDays(1)
@@ -448,8 +493,8 @@ public sealed class MainForm : Form
             }
         }
         _projectDirty = true;
-        UpdateRows(_project.ImagePaths.Count - picker.FileNames.Length);
-        _status.Text = "Images added";
+        UpdateRows(originalCount);
+        _status.Text = $"{selected.Length} image(s) added. Review schedule before deployment.";
     }
 
     private void ReplaceImage()
