@@ -364,6 +364,18 @@ internal sealed class DomainDeploymentForm : Form
                 1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
                 _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
             };
+        // Guided mode exposes only the controls needed for the current step.
+        // Advanced mode keeps the complete manual editing surface.
+        bool credentialsStep = _advancedMode || _wizardStep == 0;
+        bool targetStep = _advancedMode || _wizardStep == 1;
+        _domainBox.Enabled = _dcBox.Enabled = credentialsStep && !_running;
+        _currentRadio.Enabled = _alternateRadio.Enabled = credentialsStep && !_running;
+        _userBox.Enabled = _passwordBox.Enabled = credentialsStep &&
+            _alternateRadio.Checked && !_running;
+        _usersButton.Enabled = credentialsStep && _alternateRadio.Checked && !_running;
+        _connectButton.Enabled = credentialsStep && !_running;
+        _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
+        _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
         _wizardBack.Enabled = !_running;
