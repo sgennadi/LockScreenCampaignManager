@@ -95,7 +95,7 @@ public sealed partial class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 208));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
@@ -124,10 +124,10 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(4, 2, 4, 2)
         };
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 215));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 98));
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 121));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 147));
         _adConnectButton.Text = "Connect AD...";
         _adConnectButton.MinimumSize = Size.Empty;
         _adConnectButton.Dock = DockStyle.Fill;
@@ -153,8 +153,12 @@ public sealed partial class MainForm : Form
         _advancedModeButton.Height = 35;
         _advancedModeButton.Click += (_, _) => SetWorkflowMode(true);
         _wizardMode.Dock = DockStyle.Fill;
+        _wizardMode.Tag = "NoIcon";
+        _wizardMode.AutoEllipsis = true;
         _wizardMode.Margin = new Padding(2);
         _advancedModeButton.Dock = DockStyle.Fill;
+        _advancedModeButton.Tag = "NoIcon";
+        _advancedModeButton.AutoEllipsis = true;
         _advancedModeButton.Margin = new Padding(2);
         adFirstStep.Controls.Add(_wizardMode, 2, 0);
         adFirstStep.Controls.Add(_advancedModeButton, 3, 0);
@@ -226,7 +230,7 @@ public sealed partial class MainForm : Form
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
         left.Controls.Add(leftLayout);
         middle.Panel1.Controls.Add(left);
         leftLayout.Controls.Add(new Label {
@@ -235,16 +239,28 @@ public sealed partial class MainForm : Form
         }, 0, 0);
         ConfigureGrid();
         leftLayout.Controls.Add(_table, 0, 1);
-        var imageButtons = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
-            Padding = new Padding(0, 7, 0, 0)
+        // Fixed 2x2 toolbar: no wrapped-offscreen buttons at 125-200% DPI.
+        var imageButtons = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
+            Padding = new Padding(1, 3, 1, 3)
         };
-        imageButtons.Controls.Add(MakeButton("1  Add files...", AddImages, 144, primary: true));
-        imageButtons.Controls.Add(MakeButton("Add folder...", AddImagesFromFolder, 144));
+        imageButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        imageButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        imageButtons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        imageButtons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        var addFiles = MakeButton("1  Add files...", AddImages, 145, primary: true);
+        var addFolder = MakeButton("Add folder...", AddImagesFromFolder, 145);
         _imageScheduleButton.Text = "3  Schedule...";
-        _imageScheduleButton.Width = 145;
-        _imageScheduleButton.Height = 36;
         _imageScheduleButton.Click += (_, _) => OpenScheduleEditor();
+        foreach (var button in new[] { addFiles, addFolder, _imageScheduleButton })
+        {
+            button.Tag = "NoIcon";
+            button.Dock = DockStyle.Fill;
+            button.Margin = new Padding(3);
+            button.AutoEllipsis = true;
+        }
+        imageButtons.Controls.Add(addFiles, 0, 0);
+        imageButtons.Controls.Add(addFolder, 1, 0);
         _arrangeImagesButton = AddActionMenu(imageButtons, "2  Arrange / edit", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Replace selected image...", ReplaceImage, () => SelectedIndex >= 0),
             ("Remove selected image", RemoveImage, () => SelectedIndex >= 0),
@@ -255,7 +271,12 @@ public sealed partial class MainForm : Form
             ("Auto match dates / weekdays...", AutoMatchImageNames,
                 () => _project.ImagePaths.Count > 0)
         });
-        imageButtons.Controls.Add(_imageScheduleButton);
+        _arrangeImagesButton.Dock = DockStyle.Fill;
+        _arrangeImagesButton.Margin = new Padding(3);
+        _arrangeImagesButton.AutoEllipsis = true;
+        imageButtons.SetCellPosition(_arrangeImagesButton,
+            new TableLayoutPanelCellPosition(0, 1));
+        imageButtons.Controls.Add(_imageScheduleButton, 1, 1);
         leftLayout.Controls.Add(imageButtons, 0, 2);
 
         var right = PanelBox();
@@ -282,8 +303,8 @@ public sealed partial class MainForm : Form
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
@@ -295,7 +316,7 @@ public sealed partial class MainForm : Form
             Padding = new Padding(8, 5, 8, 4), BackColor = UiStyle.SoftBlue
         };
         flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 365));
+        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 382));
         _workflowHint.Dock = DockStyle.Fill;
         _workflowHint.TextAlign = ContentAlignment.MiddleLeft;
         _workflowHint.AutoEllipsis = true;
@@ -304,8 +325,8 @@ public sealed partial class MainForm : Form
         _workflowButtons.Dock = DockStyle.Fill;
         _workflowButtons.ColumnCount = 3;
         _workflowButtons.RowCount = 1;
-        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
-        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 89));
+        _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
         _workflowButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _workflowNext.Text = "Next";
         _workflowNext.Width = 83;
@@ -413,7 +434,7 @@ public sealed partial class MainForm : Form
         return box;
     }
 
-    private static Button AddActionMenu(FlowLayoutPanel host, string title,
+    private static Button AddActionMenu(Control host, string title,
         (string Label, Action Execute, Func<bool>? Allowed)[] entries)
     {
         var button = new Button {
