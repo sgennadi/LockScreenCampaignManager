@@ -35,6 +35,7 @@ internal static class SelfTests
         TestNativeComputerGroupAssignmentContracts();
         TestNativeGpoConflictScanContracts();
         TestNativeSysvolStorageContracts();
+        TestNativeGpoLifecycleListContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -289,6 +290,56 @@ internal static class SelfTests
             catch (InvalidOperationException) { rejected = true; }
             Check(rejected, "Native cleanup preview refuses unsafe or incomplete evidence");
         }
+    }
+
+    private static void TestNativeGpoLifecycleListContracts()
+    {
+        const string domain = "example.com";
+        var id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+        string dn = NativeGpoLifecycleList.PolicyDn(id, "DC=example,DC=com");
+        Check(dn == "CN={01234567-89AB-CDEF-0123-456789ABCDEF}," +
+            "CN=Policies,CN=System,DC=example,DC=com",
+            "Native lifecycle listing builds a domain-scoped GPO DN");
+        Check(NativeGpoLifecycleList.SameController("dc01", "dc01.example.com") &&
+            NativeGpoLifecycleList.SameController("dc01.example.com", "DC01.EXAMPLE.COM") &&
+            !NativeGpoLifecycleList.SameController("dc02.example.com", "dc01.example.com"),
+            "Native lifecycle listing verifies the selected DC identity");
+        var links = NativeGpoLifecycleList.ParseLinks(
+            "[LDAP://" + dn + ";0][LDAP://" + dn + ";3]");
+        Check(links.Count == 2 && links[0].Dn == dn &&
+            links[0].Flags == 0 && links[1].Flags == 3,
+            "Native lifecycle listing preserves link order and link flags");
+        foreach (string broken in new[] {
+            "[LDAP://" + dn + ";x]", "[LDAP://" + dn + ";4]",
+            "[LDAP://" + dn + ";0]unexpected",
+            "[LDAP://" + dn + ";-1]"
+        })
+        {
+            bool rejected = false;
+            try { _ = NativeGpoLifecycleList.ParseLinks(broken); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "Native lifecycle fails closed on malformed links");
+        }
+
+        const string ini = @"[ScriptsConfig]
+StartExecutePSFirst=true
+[Startup]
+0CmdLine=\\example.com\SYSVOL\example.com\scripts\LockScreenCampaigns\alpha\LockScreen-Agent.ps1
+0Parameters=-Mode Install
+";
+        Check(NativeGpoLifecycleList.IsManagedStartup(ini, domain, out var campaign) &&
+            campaign == "alpha",
+            "Native lifecycle identifies managed startup scripts only");
+        Check(!NativeGpoLifecycleList.IsManagedStartup(
+                ini.Replace("0Parameters=-Mode Install", "0Parameters=-Mode Remove"),
+                domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedStartup(
+                ini.Replace(@"\\example.com\SYSVOL\example.com",
+                    @"\\other.example.com\SYSVOL\example.com"),
+                domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedStartup(
+                ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
+            "Native lifecycle excludes foreign or multi-script GPOs");
     }
 
     private static void TestNativeGpoConflictScanContracts()
