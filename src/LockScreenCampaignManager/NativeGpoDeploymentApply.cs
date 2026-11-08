@@ -374,7 +374,7 @@ internal static class NativeGpoDeploymentApply
         Directory.CreateDirectory(scripts);
         // Independent GPO startup registrations:
         // PS1 uses PowerShell Startup Scripts (psscripts.ini).
-        // EXE uses classic Startup Scripts (scripts.ini + CMD launcher).
+        // EXE uses classic Startup Scripts (scripts.ini; direct EXE).
         string ini = Path.Combine(scripts, clientType == CampaignClientType.Executable
             ? "scripts.ini" : "psscripts.ini");
         if (File.Exists(ini) ||
@@ -390,20 +390,15 @@ internal static class NativeGpoDeploymentApply
         }
         else if (clientType == CampaignClientType.Executable)
         {
+            // MS-GPSCR 2.2.2 permits a full UNC executable as 0CmdLine,
+            // with 0Parameters passed to the executable. This uses NO
+            // PowerShell and NO intermediate CMD/BAT launcher.
             if (!clientScript.EndsWith(@"\LockScreen-Agent.exe",
-                    StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Native client path is invalid.");
-            string startup = Path.Combine(scripts, "Startup");
-            Directory.CreateDirectory(startup);
-            string cmd = Path.Combine(startup, "Start-LockScreen-Agent.cmd");
-            if (File.Exists(cmd))
-                throw new InvalidDataException("GPO launcher already exists.");
-            File.WriteAllText(cmd, "@echo off\r\n\"" + clientScript +
-                "\" --client-agent Install\r\nexit /b %ERRORLEVEL%\r\n", Encoding.ASCII);
-            string command = @"\\" + domain + @"\SYSVOL\" + domain +
-                @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() +
-                @"}\Machine\Scripts\Startup\Start-LockScreen-Agent.cmd";
-            text = "[Startup]\r\n0CmdLine=" + command + "\r\n0Parameters=\r\n";
+                    StringComparison.OrdinalIgnoreCase) ||
+                clientScript.Length >= 260)
+                throw new InvalidDataException("Native EXE startup path violates GPO limits.");
+            text = "[Startup]\r\n0CmdLine=" + clientScript +
+                "\r\n0Parameters=--client-agent Install\r\n";
         }
         else throw new NotSupportedException("Unsupported client type.");
         File.WriteAllText(ini, text, new UnicodeEncoding(false, true));
