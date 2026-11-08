@@ -67,16 +67,21 @@ internal static class AppLog
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LockScreenCampaignManager");
 
-    internal static void Write(Exception ex, string operation = "Application")
+    internal static void Write(Exception ex, string operation = "Application") =>
+        WriteToDirectory(DirectoryPath, ex, operation);
+
+    // Explicit directory for synthetic diagnostics tests; production always
+    // calls Write() with the user's local state directory.
+    internal static void WriteToDirectory(string directory, Exception ex, string operation)
     {
         try
         {
-            Directory.CreateDirectory(DirectoryPath);
+            Directory.CreateDirectory(directory);
             string log = $"{DateTimeOffset.UtcNow:O} | " +
                 UniversalDiagnosticsEmbedded.Clean(operation, 80) + " | " +
                 UniversalDiagnosticsEmbedded.Clean(ex.GetType().Name, 90) + " | " +
                 $"0x{ex.HResult:X8} | " + UniversalDiagnosticsEmbedded.Clean(ex.Message, 260);
-            File.AppendAllText(Path.Combine(DirectoryPath, "errors.log"), log + Environment.NewLine,
+            File.AppendAllText(Path.Combine(directory, "errors.log"), log + Environment.NewLine,
                 new UTF8Encoding(false));
         }
         catch { /* Logging should never interrupt the GUI. */ }

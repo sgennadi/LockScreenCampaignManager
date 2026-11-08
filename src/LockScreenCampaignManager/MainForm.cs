@@ -15,7 +15,7 @@ public sealed class MainForm : Form
     private readonly Label _adConnectionStatus = new();
     private readonly Button _adConnectButton = new();
     private AdDirectorySnapshot? _adSnapshot;
-    private string _adConnectedCompanyId = "";
+    private AdConnectionScope _adScope = AdConnectionScope.From(null);
     private bool _adFirstStepShown;
     private readonly TextBox _name = new();
     private readonly DateTimePicker _startDate = new();
@@ -563,6 +563,7 @@ public sealed class MainForm : Form
             }
             CompanyProfilesStore.SetActive(newOwner?.Id);
             _company = newOwner;
+            SetAdSnapshot(null);
             SetProject(model);
             _status.Text = "Project opened";
         }
@@ -572,7 +573,7 @@ public sealed class MainForm : Form
     private void SetAdSnapshot(AdDirectorySnapshot? snapshot)
     {
         _adSnapshot = snapshot;
-        _adConnectedCompanyId = snapshot is null ? "" : _company?.Id ?? "";
+        _adScope = AdConnectionScope.From(_company);
         if (snapshot is null)
         {
             UiStyle.ApplyStatus(_adConnectionStatus,
@@ -592,6 +593,8 @@ public sealed class MainForm : Form
     private void ConnectAndReadAd()
     {
         if (IsDisposed || Disposing) return;
+        // Never retain a previous authorized inventory during a new attempt.
+        SetAdSnapshot(null);
         try
         {
             using var dialog = new AdConnectionStartDialog(_company);
@@ -613,16 +616,10 @@ public sealed class MainForm : Form
 
     private void OpenDomainDeployment()
     {
-        if (_adSnapshot is null ||
-            _adSnapshot.ObservedUtc < DateTimeOffset.UtcNow.AddMinutes(-20) ||
-            !string.Equals(_adConnectedCompanyId, _company?.Id ?? "",
-                StringComparison.OrdinalIgnoreCase) ||
-            (_company is not null &&
-             !string.Equals(_adSnapshot.Domain, _company.Domain,
-                 StringComparison.OrdinalIgnoreCase)))
+        if (!_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow))
         {
             ConnectAndReadAd();
-            if (_adSnapshot is null) return;
+            if (!_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow)) return;
         }
         ReadControls();
         try
@@ -711,11 +708,7 @@ public sealed class MainForm : Form
         // Never carry a trusted directory snapshot across company identities.
         // Company profiles only prefill a domain and are not an authorization.
         if (_adSnapshot is not null &&
-            (!string.Equals(_adConnectedCompanyId, _company?.Id ?? "",
-                StringComparison.OrdinalIgnoreCase) ||
-             (_company is not null &&
-              !string.Equals(_adSnapshot.Domain, _company.Domain,
-                  StringComparison.OrdinalIgnoreCase))))
+            !_adScope.Matches(_adSnapshot, _company, DateTimeOffset.UtcNow))
             SetAdSnapshot(null);
         _companyLabel.Text = _company is null
             ? "ACTIVE COMPANY: Unassigned — local campaign"
