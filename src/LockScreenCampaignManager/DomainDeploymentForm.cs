@@ -127,7 +127,7 @@ internal sealed class DomainDeploymentForm : Form
     private static TableLayoutPanel ResponsiveField(string title, Control editor)
     {
         var holder = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
-            RowCount = 2, Margin = new Padding(2, 1, 10, 2) };
+            RowCount = 2, Margin = new Padding(2, 3, 10, 4) };
         holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         holder.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         holder.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill,
@@ -154,10 +154,10 @@ internal sealed class DomainDeploymentForm : Form
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(18) };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 89));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
         Controls.Add(layout);
         layout.Controls.Add(new Label { Text = "Active Directory / GPO Deployment", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold), ForeColor = Color.FromArgb(30, 44, 65) }, 0, 0);
@@ -167,6 +167,7 @@ internal sealed class DomainDeploymentForm : Form
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         _wizardHint.Dock = DockStyle.Fill;
         _wizardHint.TextAlign = ContentAlignment.MiddleLeft;
+        _wizardHint.Margin = new Padding(2, 0, 8, 0);
         _wizardHint.AutoEllipsis = true;
         _wizardHint.ForeColor = UiStyle.Navy;
         navigation.Controls.Add(_wizardHint, 0, 0);
@@ -233,10 +234,12 @@ internal sealed class DomainDeploymentForm : Form
         connLayout.Controls.Add(accounts, 0, 1);
         layout.Controls.Add(connection, 0, 2);
 
-        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(6) };
-        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
         notification.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _connectionStatus.Dock = DockStyle.Fill;
+        _connectionStatus.AutoEllipsis = true;
+        _connectionStatus.TextAlign = ContentAlignment.MiddleLeft;
         _connectionStatus.Text = "Not connected. Native LDAP + Windows GPO COM; no RSAT or WinRM.";
         _connectionStatus.ForeColor = Color.DarkSlateGray;
         notification.Controls.Add(_connectionStatus, 0, 0);
@@ -289,10 +292,11 @@ internal sealed class DomainDeploymentForm : Form
         _details.Text = "Select a domain, OU and computer security group; then click Preview.";
         split.Panel2.Controls.Add(_details);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 14, 0, 0) };
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 7, 0, 0) };
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
+            Padding = new Padding(0, 3, 0, 0) };
         _deploymentActionRow = buttons;
         _planButton = Button("Preview / check conflicts", 213, () => _ = PlanAsync(), true);
         _deployButton = Button("Deploy GPO + files", 190, () => _ = DeployAsync());
@@ -313,6 +317,8 @@ internal sealed class DomainDeploymentForm : Form
         buttons.Controls.Add(Button("Close", 96, Close));
         footer.Controls.Add(buttons, 0, 0);
         _progress.Dock = DockStyle.Fill;
+        _progress.AutoEllipsis = true;
+        _progress.TextAlign = ContentAlignment.MiddleLeft;
         _progress.ForeColor = Color.DimGray;
         _progress.Text = "No action taken in Active Directory.";
         footer.Controls.Add(_progress, 0, 1);
