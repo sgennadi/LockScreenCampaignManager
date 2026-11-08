@@ -1352,7 +1352,6 @@ internal static class SelfTests
                 kind = "Unknown", value = "" }
         ];
         string digest = new('a', 64);
-        string GpoRow(string id, int precedence) => ""; // Marker for fixture readability.
         object Evidence(string status = "HashMatches",
             string expected = "", string actual = "", int winners = 1) => new {
                 domain, dc, targetOu = ou, groupDn = group, computer,
@@ -2802,8 +2801,8 @@ internal static class SelfTests
             else if (address.Host == "api.github.com" &&
                 address.AbsolutePath.EndsWith("/releases/assets/987654321", StringComparison.Ordinal))
             {
-                Check(request.Headers.Authorization?.Parameter == token &&
-                    request.Headers.Authorization.Scheme == "Bearer" &&
+                Check(request.Headers.Authorization is { Scheme: "Bearer" } auth &&
+                    auth.Parameter == token &&
                     request.Headers.Accept.Any(x => x.MediaType == "application/octet-stream"),
                     "Private release asset ID is requested from pinned API with bearer");
                 AssetRequests++;
