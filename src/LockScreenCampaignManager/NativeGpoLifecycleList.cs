@@ -42,7 +42,7 @@ internal static class NativeGpoLifecycleList
     private sealed record LinkInfo(
         string ou, int flags, bool enabled, bool enforced,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? type);
-    private sealed record ManagedInfo(string campaignId, string end, string timeZone);
+    internal sealed record ManagedInfo(string campaignId, string end, string timeZone);
     private sealed record PolicyResult(
         string id, string name, string campaignId, string end,
         string timeZone, LinkInfo[] links, int linkCount, int gpoFlags);
@@ -173,7 +173,7 @@ internal static class NativeGpoLifecycleList
         return value;
     }
 
-    private static List<SearchResultEntry> SearchPaged(
+    internal static List<SearchResultEntry> SearchPaged(
         LdapConnection ldap, string rootDn, string filter, int max,
         Stopwatch timer, params string[] attributes)
     {
@@ -274,7 +274,7 @@ internal static class NativeGpoLifecycleList
         return true;
     }
 
-    private static ManagedInfo? ReadManagedGpo(string dc, string domain, Guid id)
+    internal static ManagedInfo? ReadManagedGpo(string dc, string domain, Guid id)
     {
         string policyDir = @"\\" + dc + @"\SYSVOL\" + domain + @"\Policies\{" +
             id.ToString("D").ToUpperInvariant() + "}";
