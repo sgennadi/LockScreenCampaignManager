@@ -63,7 +63,7 @@ internal static class NativeImmediateApply
 
             // Recheck the pinned client method on the selected DC.
             // Never attempt to execute an EXE as a PowerShell script.
-            string dc = Get(args, "dc").Trim();
+            string dc = Required(data, "dc");
             NativeAdDiscovery.ValidateNames(domain, dc);
             string manifest = @"\\" + dc + @"\SYSVOL\" + domain +
                 @"\scripts\LockScreenCampaigns\" + id + @"\campaign.json";
