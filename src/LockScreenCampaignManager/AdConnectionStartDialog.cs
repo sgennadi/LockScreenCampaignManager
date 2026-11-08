@@ -303,7 +303,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 175));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 215));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -329,6 +329,7 @@ internal sealed class AdConnectionStartDialog : Form
         _password.UseSystemPasswordChar = true;
         authentication.Controls.Add(Field("AD username", _user, 325));
         authentication.Controls.Add(Field("Password (session only, never saved)", _password, 325));
+        authentication.Controls.Add(Field("AD DNS domain (auto-detected)", _domain, 325));
         connection.Controls.Add(authentication, 0, 1);
 
         _serverOptions.Dock = DockStyle.Fill;
@@ -341,7 +342,6 @@ internal sealed class AdConnectionStartDialog : Form
         _dc.DropDownWidth = 750;
         _dc.MaxDropDownItems = 18;
         _dc.IntegralHeight = false;
-        _serverOptions.Controls.Add(Field("AD DNS domain", _domain, 345));
         _serverOptions.Controls.Add(Field("Optional DC / server (automatic by default)", _dc, 420));
         _refreshDc.Text = "Find DCs";
         _refreshDc.AutoSize = true;
