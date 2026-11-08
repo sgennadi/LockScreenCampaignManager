@@ -157,20 +157,83 @@ internal static partial class NativeClientAgent
             throw new IOException("Cannot schedule removal of native agent executable.");
     }
 
+    private static object ReceiptValue(RegistryValueRecord state) => new
+    {
+        state.Exists,
+        state.Kind,
+        Value = state.Kind switch
+        {
+            "DWord" or "QWord" => (object)state.Number,
+            "Binary" => Convert.FromBase64String(state.Base64 ?? "")
+                .Select(value => (int)value).ToArray(),
+            "MultiString" => state.TextArray ?? [],
+            _ => state.Text
+        }
+    };
+
+    private static bool SameRegistryValue(RegistryValueRecord a,
+        RegistryValueRecord b) =>
+        a.Exists == b.Exists && a.Kind == b.Kind &&
+        a.Text == b.Text && a.Number == b.Number &&
+        a.Base64 == b.Base64 &&
+        (a.TextArray ?? []).SequenceEqual(b.TextArray ?? []);
+
     private static void FinalizeCleanup(Context ctx)
     {
-        if (!File.Exists(ctx.CompletedPath)) return;
-        if (File.Exists(ctx.LocalExe))
+        if (!File.Exists(ctx.CompletedPath) || File.Exists(ctx.LocalExe))
             return; // Not yet deleted by Windows after reboot.
+        // A completed marker is not itself evidence that old registry
+        // values were restored. Never fabricate a valid receipt from it.
+        using var document = JsonDocument.Parse(
+            File.ReadAllBytes(ctx.CompletedPath));
+        var marker = document.RootElement;
+        if (!marker.TryGetProperty("CampaignId", out var idField) ||
+            idField.GetString() != ctx.Id ||
+            !marker.TryGetProperty("RestoredOwnRegistry", out var restoredField))
+            throw new InvalidDataException("Native cleanup marker is invalid.");
+        bool restored = restoredField.ValueKind == JsonValueKind.True;
+        BackupRecord? backup = Directory.Exists(ctx.Local) ? ReadBackup(ctx) : null;
+        if (restored && backup is null)
+            throw new InvalidDataException("Original backup is missing; final receipt denied.");
+
+        OwnerRecord? owner = ReadOptional<OwnerRecord>(ctx.OwnerPath);
+        if (owner is not null && owner.CampaignId == ctx.Id)
+            throw new InvalidOperationException("Cleanup owner was not released.");
+
+        if (restored && backup is not null)
+        {
+            using var registry = Registry.LocalMachine.OpenSubKey(
+                RegistryPath, writable: false);
+            if (!SameRegistryValue(GetRegistryValue(registry, "LockScreenImage"),
+                    backup.LockScreenImage) ||
+                !SameRegistryValue(GetRegistryValue(registry, "NoChangingLockScreen"),
+                    backup.NoChangingLockScreen))
+                throw new InvalidOperationException(
+                    "Original registry values were overwritten after cleanup.");
+        }
+
         if (Directory.Exists(ctx.Local))
         {
             if ((File.GetAttributes(ctx.Local) & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("Cannot finalize cleanup through a reparse point.");
+            // Restrict deletion to the known, owned local footprint. A
+            // foreign file or link is not a reason to recurse dangerously.
+            foreach (string entry in Directory.GetFileSystemEntries(ctx.Local))
+            {
+                string name = Path.GetFileName(entry);
+                if (name is not ("source-state.json" or "campaign.json" or
+                    "registry-backup-native.json" or "images"))
+                    throw new IOException("Unexpected local campaign entry; manual review required.");
+                if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("Local campaign contains an unexpected reparse point.");
+                if (name == "images" && Directory.GetFileSystemEntries(entry).Length != 0)
+                    throw new IOException("Local campaign image directory was not cleared.");
+            }
             Directory.Delete(ctx.Local, recursive: true);
         }
-        OwnerRecord? owner = ReadOptional<OwnerRecord>(ctx.OwnerPath);
-        if (owner is not null && owner.CampaignId == ctx.Id)
-            throw new InvalidOperationException("Cleanup owner was not released.");
+        // Record no receipt if a different GPO replaced our image. That is
+        // a NeedsReview outcome rather than a falsely verified restoration.
+        if (!restored || backup is null) return;
         if (!File.Exists(ctx.ReceiptPath))
             WriteNew(ctx.ReceiptPath, new
             {
@@ -178,7 +241,10 @@ internal static partial class NativeClientAgent
                 observedUtc = DateTimeOffset.UtcNow.ToString("O"),
                 cleanupStage = "AfterFileAndTaskRemoval",
                 localRootRemoved = true, scheduledTaskRemoved = true,
-                feedbackTaskRemoved = true, ownerReleased = true
+                feedbackTaskRemoved = true, ownerReleased = true,
+                restoredOwnRegistry = true,
+                expectedLockScreenImage = ReceiptValue(backup.LockScreenImage),
+                expectedNoChangingLockScreen = ReceiptValue(backup.NoChangingLockScreen)
             });
     }
 
