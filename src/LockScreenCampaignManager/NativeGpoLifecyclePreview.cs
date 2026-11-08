@@ -14,10 +14,9 @@ using Microsoft.Win32.SafeHandles;
 namespace LockScreenCampaignManager;
 
 /// <summary>
-/// Native read-only Preview for managed LockScreen GPO lifecycle actions.
-/// The legacy PowerShell Apply independently rebuilds the SAME plan digest
-/// from LDAP, SYSVOL and the optional Reuse package before performing writes.
-/// No AD, GPO or SYSVOL changes occur in this class.
+/// Native Preview and guarded Apply for managed LockScreen GPO lifecycle
+/// actions. Apply rebuilds the SAME plan digest from fresh LDAP and SYSVOL
+/// before a scoped link change or COM deletion. Reuse is not yet native.
 /// </summary>
 internal static class NativeGpoLifecyclePreview
 {
@@ -173,10 +172,11 @@ internal static class NativeGpoLifecyclePreview
                 allLinks, planHash, gptVersion, Note(action));
             if (mode == "Apply")
             {
-                // Only link operations are native. Destructive GPO Delete and
-                // multi-file Reuse still require the independently audited path.
-                if (action is not ("Disable" or "Enable" or "Unlink" or "Relink"))
-                    throw new NotSupportedException("This action is not a native link-only Apply.");
+                // Reuse changes both AD and SYSVOL and retains the
+                // independently audited legacy engine. Delete is native but
+                // never proceeds while ANY OU/domain/site link still exists.
+                if (action == "Reuse")
+                    throw new NotSupportedException("GPO Reuse is not yet native.");
                 string approval = Get(args, "approveGuid").Trim();
                 string approvedHash = Get(args, "planHash");
                 if (!Guid.TryParse(approval, out Guid approvedId) ||
@@ -184,6 +184,39 @@ internal static class NativeGpoLifecyclePreview
                     !string.Equals(approvedHash, planHash, StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         "Confirmation/preview mismatch. Refresh and confirm the exact GPO GUID.");
+
+                if (action == "Delete")
+                {
+                    // Recheck links against the selected DC immediately prior
+                    // to the irreversible COM deletion. The initial preview
+                    // check also covered both OU/domain and site gPLink.
+                    var linksNow = CollectLinks(ldap, actualDc, baseDn, configDn,
+                        gpoDn, Stopwatch.StartNew());
+                    if (allLinks.Count != 0 || linksNow.Count != 0)
+                        throw new InvalidOperationException(
+                            "The selected GPO is linked. Unlink it from every OU, domain and site before deleting.");
+                    var current = ReadOne(ldap, gpoDn,
+                        "(objectClass=groupPolicyContainer)",
+                        "versionNumber", "flags");
+                    if (LongAttr(current, "versionNumber") != gpo.Version ||
+                        LongAttr(current, "flags", optional: true) != gpo.Flags)
+                        throw new InvalidOperationException(
+                            "GPO changed since confirmation. Refresh Preview.");
+
+                    NativeGpoCom.DeleteManagedUnlinkedGpo(actualDc, gpoDn);
+                    return JsonSerializer.SerializeToElement(new
+                    {
+                        success = true,
+                        message = "Selected unlinked managed GPO deleted using native Windows GPO COM. Review AD replication.",
+                        data = new
+                        {
+                            action, gpoId = gpoId.ToString("D"),
+                            campaignId = managed.campaignId, ou = ouDn,
+                            successful = true, note = Note(action),
+                            oldSourcePreserved = true
+                        }
+                    }, Json);
+                }
 
                 // LDAP atomic modify: delete the exact original single-value
                 // gPLink and add the replacement, or add/delete when empty.
