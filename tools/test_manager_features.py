@@ -327,7 +327,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("Use current Windows account", first)
         self.assertIn("Remember username", first)
         self.assertIn("Save encrypted password (Windows Credential Manager)", first)
-        self.assertIn("Forget saved credentials", first)
+        self.assertIn("Forget saved login", first)
         vault = read("AdCredentialVault.cs")
         self.assertIn("CredWrite", vault)
         self.assertIn("CredRead", vault)
