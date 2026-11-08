@@ -97,8 +97,8 @@ internal static class NativeRemoteCleanup
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or InvalidDataException or JsonException or ArgumentException
             or System.ComponentModel.Win32Exception or COMException
-            or TargetInvocationException or System.Security.SecurityException
-            or PlatformNotSupportedException)
+            or TargetInvocationException or InvalidOperationException
+            or System.Security.SecurityException or PlatformNotSupportedException)
         {
             int hr = ex is TargetInvocationException tie && tie.InnerException is not null
                 ? tie.InnerException.HResult : ex.HResult;
@@ -228,7 +228,7 @@ internal static class NativeRemoteCleanup
             service = Activator.CreateInstance(server) ??
                 throw new InvalidOperationException("Cannot activate Task Scheduler COM.");
             Call(service, "Connect", host);
-            root = Call(service, "GetFolder", @"\\");
+            root = Call(service, "GetFolder", @"\");
             if (root is null) throw new InvalidDataException("Task Scheduler root unavailable.");
             foreach (string task in new[]
             {

@@ -93,6 +93,18 @@ for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
 native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Immediate && mode is ("List" or "Preview")' in runner
 assert 'NativeImmediateActions.Execute(mode, request, credentials)' in runner
+# Native VerifyCleanup reads client post-deletion evidence but never writes.
+assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
+native_receipt = (project / 'NativeRemoteCleanup.cs').read_text(encoding='utf-8')
+for guard in ('CheckMany', 'ValidateReceipt', 'MatchesExpected',
+              'RegistryView.Registry64', 'OpenRemoteBaseKey', 'GetTask',
+              'Schedule.Service', 'ReadOptionalFile', 'File.GetAttributes',
+              'RemoteFootprintMatchesPostCleanupReceipt', 'IsOfflineHresult'):
+    assert guard in native_receipt, guard
+for forbidden in ('RegisterTaskDefinition', 'DeleteTask', 'SetValue(',
+                  'WriteAllBytes', 'File.Delete(', 'Directory.Delete('):
+    assert forbidden not in native_receipt, forbidden
+
 assert 'LockScreenCampaignManager.CampaignPushNow.ps1' in csproj
 for guard in ('LegacyPlanHash', 'Selected(args, candidates)', 'ReadManagedGpo',
               'SearchPaged', 'WindowsIdentity.RunImpersonated',

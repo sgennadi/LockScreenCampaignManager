@@ -38,6 +38,7 @@ internal static class SelfTests
         TestNativeGpoLifecycleListContracts();
         TestNativeGpoLifecyclePreviewContracts();
         TestNativeImmediateActionsContracts();
+        TestNativeRemoteCleanupContracts();
         TestNativeGpoDeploymentPlanContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
@@ -388,6 +389,66 @@ StartExecutePSFirst=true
             Check(corruptDenied, "Native GPO preflight rejects modified campaign JPEGs");
         }
         finally { Directory.Delete(folder, true); }
+    }
+
+    private static void TestNativeRemoteCleanupContracts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        const string id = "campaign-a";
+        string ok = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1, campaignId = id,
+            cleanupStage = "AfterFileAndTaskRemoval",
+            observedUtc = now.ToString("O"),
+            localRootRemoved = true, scheduledTaskRemoved = true,
+            feedbackTaskRemoved = true, ownerReleased = true,
+            restoredOwnRegistry = true,
+            expectedLockScreenImage = new { Exists = false, Kind = "String", Value = (string?)null },
+            expectedNoChangingLockScreen = new { Exists = true, Kind = "DWord", Value = 1 }
+        });
+        using var receipt = System.Text.Json.JsonDocument.Parse(ok);
+        Check(NativeRemoteCleanup.ValidateReceipt(receipt.RootElement, id, now) is null,
+            "Native cleanup accepts only complete matching post-deletion receipts");
+        Check(NativeRemoteCleanup.ValidateReceipt(receipt.RootElement,
+            "different-campaign", now) == "IncompleteOrUnrestoredReceipt",
+            "Native cleanup rejects receipts for other campaigns");
+        Check(NativeRemoteCleanup.ValidateReceipt(receipt.RootElement,
+            id, now.AddMinutes(-10)) == "InvalidReceiptTime",
+            "Native cleanup rejects post-cleanup receipts from the future");
+        using var broken = System.Text.Json.JsonDocument.Parse(
+            ok.Replace("AfterFileAndTaskRemoval", "BeforeFileAndTaskRemoval"));
+        Check(NativeRemoteCleanup.ValidateReceipt(broken.RootElement,
+            id, now) == "IncompleteOrUnrestoredReceipt",
+            "Native cleanup fails closed on premature cleanup receipts");
+
+        var image = receipt.RootElement.GetProperty("expectedLockScreenImage");
+        var locked = receipt.RootElement.GetProperty("expectedNoChangingLockScreen");
+        Check(NativeRemoteCleanup.MatchesExpected(false,
+                Microsoft.Win32.RegistryValueKind.String, null, image) &&
+            NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.DWord, 1, locked) &&
+            !NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.DWord, 2, locked),
+            "Native cleanup compares absence, registry types and DWORD exactly");
+
+        using var multi = System.Text.Json.JsonDocument.Parse(
+            """{"Exists":true,"Kind":"MultiString","Value":["a","b"]}""");
+        Check(NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.MultiString,
+                new[] { "a", "b" }, multi.RootElement) &&
+            !NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.MultiString,
+                new[] { "b", "a" }, multi.RootElement),
+            "Native cleanup preserves MultiString element order");
+        using var binary = System.Text.Json.JsonDocument.Parse(
+            """{"Exists":true,"Kind":"Binary","Value":[0,13,255]}""");
+        Check(NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.Binary,
+                new byte[] { 0, 13, 255 }, binary.RootElement) &&
+            !NativeRemoteCleanup.MatchesExpected(true,
+                Microsoft.Win32.RegistryValueKind.Binary,
+                new byte[] { 0, 13, 254 }, binary.RootElement),
+            "Native cleanup compares binary registry state without coercion");
     }
 
     private static void TestNativeImmediateActionsContracts()
