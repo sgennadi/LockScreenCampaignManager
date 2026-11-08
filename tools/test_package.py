@@ -75,6 +75,18 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+# Lifecycle List is native C#; protected Preview/Apply retain their
+# shared legacy plan hash and write engine.
+native_lifecycle = (project / 'NativeGpoLifecycleList.cs').read_text(encoding='utf-8')
+assert 'operation == DomainOperation.Lifecycle && mode == "List"' in runner
+assert 'NativeGpoLifecycleList.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.GpoLifecycle.ps1' in csproj
+for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',
+              'ReadManagedGpo', 'ReadRootDse', 'configurationNamingContext',
+              'ParseLinks', 'CN=Sites,', 'WindowsIdentity.RunImpersonated',
+              'ReadAllText(ini, Encoding.Unicode)', 'LOGON_NETCREDENTIALS_ONLY'):
+    assert guard in native_lifecycle, guard
+
 # SYSVOL Scan and Preview are native; the write/Deletion Cleanup remains PS1.
 native_storage = (project / 'NativeSysvolStorage.cs').read_text(encoding='utf-8')
 assert 'operation == DomainOperation.Storage && mode is ("Scan" or "Preview")' in runner
