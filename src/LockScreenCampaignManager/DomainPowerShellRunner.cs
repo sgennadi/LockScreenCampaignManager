@@ -60,15 +60,15 @@ internal static class DomainPowerShellRunner
             return NativeGpoLifecycleList.Execute(mode, request, credentials);
         if (operation == DomainOperation.Lifecycle && mode == "Preview")
             return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
-        // Lifecycle link operations and guarded deletion are native C#.
-        // Only multi-file Reuse remains on the audited legacy code path.
+        // Lifecycle link, guarded deletion and staged campaign Reuse are
+        // native C#. Every Apply rebuilds the exact approved preview hash.
         if (operation == DomainOperation.Lifecycle && mode == "Apply")
         {
             var lifecycleRequest = JsonSerializer.SerializeToElement(request, Json);
             string action = lifecycleRequest.TryGetProperty("action", out var actionProperty)
                 && actionProperty.ValueKind == JsonValueKind.String
                 ? actionProperty.GetString() ?? "" : "";
-            if (action is "Disable" or "Enable" or "Unlink" or "Relink" or "Delete")
+            if (action is "Disable" or "Enable" or "Unlink" or "Relink" or "Delete" or "Reuse")
                 return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
         }
 
@@ -93,7 +93,8 @@ internal static class DomainPowerShellRunner
         bool legacyAllowed = operation switch
         {
             DomainOperation.Deployment => mode == "Deploy",
-            DomainOperation.Lifecycle => mode == "Apply",
+            // All supported lifecycle actions now have native Apply paths.
+            DomainOperation.Lifecycle => false,
             DomainOperation.ConflictScan =>
                 mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
             DomainOperation.Immediate =>
