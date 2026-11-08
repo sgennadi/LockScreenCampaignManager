@@ -84,9 +84,8 @@ function Get-PrincipalSids {
     } else {
         '(sAMAccountName=' + (Escape-Filter $name) + ')'
     }
-    $users = @(Search-Entries $Connection $BaseDn
-        ('(&(objectCategory=person)(objectClass=user)' + $filter + ')')
-        @('objectSid','tokenGroups') 2)
+    $query = '(&(objectCategory=person)(objectClass=user)' + $filter + ')'
+    $users = @(Search-Entries $Connection $BaseDn $query @('objectSid','tokenGroups') 2)
     if ($users.Count -ne 1) { throw 'Cannot resolve exact account to inspect permissions.' }
     $sids = [Collections.Generic.HashSet[string]]::new(
         [StringComparer]::OrdinalIgnoreCase)
