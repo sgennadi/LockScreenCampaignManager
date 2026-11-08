@@ -78,8 +78,7 @@ internal static class NativeGpoLifecyclePreview
                 !NativeGpoLifecycleList.SameController(requestedDc, actualDc))
                 throw new InvalidOperationException(
                     "The connected domain controller does not match the selected AD domain/DC.");
-            if (!NativeAdDiscovery.Attr(root, "isRODC").Equals("FALSE",
-                    StringComparison.OrdinalIgnoreCase))
+            if (NativeAdDiscovery.ReadDcWritable(ldap, root) != true)
                 throw new InvalidOperationException("Writable AD controller cannot be verified.");
             DateTime dcUtc = NativeDcConsistency.ParseDcTime(clock);
             int skewSeconds = (int)Math.Round((DateTime.UtcNow - dcUtc).TotalSeconds);
