@@ -277,6 +277,14 @@ internal static class NativeGpoDeploymentPlan
         return new VerifiedPackage(id, slides.GetArrayLength(), imageBytes);
     }
 
+    // Offline CI can verify the same package validation without LDAP,
+    // SYSVOL access or allowing any GPO mutation.
+    internal static (string Id, int Count, long Bytes) VerifyLocalPackageForTest(string path)
+    {
+        var found = ValidatePackage(path);
+        return (found.Id, found.Count, found.Bytes);
+    }
+
     internal static DateTime ParseLocal(string text) =>
         DateTime.ParseExact(text, "yyyy-MM-ddTHH:mm:ss",
             CultureInfo.InvariantCulture, DateTimeStyles.None);
