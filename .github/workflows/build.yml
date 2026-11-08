@@ -261,7 +261,21 @@ jobs:
       - name: Checkout tested commit
         uses: actions/checkout@v7
 
+      - name: Skip stale main-branch run
+        id: latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$current" = "$GITHUB_SHA" ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Skipping stale tested commit $GITHUB_SHA; current main is $current"
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download tested x86/x64 packages
+        if: steps.latest.outputs.publish == 'true'
         uses: actions/download-artifact@v7
         with:
           pattern: LockScreenCampaignManager-win-*
@@ -269,6 +283,7 @@ jobs:
           merge-multiple: true
 
       - name: Verify four ZIP files and create SHA-256 manifest
+        if: steps.latest.outputs.publish == 'true'
         shell: bash
         run: |
           python - <<'PY'
@@ -312,6 +327,7 @@ jobs:
           PY
 
       - name: Publish 0.4.0-preview.34 (no overwrite)
+        if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -328,6 +344,7 @@ jobs:
             --prerelease --notes-file docs/RELEASE-PREVIEW34.md
 
       - name: Verify public release digest metadata for UniversalUpdater
+        if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
