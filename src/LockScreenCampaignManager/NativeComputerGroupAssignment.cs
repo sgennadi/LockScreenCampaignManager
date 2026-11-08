@@ -104,11 +104,14 @@ internal static class NativeComputerGroupAssignment
 
     internal static bool PreviewFresh(string value, DateTimeOffset now)
     {
-        if (!DateTimeOffset.TryParseExact(value, "o", CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out var parsed) ||
-            parsed.Offset != TimeSpan.Zero)
+        // The preview engine writes DateTime.UtcNow in the roundtrip "o"
+        // format ending in Z. Parse it as UTC DateTime, not DateTimeOffset:
+        // DateTimeOffset's "o" format expects a numeric offset.
+        if (!DateTime.TryParseExact(value, "o", CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out var parsed) ||
+            parsed.Kind != DateTimeKind.Utc)
             return false;
-        double minutes = (now - parsed).TotalMinutes;
+        double minutes = (now.UtcDateTime - parsed).TotalMinutes;
         return minutes >= 0 && minutes <= 5;
     }
 
