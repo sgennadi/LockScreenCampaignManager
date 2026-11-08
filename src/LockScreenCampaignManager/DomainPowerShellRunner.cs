@@ -16,7 +16,7 @@ internal sealed record DomainCredentials(string Domain, string UserName, string 
 /// <summary>
 /// Native Windows administrative operation router. The historical class name
 /// is retained solely for call-site/API compatibility. This class NEVER
-/// launches powershell.exe, creates temporary PS1 files or executes scripts.
+/// starts subprocesses, creates temporary script files or executes scripts.
 /// The separately deployed client LockScreen-Agent.ps1 is not run here.
 /// </summary>
 internal static class DomainPowerShellRunner
