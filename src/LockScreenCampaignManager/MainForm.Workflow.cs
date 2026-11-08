@@ -72,7 +72,7 @@ public sealed partial class MainForm
         var result = dialog.ShowDialog(this);
         if (result == DialogResult.Yes)
         {
-            _workflowStep = _project.ImagePaths.Count > 0 ? 2 : 0;
+            _workflowStep = AdReady ? 1 : 0;
             SetWorkflowMode(false);
             _status.Text = _workflowStep == 0
                 ? "Wizard: connect to AD first, or choose Skip AD to prepare locally."
@@ -134,10 +134,11 @@ public sealed partial class MainForm
               $"  |  Images: {_project.ImagePaths.Count}";
         _workflowHint.AccessibleDescription = _workflowHint.Text;
         _workflowBack.Enabled = _workflowStep > 0;
-        _workflowNext.Visible = _workflowStep < 5;
+        _workflowNext.Visible = true;
         _workflowNext.Text = _workflowStep == 0
-            ? (AdReady ? "Next" : "Skip AD") : _workflowStep == 4 ? "Deploy >" : "Next";
-        _workflowNext.Enabled = _workflowStep == 0 || _project.ImagePaths.Count > 0;
+            ? (AdReady ? "Next" : "Skip AD")
+            : _workflowStep == 5 ? "Finish offline" : "Next";
+        _workflowNext.Enabled = _workflowStep is 0 or 5 || _project.ImagePaths.Count > 0;
         _workflowAction.Text = _workflowStep switch
         {
             0 => AdReady ? "AD connected" : "Connect to AD...",
@@ -157,6 +158,16 @@ public sealed partial class MainForm
     private void AdvanceWorkflow()
     {
         ReadControls();
+        if (_workflowStep == 5)
+        {
+            _status.Text = "Campaign finished locally. No AD or GPO changes were made.";
+            MessageBox.Show(this,
+                "The campaign is saved locally. Nothing was deployed to AD. " +
+                "You can reopen the project or use Advanced > AD / GPO when ready.",
+                "Finished offline", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SetWorkflowMode(true);
+            return;
+        }
         if (_workflowStep is > 0 and < 5 && _project.ImagePaths.Count == 0)
         {
             _status.Text = "Add at least one image before continuing.";
