@@ -363,6 +363,20 @@ StartExecutePSFirst=true
             new string('B', 64) + ":" + new string('C', 64));
         Check(reuse == "a84a855068f2db247778dee5515b53913d801e9c03da8f52fb173df8ed89e981",
             "Native GPO Lifecycle Reuse includes exact package hashes");
+        string localIniHash = "6C16DEDACE8D7314E5801228B46B0E0DE72650ABCC90F7CAE556D8EB24D246F9";
+        string localManifestHash = "EB22561D02AC898453B89A6391EF5C609A68F62C5E103D8964FFB1C10A8A0755";
+        string localAgentHash = "0CEAE95780F63F2F1EBE527746BDDEFC965CE7D8C8B564FC1CDD53A6EA566C78";
+        Check(NativeGpoLifecyclePreview.LegacyPlanHash(
+                "example.com", "localhost", gpoDn, ou, links,
+                42, 0, localIniHash, "Disable", "", "") ==
+            "4c552d75251cf09317b885ddd9136a39b0f09a1279f19db9cba9da92d305e1a8",
+            "Native lifecycle Disable matches real-file PowerShell 5.1 Plan fixture");
+        Check(NativeGpoLifecyclePreview.LegacyPlanHash(
+                "example.com", "localhost", gpoDn, ou, links,
+                42, 0, localIniHash, "Reuse", "new_campaign",
+                localManifestHash + ":" + localAgentHash) ==
+            "4ad6c02566f179a40d523f3f70577722969676e90daae01840731c18d60cf0c3",
+            "Native lifecycle Reuse matches real-file PowerShell 5.1 Plan fixture");
         Check(disable != NativeGpoLifecyclePreview.LegacyPlanHash(
                 "example.com", "dc02.example.com", gpoDn, ou, links,
                 42, 0, new string('A', 64), "Disable", "", "") &&

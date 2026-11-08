@@ -90,8 +90,8 @@ for guard in ('LegacyPlanHash', 'CheckAction', 'FileSha256', 'CollectLinks',
               'TimeZoneInfo.ConvertTimeFromUtc', 'SessionOptions.ReferralChasing',
               'GptVersionPattern', 'gptVersion != gpo.Version'):
     assert guard in native_preview, guard
-for fixture in ('FunctionDefinitionAst', "'Hash', 'Plan'",
-                '59909b422c6b7158', 'a84a855068f2db24'):
+for fixture in ('FunctionDefinitionAst', "'Hash', 'ReadPackage', 'Plan'",
+                '4c552d75251cf093', '4ad6c02566f179a4'):
     assert fixture in legacy_fixture, fixture
 assert 'LockScreenCampaignManager.GpoLifecycle.ps1' in csproj
 for guard in ('SessionOptions.ReferralChasing', 'IsManagedStartup',

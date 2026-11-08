@@ -5,7 +5,7 @@
 - Supports Disable, Enable, Unlink, Relink, Delete and Reuse read-only previews. Validates selected writable DC, exact managed GPO GUID, duplicate links, other OU/site links, and AD/SYSVOL version consistency.
 - Reuse validates the replacement campaign, JPEG SHA-256, new campaign schedule and timezone, expired prior campaign, unused target SYSVOL campaign ID and DC clock skew.
 - **Apply remains unchanged:** the embedded PowerShell engine independently recomputes the plan hash and all current guards before writing. Native Preview produces the exact original UTF-8 SHA-256 preimage, preserving required manual GUID confirmation.
-- Includes native .NET self-tests and a Windows PowerShell 5.1 test that extracts the REAL legacy `Plan` and `Hash` functions, mocks only files, and cross-checks fixed golden values for Disable and Reuse.
+- Includes native .NET self-tests and a Windows PowerShell 5.1 test that executes the original `Plan`, `Hash` and `ReadPackage` functions against deterministic local fixture files (no AD or SYSVOL writes), cross-checking golden SHA-256 values for Disable and Reuse.
 
 ## Retained protections
 - No writes occur during Preview. Delete still requires all OU, domain and site links to be removed. Reuse preserves the existing GPO GUID and security filtering.
