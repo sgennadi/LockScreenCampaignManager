@@ -53,6 +53,13 @@ public sealed partial class MainForm
         };
         _workflowAction.Enabled = _workflowStep != 3 ||
             (AdReady && _project.ImagePaths.Count > 0);
+        int index = SelectedIndex;
+        _replaceImageButton.Enabled = _removeImageButton.Enabled = index >= 0;
+        _moveUpButton.Enabled = index > 0;
+        _moveDownButton.Enabled = index >= 0 && index < _project.ImagePaths.Count - 1;
+        _manualValidate.Enabled = _project.ImagePaths.Count > 0;
+        _manualExport.Enabled = _project.ImagePaths.Count > 0;
+        _manualDeploy.Enabled = AdReady && _project.ImagePaths.Count > 0;
     }
 
     private void AdvanceWorkflow()
@@ -84,6 +91,52 @@ public sealed partial class MainForm
         }
         _workflowStep = Math.Min(3, _workflowStep + 1);
         UpdateWorkflow();
+    }
+
+    private void SortImagesByFilename()
+    {
+        if (_project.ImagePaths.Count < 2) return;
+        if (MessageBox.Show(this,
+                "Sort images alphabetically by filename? This changes which image plays in each scheduled slot.",
+                "Sort campaign images", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        _project.ImagePaths = _project.ImagePaths
+            .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase).ToList();
+        _projectDirty = true;
+        UpdateRows(0);
+        _status.Text = "Images sorted by filename. Verify the date/time assignment."; 
+    }
+
+    private void AutoMatchImageNames()
+    {
+        if (_project.ImagePaths.Count == 0) return;
+        ReadControls();
+        try
+        {
+            var proposal = ImageFilenameMatcher.Suggest(_project, _project.ImagePaths);
+            var ordered = proposal.Slots.Select(x => x.SuggestedPath).ToArray();
+            if (ordered.Any(x => x is null) ||
+                ordered.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ordered.Length ||
+                proposal.ConfidentCount != ordered.Length)
+            {
+                MessageBox.Show(this,
+                    $"Matched {proposal.ConfidentCount} of {ordered.Length} image slots confidently. " +
+                    "Some filenames are ambiguous. No changes made. " +
+                    "Rename the files using a number, weekday or date, or arrange them manually.",
+                    "Auto match needs review", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (MessageBox.Show(this,
+                    $"Matched all {ordered.Length} image(s) to their planned dates. " +
+                    "Apply the suggested order?",
+                    "Confirm automatic image order", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            _project.ImagePaths = ordered.Select(x => x!).ToList();
+            _projectDirty = true;
+            UpdateRows(0);
+            _status.Text = "Image order inferred from filenames. Review before deployment.";
+        }
+        catch (Exception ex) { UiErrorDialog.Show(this, "Auto match images", ex); }
     }
 
     private void RunWorkflowAction()
