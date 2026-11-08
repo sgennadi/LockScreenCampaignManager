@@ -61,6 +61,6 @@ assert 'Remote-GPO-Deploy.ps1' not in (project / 'LockScreenCampaignManager.cspr
 assert 'CreateProcessWithLogonW' in (project / 'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
 assert '1  Connect to DC & Read AD' in (project / 'MainForm.cs').read_text(encoding='utf-8')
 assert '3  GPO Preview / Deploy' in (project / 'MainForm.cs').read_text(encoding='utf-8')
-assert 'Step 1' in (project / 'AdConnectionStartDialog.cs').read_text(encoding='utf-8')
+assert 'AD Connection Wizard' in (project / 'AdConnectionStartDialog.cs').read_text(encoding='utf-8')
 assert 'ad.example.test' not in (project / 'CampaignExporter.cs').read_text(encoding='utf-8')
 print('PASS: universal AD/GPO deployment components and security filtering')
