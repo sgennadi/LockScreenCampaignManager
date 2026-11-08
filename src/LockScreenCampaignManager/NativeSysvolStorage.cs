@@ -391,14 +391,21 @@ internal static class NativeSysvolStorage
             throw new InvalidDataException("Unsafe campaign identifier.");
         VerifyDirectory(folder);
         string manifest = Path.Combine(folder, "campaign.json");
-        string agent = Path.Combine(folder, "LockScreen-Agent.ps1");
         string images = Path.Combine(folder, "images");
         VerifyDirectory(images);
         var info = FileHash(manifest, 10, 1_048_576);
-        var agentInfo = FileHash(agent, 1, 5 * 1_048_576);
         using var doc = JsonDocument.Parse(File.ReadAllBytes(manifest),
             new JsonDocumentOptions { MaxDepth = 12 });
         var cfg = doc.RootElement;
+        CampaignClientType clientType = NativeGpoDeploymentPlan.ParseClientType(
+            cfg.TryGetProperty("clientType", out var declared) &&
+            declared.ValueKind == JsonValueKind.String
+                ? declared.GetString() ?? "" : "");
+        string agentName = clientType == CampaignClientType.Executable
+            ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
+        string agent = Path.Combine(folder, agentName);
+        var agentInfo = FileHash(agent, 1, clientType == CampaignClientType.Executable
+            ? 250L * 1_048_576 : 5 * 1_048_576);
         if (cfg.GetProperty("campaignId").GetString() != id ||
             cfg.GetProperty("schemaVersion").GetInt32() != 1)
             throw new InvalidDataException("Campaign ID or schema mismatch.");
@@ -422,7 +429,7 @@ internal static class NativeSysvolStorage
         string[] entries = Directory.GetFileSystemEntries(folder)
             .Select(Path.GetFileName).ToArray()!;
         if (exactLayout && (entries.Length != 3 ||
-            entries.Any(x => x is not ("campaign.json" or "LockScreen-Agent.ps1" or "images"))))
+            entries.Any(x => x != "campaign.json" && x != agentName && x != "images")))
             throw new InvalidDataException("Unexpected files in campaign folder.");
         string[] imageFiles = Directory.GetFileSystemEntries(images)
             .Select(Path.GetFileName).ToArray()!;
