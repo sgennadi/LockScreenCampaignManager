@@ -13,11 +13,11 @@ using Microsoft.Win32.SafeHandles;
 namespace LockScreenCampaignManager;
 
 /// <summary>
-/// Read-only eligible computer listing and guarded immediate-action Preview.
+/// Read-only eligible listing, guarded action Preview and cleanup verification.
 /// The actual remote Push/Repair/Report/Cleanup still runs through the legacy
 /// PowerShell Task Scheduler RPC engine and independently re-checks the
 /// complete OU/group/GPO/SYSVOL scope and plan hash immediately before writing.
-/// This module does not create scheduled tasks, modify GPOs or contact clients.
+/// Only VerifyCleanup reads clients; no mode creates tasks or changes state.
 /// </summary>
 internal static class NativeImmediateActions
 {
@@ -28,7 +28,7 @@ internal static class NativeImmediateActions
         @"\A[A-Za-z0-9][A-Za-z0-9.-]{1,253}\z",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly HashSet<string> Purposes = new(
-        ["Push", "Cleanup", "Report", "Repair"], StringComparer.Ordinal);
+        ["Push", "Cleanup", "Report", "Repair", "VerifyCleanup"], StringComparer.Ordinal);
     internal sealed record EligibleComputer(string name, string sam, string dn);
 
     internal static JsonElement Execute(string mode, object request,
@@ -36,8 +36,8 @@ internal static class NativeImmediateActions
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Windows signed/sealed LDAP is required.");
-        if (mode is not ("List" or "Preview"))
-            throw new ArgumentException("Only read-only List and Preview are native.");
+        if (mode is not ("List" or "Preview" or "VerifyCleanup"))
+            throw new ArgumentException("Only read-only List, Preview and VerifyCleanup are native.");
         JsonElement args = JsonSerializer.SerializeToElement(request, Json);
         string domain = Text(args, "domain").Trim().ToLowerInvariant();
         string selectedDc = Text(args, "dc").Trim();
@@ -89,6 +89,9 @@ internal static class NativeImmediateActions
             if (purpose.Length == 0) purpose = "Push";
             if (!Purposes.Contains(purpose))
                 throw new ArgumentException("Unsupported immediate action purpose.");
+            if ((mode == "VerifyCleanup") != (purpose == "VerifyCleanup"))
+                throw new InvalidOperationException(
+                    "Read-only VerifyCleanup mode must match selected purpose.");
             string gpoText = Text(args, "gpoId");
             if (!Guid.TryParse(gpoText, out Guid gpoId) || gpoId == Guid.Empty)
                 throw new ArgumentException("Choose a valid managed GPO.");
@@ -102,7 +105,7 @@ internal static class NativeImmediateActions
                 throw new InvalidDataException("Invalid GPO flags.");
             int flags = flagText.Length == 0 ? 0 :
                 int.Parse(flagText, CultureInfo.InvariantCulture);
-            bool allowDisabled = purpose is "Cleanup" or "Report";
+            bool allowDisabled = purpose is "Cleanup" or "Report" or "VerifyCleanup";
             if (!allowDisabled && (flags & 2) != 0)
                 throw new InvalidOperationException("Computer GPO configuration is disabled.");
 
@@ -146,6 +149,24 @@ internal static class NativeImmediateActions
                 TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone) >= endLocal)
                 throw new InvalidOperationException(
                     "Campaign has ended; reuse the GPO with a new campaign.");
+
+            if (mode == "VerifyCleanup")
+            {
+                // Already validated explicit DC, managed GPO, OU/group and
+                // all selected eligible computers. No task/registry write path.
+                var reports = NativeRemoteCleanup.CheckMany(selected, managed.campaignId);
+                return JsonSerializer.SerializeToElement(new
+                {
+                    success = true,
+                    message = "Native read-only post-cleanup verification completed. Unavailable evidence remains Unknown.",
+                    data = new
+                    {
+                        campaignId = managed.campaignId,
+                        gpoId = gpoId.ToString("D"),
+                        results = reports
+                    }
+                }, Json);
+            }
 
             string manifestHash = Convert.ToHexString(SHA256.HashData(content));
             string digest = LegacyPlanHash(dns, dc, ouDn, groupDn, gpoId,
