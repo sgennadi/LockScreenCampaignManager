@@ -30,6 +30,32 @@ internal static class NativeGpoCom
             int capacity);
     }
 
+    internal static Guid CreateNewGpo(string selectedDc, string newPolicyName)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Windows GPO COM is required.");
+        if (string.IsNullOrWhiteSpace(selectedDc) ||
+            newPolicyName.Length is < 3 or > 120 || newPolicyName.Any(char.IsControl))
+            throw new ArgumentException("Invalid new GPO identity.");
+
+        object com = new GroupPolicyObject();
+        try
+        {
+            var policy = (IGroupPolicyObject)com;
+            policy.New("LDAP://" + selectedDc, newPolicyName, 0);
+            var identifier = new System.Text.StringBuilder(512);
+            policy.GetName(identifier, identifier.Capacity);
+            if (!Guid.TryParse(identifier.ToString().Trim('{', '}'), out Guid gpoId) ||
+                gpoId == Guid.Empty)
+                throw new InvalidOperationException("GPO COM returned an invalid policy GUID.");
+            return gpoId;
+        }
+        finally
+        {
+            if (Marshal.IsComObject(com)) _ = Marshal.ReleaseComObject(com);
+        }
+    }
+
     internal static void DeleteManagedUnlinkedGpo(string verifiedDc, string gpoDn)
     {
         if (!OperatingSystem.IsWindows())
