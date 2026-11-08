@@ -117,10 +117,13 @@ public sealed partial class MainForm : Form
             // editor below it rather than squeezing or obscuring the steps.
             int addedHeaderHeight = Math.Max(0,
                 (int)Math.Ceiling(root.RowStyles[0].Height) - 190);
+            int addedSettingsHeight = Math.Max(0,
+                (int)Math.Ceiling(root.RowStyles[1].Height) - 98);
             int addedFooterHeight = Math.Max(0,
                 (int)Math.Ceiling(root.RowStyles[4].Height) - 112);
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(855 + addedHeaderHeight + addedFooterHeight, visible.Height));
+                Math.Max(855 + addedHeaderHeight + addedSettingsHeight +
+                    addedFooterHeight, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -259,6 +262,35 @@ public sealed partial class MainForm : Form
         _timeZone.TextChanged += (_, _) => OnDataChanged();
         settingsFlow.Controls.Add(WithLabel("Windows time zone", _timeZone, 198));
         root.Controls.Add(settings, 0, 1);
+
+        // The old fixed 98px settings band cropped "Campaign name" at
+        // 125-200% DPI. Calculate the bottom of ALL wrapped label/input
+        // pairs and grow both this row and the scrollable editor canvas.
+        bool fittingSettings = false;
+        void FitSettingsPanel()
+        {
+            if (fittingSettings || settingsFlow.IsDisposed || root.IsDisposed) return;
+            fittingSettings = true;
+            try
+            {
+                int childrenBottom = settingsFlow.Controls.Cast<Control>()
+                    .Select(c => Math.Max(c.Bottom + c.Margin.Bottom,
+                        c.Height + c.Margin.Vertical + settingsFlow.Padding.Top))
+                    .DefaultIfEmpty(80).Max();
+                int required = childrenBottom + settingsFlow.Padding.Bottom +
+                    settings.Padding.Vertical + settings.Margin.Vertical + 12;
+                if (root.RowStyles[1].Height < required)
+                {
+                    root.RowStyles[1].Height = required;
+                    FitContentToViewport();
+                }
+            }
+            finally { fittingSettings = false; }
+        }
+        settingsFlow.Layout += (_, _) => FitSettingsPanel();
+        Shown += (_, _) => FitSettingsPanel();
+        DpiChanged += (_, _) => BeginInvoke(new Action(FitSettingsPanel));
+        FitSettingsPanel();
 
         var middle = new SplitContainer {
             Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 9,
@@ -484,14 +516,56 @@ public sealed partial class MainForm : Form
 
     private static Control WithLabel(string label, Control control, int width)
     {
-        var box = new TableLayoutPanel { Width = width, Height = 75, ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 10, 6) };
-        box.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        box.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        box.Controls.Add(new Label { Text = label, Dock = DockStyle.Fill, ForeColor = Color.FromArgb(80, 88, 99), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-        control.Margin = new Padding(0);
-        control.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+        var box = new TableLayoutPanel
+        {
+            Name = label == "Campaign name" ? "CampaignNameField" : "CampaignInputField",
+            Width = width, Height = 88, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(0, 0, 10, 6)
+        };
+        box.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        box.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        var title = new Label
+        {
+            Name = label == "Campaign name" ? "CampaignNameLabel" : "CampaignInputLabel",
+            Text = label, Dock = DockStyle.Fill,
+            AutoEllipsis = false, AutoSize = false,
+            ForeColor = Color.FromArgb(80, 88, 99),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(2, 3, 2, 3)
+        };
+        box.Controls.Add(title, 0, 0);
+        control.Margin = Padding.Empty;
+        control.Dock = DockStyle.Top;
         box.Controls.Add(control, 0, 1);
+        void Fit() => FitInputLabel(box, title, control, width);
+        title.FontChanged += (_, _) => Fit();
+        control.FontChanged += (_, _) => Fit();
+        Fit();
         return box;
+    }
+
+    private static void FitInputLabel(TableLayoutPanel box,
+        Label title, Control field, int originalWidth)
+    {
+        if (box.IsDisposed || title.IsDisposed || field.IsDisposed) return;
+        int titleText = TextRenderer.MeasureText("Agpqy", title.Font,
+            new Size(4096, 4096),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+        int titleHeight = Math.Max(34,
+            titleText + title.Padding.Vertical + title.Margin.Vertical + 11);
+        int fieldHeight = Math.Max(44,
+            Math.Max(field.Height, field.PreferredSize.Height) +
+            field.Margin.Vertical + 8);
+        box.RowStyles[0].Height = titleHeight;
+        box.RowStyles[1].Height = fieldHeight;
+        int textWidth = TextRenderer.MeasureText(title.Text, title.Font,
+            new Size(4096, 4096),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+        int neededWidth = Math.Max(originalWidth,
+            Math.Max(textWidth + title.Padding.Horizontal + 17, field.Width + 10));
+        if (box.Width != neededWidth) box.Width = neededWidth;
+        int neededHeight = titleHeight + fieldHeight + box.Padding.Vertical + 4;
+        if (box.Height != neededHeight) box.Height = neededHeight;
     }
 
     private static Button AddActionMenu(Control host, string title,
