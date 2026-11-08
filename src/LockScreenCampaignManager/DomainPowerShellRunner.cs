@@ -46,6 +46,9 @@ internal static class DomainPowerShellRunner
             return NativeGpoConflictScan.Execute(mode, request, credentials);
         if (operation == DomainOperation.ConflictScan && mode == "Effective")
             return NativeGpoEffectiveAudit.Execute(mode, request, credentials);
+        if (operation == DomainOperation.ConflictScan &&
+            mode is ("VerifyEndpoint" or "VerifyEvidence"))
+            return NativeGpoEndpointAudit.Execute(mode, request, credentials);
 
         // SYSVOL Scan, Preview and explicitly approved Cleanup run in native
         // C#. Cleanup re-audits every policy and the exact source files.
@@ -98,8 +101,7 @@ internal static class DomainPowerShellRunner
         bool legacyAllowed = operation switch
         {
 
-            DomainOperation.ConflictScan =>
-                mode is "VerifyEndpoint" or "VerifyEvidence",
+
             _ => false
         };
         if (!legacyAllowed)
