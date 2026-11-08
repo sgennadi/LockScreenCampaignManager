@@ -10,14 +10,12 @@ internal static class ManualGitHubIssueHelp
     internal const string Repository = "sgennadi/LockScreenCampaignManager";
     internal const string IssueUrl = "https://github.com/" + Repository + "/issues/new";
     internal const string Explanation =
-        "No diagnostics are sent automatically. This button copies the displayed report " +
-        "and opens a blank GitHub Issue form.\n\n" +
-        "This repository is PUBLIC. Anything posted in an Issue can be seen by anyone. " +
-        "Review the JSON and remove all private domains, names, paths, machine details " +
-        "and secrets before pasting or submitting it.\n\n" +
-        "YES: Copy the reviewed report and open GitHub Issues.\n" +
-        "NO: Stay here; nothing is sent.\n\n" +
-        "The local report stays pending: this application cannot confirm GitHub delivery.";
+        "The public GitHub Issue form will open with a prepared title and error report.\\n\\n" +
+        "You must review and explicitly submit it in GitHub; nothing is uploaded automatically. " +
+        "This repository is PUBLIC, so remove private names, domains, paths, " +
+        "computer details and secrets before submitting.\\n\\n" +
+        "A copy of the report will also be placed on the clipboard as a fallback.\\n\\n" +
+        "YES: Prepare a GitHub Issue.  NO: Stay here.";
     internal static void OpenReviewedReport(IWin32Window owner, string reviewedReport)
     {
         if (string.IsNullOrWhiteSpace(reviewedReport))
@@ -33,8 +31,34 @@ internal static class ManualGitHubIssueHelp
         try
         {
             Clipboard.SetText(reviewedReport);
-            // The issue must be reviewed, pasted and submitted by the user.
-            Process.Start(new ProcessStartInfo { FileName = IssueUrl, UseShellExecute = true });
+            // GitHub's issue query parameters populate the draft, but never
+            // submit it. The user must review and click Submit new issue.
+            // Keep the URL bounded for browsers and proxy configurations.
+            string title = "LockScreen Campaign Manager — error report";
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(reviewedReport);
+                var ev = document.RootElement.GetProperty("event");
+                string component = ev.GetProperty("component").GetString() ?? "Application";
+                string errorType = ev.GetProperty("error_type").GetString() ?? "Error";
+                title = "[Bug] " + UniversalDiagnosticsEmbedded.Clean(component, 80) +
+                    " — " + UniversalDiagnosticsEmbedded.Clean(errorType, 80);
+            }
+            catch (System.Text.Json.JsonException) { /* Keep a generic title for older reports. */ }
+            var body = "### Diagnostic report (review before publishing)\\n\\n" +
+                "This is a public issue. Remove any private information.\\n\\n" +
+                "```json\\n" + reviewedReport.Replace("```", "`` `") + "\\n```\\n";
+            string target = IssueUrl + "?title=" + Uri.EscapeDataString(title) +
+                "&body=" + Uri.EscapeDataString(body);
+            if (target.Length > 7000)
+            {
+                target = IssueUrl + "?title=" + Uri.EscapeDataString(title);
+                MessageBox.Show(owner,
+                    "The report is too long to prefill safely. It was copied to the clipboard. " +
+                    "Paste it into the GitHub issue body after reviewing it.",
+                    "Report copied", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
         }
         catch (Exception ex)
         {
