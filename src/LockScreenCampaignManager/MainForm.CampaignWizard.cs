@@ -63,6 +63,7 @@ public sealed partial class MainForm
         private readonly Button _back = new();
         private readonly Button _next = new();
         private readonly Button _close = new();
+        private readonly Button _updateAvailable = new();
         private readonly Label _footnote = new();
         private ListBox? _images;
         private RadioButton? _connectChoice;
@@ -84,7 +85,10 @@ public sealed partial class MainForm
             MinimumSize = new Size(950, 690);
             BackColor = UiStyle.Canvas;
             BuildLayout();
+            _owner.UpdateNoticeChanged += UpdateAvailableNotice;
+            Disposed += (_, _) => _owner.UpdateNoticeChanged -= UpdateAvailableNotice;
             UiStyle.Apply(this);
+            UpdateAvailableNotice();
             FitHeader();
             DpiChanged += (_, _) => BeginInvoke(new Action(FitHeader));
             UiWindowPlacement.Attach(this, "campaign-setup-wizard");
@@ -189,6 +193,16 @@ public sealed partial class MainForm
             _footnote.AutoEllipsis = true;
             footer.Controls.Add(_footnote, 0, 0);
 
+            _updateAvailable.Name = "WizardUpdateNoticeButton";
+            _updateAvailable.Text = "New update...";
+            _updateAvailable.Dock = DockStyle.Fill;
+            _updateAvailable.Tag = "NoIcon";
+            _updateAvailable.Visible = false;
+            _updateAvailable.AutoEllipsis = true;
+            _updateAvailable.Margin = new Padding(4, 2, 4, 2);
+            _updateAvailable.Click += (_, _) => _owner.OpenUniversalUpdaterFromNotice();
+            footer.Controls.Add(_updateAvailable, 1, 0);
+
             _back.Text = "Back";
             _back.Tag = "NoIcon";
             _back.Dock = DockStyle.Fill;
@@ -214,6 +228,20 @@ public sealed partial class MainForm
             AcceptButton = _next;
             CancelButton = _close;
             RenderPage();
+        }
+
+        private void UpdateAvailableNotice()
+        {
+            if (IsDisposed) return;
+            string? version = _owner.AvailableUpdateVersion;
+            _updateAvailable.Visible = version is not null;
+            if (version is null) return;
+            _updateAvailable.Text = "Update " + version;
+            _updateAvailable.BackColor = Color.FromArgb(255, 230, 173);
+            _updateAvailable.ForeColor = Color.FromArgb(89, 55, 9);
+            _updateAvailable.FlatAppearance.BorderColor = Color.FromArgb(206, 145, 43);
+            new ToolTip { AutoPopDelay = 20000 }.SetToolTip(
+                _updateAvailable, _owner.AvailableUpdateSummary);
         }
 
         internal void ShowPageForSmokeTest(int page)

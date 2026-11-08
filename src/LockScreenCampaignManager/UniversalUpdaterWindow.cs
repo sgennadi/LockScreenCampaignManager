@@ -51,7 +51,7 @@ internal sealed class UniversalUpdaterWindow : Form
     private string? _stagedPath;
     private StagedPackage? _staged;
 
-    internal UniversalUpdaterWindow()
+    internal UniversalUpdaterWindow(bool checkOnOpen = false)
     {
         Text = "Updates — LockScreen Campaign Manager";
         Font = new Font("Segoe UI", 9.5f);
@@ -244,6 +244,12 @@ internal sealed class UniversalUpdaterWindow : Form
         FormClosed += (_, _) => _sessionToken.Clear();
         UiStyle.Apply(this);
         UiWindowPlacement.Attach(this, "updater");
+        if (checkOnOpen)
+        {
+            // Opening from the update notice performs a new read-only Check.
+            // Download, verification and Install still require user action.
+            Shown += async (_, _) => await CheckAsync();
+        }
     }
 
     private static TableLayoutPanel Field(string caption, Control control)

@@ -85,6 +85,7 @@ public sealed partial class MainForm : Form
             _startupWizardShown = true;
             BeginInvoke(new Action(ShowStartupWizardChoice));
         };
+        EnableUpdateNoticeMonitoring();
     }
 
     private void ConfigureLayout()
@@ -116,8 +117,10 @@ public sealed partial class MainForm : Form
             // editor below it rather than squeezing or obscuring the steps.
             int addedHeaderHeight = Math.Max(0,
                 (int)Math.Ceiling(root.RowStyles[0].Height) - 190);
+            int addedFooterHeight = Math.Max(0,
+                (int)Math.Ceiling(root.RowStyles[4].Height) - 112);
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(855 + addedHeaderHeight, visible.Height));
+                Math.Max(855 + addedHeaderHeight + addedFooterHeight, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -356,7 +359,7 @@ public sealed partial class MainForm : Form
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         _footerLayout = footer;
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
@@ -469,7 +472,7 @@ public sealed partial class MainForm : Form
         var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
-        footer.Controls.Add(_status, 0, 1);
+        ConfigureUpdateNotice(footer, root);
         footer.Controls.Add(toolsHost, 0, 2);
         root.Controls.Add(footer, 0, 4);
     }
