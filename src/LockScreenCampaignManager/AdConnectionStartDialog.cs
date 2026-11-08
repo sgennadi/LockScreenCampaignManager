@@ -981,14 +981,20 @@ internal sealed class AdConnectionStartDialog : Form
                 {
                     var permissionResult = await Task.Run(() =>
                         DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Permissions",
-                            new { domain = snapshot.Domain, dc = snapshot.Dc, ouDn = "" },
+                            new { domain = snapshot.Domain, dc = snapshot.Dc,
+                                ouDn = _company?.DefaultOuDn ?? "" },
                             credential));
                     var permissionData = permissionResult.GetProperty("data");
                     string creationHint = permissionData.GetProperty("gpoCreateAce").GetString()
                         ?? "UNKNOWN";
+                    string linkHint = permissionData.GetProperty("ouGpoLinkAce").GetString()
+                        ?? "UNKNOWN";
+                    string selectedOu = _company?.DefaultOuDn ?? "";
                     permissionSummary = "GPO CREATION ACL: " + creationHint +
                         " (advisory only)" + Environment.NewLine +
-                        "OU LINKING: Requires OU selection" + Environment.NewLine +
+                        (selectedOu.Length > 0
+                            ? "DEFAULT OU LINK ACL: " + linkHint + " (advisory only)"
+                            : "OU LINKING: Requires OU selection") + Environment.NewLine +
                         "GPO EDIT / DELETE: Requires target GPO selection" +
                         Environment.NewLine +
                         "SYSVOL WRITE: Not verified (no test files created)";
