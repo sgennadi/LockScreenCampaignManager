@@ -158,8 +158,9 @@ internal static class SelfTests
         Check(ManualGitHubIssueHelp.Repository == "sgennadi/LockScreenCampaignManager" &&
             ManualGitHubIssueHelp.Explanation.Contains("PUBLIC", StringComparison.Ordinal) &&
             !ManualGitHubIssueHelp.Explanation.Contains("PRIVATE", StringComparison.Ordinal) &&
-            ManualGitHubIssueHelp.Explanation.Contains("pending", StringComparison.Ordinal) &&
-            ManualGitHubIssueHelp.Explanation.Contains("review", StringComparison.OrdinalIgnoreCase),
+            ManualGitHubIssueHelp.Explanation.Contains("explicitly submit", StringComparison.OrdinalIgnoreCase) &&
+            ManualGitHubIssueHelp.Explanation.Contains("review", StringComparison.OrdinalIgnoreCase) &&
+            ManualGitHubIssueHelp.Explanation.Contains("nothing is uploaded automatically", StringComparison.OrdinalIgnoreCase),
             "Public GitHub diagnostics warns before sending and does not claim delivery");
         string root = Path.Combine(Path.GetTempPath(),
             "lscm-diagnostics-" + Guid.NewGuid().ToString("N"));
@@ -300,8 +301,9 @@ internal static class SelfTests
         Check(ManualGitHubIssueHelp.IssueUrl ==
             "https://github.com/sgennadi/LockScreenCampaignManager/issues/new" &&
             ManualGitHubIssueHelp.Explanation.Contains("PUBLIC", StringComparison.Ordinal) &&
-            ManualGitHubIssueHelp.Explanation.Contains("pending", StringComparison.Ordinal),
-            "manual diagnostics points to public Issues and still requires consent");
+            ManualGitHubIssueHelp.Explanation.Contains("explicitly submit", StringComparison.OrdinalIgnoreCase) &&
+            ManualGitHubIssueHelp.Explanation.Contains("prepared title", StringComparison.OrdinalIgnoreCase),
+            "manual diagnostics prefills public Issues but requires user approval");
     }
 
     private static void TestFilenameScheduleInference()
