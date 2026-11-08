@@ -69,6 +69,19 @@ assert 'RunImpersonated' in multi_dc and 'LOGON_NETCREDENTIALS_ONLY' in multi_dc
 assignment = (project / 'NativeComputerGroupAssignment.cs').read_text(encoding='utf-8')
 assert 'NativeComputerGroupAssignment.Execute(mode, request, credentials)' in runner
 assert 'LockScreenCampaignManager.ComputerGroupAssignment.ps1' not in csproj
+# The lightweight read-only inherited GPO candidate Scan is native C#;
+# Effective/VerifyEndpoint/VerifyEvidence retain legacy security scope.
+native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='utf-8')
+assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
+assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
+assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+for guard in ('ReadLevels', 'TryLinkedGuid', 'ParseRegistryPol',
+              'ParseGppRegistry', 'XmlReaderSettings', 'DtdProcessing.Prohibit',
+              'EnsureDirectory', 'File.GetAttributes', 'ReadRemoteRegistry',
+              'LOGON_NETCREDENTIALS_ONLY', 'RunImpersonated',
+              'highRisk', 'warningsCount'):
+    assert guard in native_conflicts, guard
+
 for guard in ('GroupRid', 'primaryGroupID', 'uSNChanged', 'PlanDigest',
               'PreviewFresh', 'approveSam', 'approveGroupDn', 'objectGUID',
               'DirectoryAttributeOperation.Add', 'DirectoryAttributeOperation.Delete',

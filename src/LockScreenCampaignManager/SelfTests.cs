@@ -33,6 +33,7 @@ internal static class SelfTests
         TestNativeAdDiscoveryContracts();
         TestNativeDcConsistencyContracts();
         TestNativeComputerGroupAssignmentContracts();
+        TestNativeGpoConflictScanContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -214,6 +215,83 @@ internal static class SelfTests
             !scope.Matches(snapshot with { Domain = "other.example.com" },
                 profile, now),
             "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
+    private static void TestNativeGpoConflictScanContracts()
+    {
+        string baseDn = "DC=example,DC=com";
+        string ouDn = "OU=Clients," + baseDn;
+        Check(NativeGpoConflictScan.Inside(ouDn, baseDn) &&
+            !NativeGpoConflictScan.Inside("OU=Other,DC=another,DC=com", baseDn),
+            "Native GPO scan never crosses verified AD domain");
+        Check(NativeGpoConflictScan.ParentDn("OU=Test\\,Training," + ouDn) == ouDn,
+            "Native GPO OU ancestry preserves escaped commas");
+        string gpoDn = "CN={01234567-89AB-CDEF-0123-456789ABCDEF}," +
+            "CN=Policies,CN=System," + baseDn;
+        Check(NativeGpoConflictScan.TryLinkedGuid(gpoDn, baseDn, out var id) &&
+            id == Guid.Parse("01234567-89ab-cdef-0123-456789abcdef") &&
+            !NativeGpoConflictScan.TryLinkedGuid(
+                "CN={01234567-89AB-CDEF-0123-456789ABCDEF},CN=Policies," +
+                "CN=System,DC=other,DC=com", baseDn, out _),
+            "Native GPO scan only follows linked GUIDs in selected domain");
+        Check(NativeGpoConflictScan.TargetValue(
+            @"Software\Policies\Microsoft\Windows\Personalization",
+            "LockScreenImage", @"C:\Windows\Test.jpg")?.risk == "High" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\Personalization",
+                "NoChangingLockScreen", "1")?.risk == "Info" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\CloudContent",
+                "DisableWindowsSpotlightFeatures", "1")?.risk == "Warning",
+            "Native GPO scanner recognizes managed lock screen conflicts");
+        byte[] policy;
+        using (var bytes = new MemoryStream())
+        {
+            using var writer = new BinaryWriter(bytes, System.Text.Encoding.Unicode, leaveOpen: true);
+            writer.Write(0x67655250u);
+            writer.Write(1u);
+            writer.Write((ushort)'[');
+            writer.Write(System.Text.Encoding.Unicode.GetBytes(
+                @"Software\Policies\Microsoft\Windows\Personalization"));
+            writer.Write((ushort)';');
+            writer.Write(System.Text.Encoding.Unicode.GetBytes("LockScreenImage"));
+            writer.Write((ushort)';');
+            writer.Write(1u);
+            writer.Write((ushort)';');
+            byte[] value = System.Text.Encoding.Unicode.GetBytes("Test.jpg\0");
+            writer.Write((uint)value.Length);
+            writer.Write((ushort)';');
+            writer.Write(value);
+            writer.Write((ushort)']');
+            writer.Flush();
+            policy = bytes.ToArray();
+        }
+        var policyHits = NativeGpoConflictScan.ParseRegistryPol(policy);
+        Check(policyHits.Count == 1 && policyHits[0].risk == "High" &&
+            policyHits[0].name == "LockScreenImage",
+            "Native Registry.pol parser reads bounded binary policy values");
+        bool corruptDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(policy[..^2]); }
+        catch (InvalidDataException) { corruptDenied = true; }
+        Check(corruptDenied, "Native GPO scan fails closed on truncated Registry.pol");
+        string xml = "<RegistrySettings><Registry><Properties hive=\"HKLM\" " +
+            "key=\"Software\\Policies\\Microsoft\\Windows\\Personalization\" " +
+            "name=\"LockScreenImage\" value=\"test.jpg\" /></Registry></RegistrySettings>";
+        var gpp = NativeGpoConflictScan.ParseGppRegistry(
+            System.Text.Encoding.UTF8.GetBytes(xml));
+        Check(gpp.Count == 1 && gpp[0].risk == "High",
+            "Native GPP XML read-only parser detects policy overlap");
+        bool dtdDenied = false;
+        try
+        {
+            NativeGpoConflictScan.ParseGppRegistry(
+                System.Text.Encoding.UTF8.GetBytes("<!DOCTYPE x [<!ENTITY y \"bad\">]><x/>"));
+        }
+        catch (System.Xml.XmlException) { dtdDenied = true; }
+        Check(dtdDenied, "Native GPO scan prohibits XML DTD");
+        Check(NativeGpoConflictScan.SafeComputerName("pc01.example.com", "example.com") &&
+            !NativeGpoConflictScan.SafeComputerName("pc01.other.test", "example.com"),
+            "Native remote HKLM target stays in selected DNS domain");
     }
 
     private static void TestNativeComputerGroupAssignmentContracts()

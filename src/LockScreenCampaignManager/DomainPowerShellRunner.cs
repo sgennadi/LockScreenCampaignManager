@@ -40,6 +40,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Assignment)
             return NativeComputerGroupAssignment.Execute(mode, request, credentials);
 
+        // Only the basic inherited GPO/registry candidate Scan is native.
+        // Effective/VerifyEndpoint/VerifyEvidence remain on the audited legacy
+        // read-only engine until their source and scope contracts are ported.
+        if (operation == DomainOperation.ConflictScan && mode == "Scan")
+            return NativeGpoConflictScan.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
