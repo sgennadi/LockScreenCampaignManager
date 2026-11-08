@@ -73,8 +73,8 @@ internal static class NativeGpoLifecyclePreview
             string actualDc = Required(root, "dnsHostName");
             string configDn = Required(root, "configurationNamingContext");
             string clock = Required(root, "currentTime");
-            if (!NativeAdDiscovery.DomainFromDn(baseDn).Equals(domain,
-                    StringComparison.OrdinalIgnoreCase) ||
+            string legacyDomain = DomainFromDnPreserveCase(baseDn);
+            if (!legacyDomain.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
                 !NativeGpoLifecycleList.SameController(requestedDc, actualDc))
                 throw new InvalidOperationException(
                     "The connected domain controller does not match the selected AD domain/DC.");
@@ -163,12 +163,12 @@ internal static class NativeGpoLifecyclePreview
                     throw new InvalidOperationException("The new campaign is already present in SYSVOL.");
             }
 
-            string planHash = LegacyPlanHash(domain, actualDc, gpo.Dn, ouDn,
+            string planHash = LegacyPlanHash(legacyDomain, actualDc, gpo.Dn, ouDn,
                 rawLinks, gpo.Version, gpo.Flags, iniHash, action,
                 newCampaignId, packageHash);
             var preview = new PreviewData(
                 action, gpo.Name, gpoId.ToString("D"), managed.campaignId,
-                newCampaignId, domain, actualDc, ouDn,
+                newCampaignId, legacyDomain, actualDc, ouDn,
                 selectedLink is not null,
                 selectedLink is not null && (selectedLink.Flags & 1) == 0,
                 allLinks, planHash, gptVersion, Note(action));
@@ -198,6 +198,18 @@ internal static class NativeGpoLifecyclePreview
                 "Cannot establish alternate network credentials for a GPO lifecycle preview.");
         using (token)
             return WindowsIdentity.RunImpersonated(token, Run);
+    }
+
+    internal static string DomainFromDnPreserveCase(string baseDn)
+    {
+        // Mirrors the legacy PowerShell DomainInfo regex exactly. A DNS
+        // comparison ignores case; the SHA-256 plan preimage MUST NOT.
+        var parts = Regex.Matches(baseDn,
+            @"(?i)(?:^|,)DC=([^,]+)", RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1));
+        if (parts.Count < 2)
+            throw new InvalidDataException("Unexpected AD domain naming context.");
+        return string.Join(".", parts.Select(x => x.Groups[1].Value));
     }
 
     internal static string LegacyPlanHash(string domain, string dc,
