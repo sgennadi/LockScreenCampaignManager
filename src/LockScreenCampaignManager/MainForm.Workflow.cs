@@ -145,18 +145,18 @@ public sealed partial class MainForm
     {
         if (_workflowHint.IsDisposed) return;
         string[] hints = [
-            "1 / 6  Connect to AD to check directory access, or work offline.",
-            "2 / 6  Import image files or choose a folder.",
-            "3 / 6  Review and arrange image order.",
-            "4 / 6  Configure schedule and change time.",
-            "5 / 6  Validate and save the campaign locally.",
-            "6 / 6  Deploy GPO: select OU/group and check write permissions."
+            "AD connection or Skip AD",
+            "Choose image files or folder",
+            "Review image order",
+            "Choose dates and change time",
+            "Validate and save campaign",
+            "Deploy GPO or finish offline"
         ];
         _workflowHint.Text = _advancedMode
-            ? "Advanced tools: choose Project, Images, Review or AD / GPO below."
-            : "STEP " + (_workflowStep + 1) + " OF 6  •  " +
-              hints[Math.Clamp(_workflowStep, 0, 5)].Split("  ", 2).Last() +
-              $"  |  Images: {_project.ImagePaths.Count}";
+            ? "Advanced: Project, Images, Review and AD / GPO"
+            : $"STEP {_workflowStep + 1}/6  •  " +
+              hints[Math.Clamp(_workflowStep, 0, 5)] +
+              $"  •  {_project.ImagePaths.Count} images";
         _workflowHint.AccessibleDescription = _workflowHint.Text;
         _workflowBack.Enabled = _workflowStep > 0;
         _workflowNext.Visible = true;
