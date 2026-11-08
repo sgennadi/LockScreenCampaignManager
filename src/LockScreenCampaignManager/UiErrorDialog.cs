@@ -125,9 +125,12 @@ internal sealed class DiagnosticsWindow : Form
         panel.Panel1.Controls.Add(_files); panel.Panel2.Controls.Add(_detail);
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
         layout.Controls.Add(panel, 0, 0);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true };
+        var buttons = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
+            Padding = new Padding(6, 10, 6, 5)
+        };
         void Add(string title, Action act)
         {
             var b = new Button { Text = title, Width = 148, Height = 38 };
