@@ -388,7 +388,9 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("InstallAndRestart", read("UniversalUpdaterWindow.cs"))
         notice = read("MainForm.UpdateNotification.cs")
         assert "GitHubReleaseClient()" in notice
-        assert "TimeSpan.FromHours(6)" in notice
+        assert "NoticeCheckInterval" in notice
+        assert "ShowUpdateCheckError" in notice
+        assert '"Check updates"' in notice
         assert "UniversalUpdaterWindow(checkOnOpen: true)" in notice
         assert "AvailableUpdateSummary" in notice
         assert "DownloadAsync" not in notice
