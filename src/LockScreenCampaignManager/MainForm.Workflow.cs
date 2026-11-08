@@ -71,10 +71,10 @@ public sealed partial class MainForm
         var result = dialog.ShowDialog(this);
         if (result == DialogResult.Yes)
         {
-            _workflowStep = _project.ImagePaths.Count > 0 ? 1 : 0;
+            _workflowStep = _project.ImagePaths.Count > 0 ? 2 : 0;
             SetWorkflowMode(false);
             _status.Text = _workflowStep == 0
-                ? "Wizard: add images or import a folder."
+                ? "Wizard: connect to AD first, or choose Skip AD to prepare locally."
                 : "Wizard: arrange imported images, then set the schedule.";
         }
         else if (result == DialogResult.No)
@@ -102,8 +102,9 @@ public sealed partial class MainForm
         {
             // Advanced mode doesn't show a blank, reserved Wizard navigation strip.
             // Give its full height back to the grouped manual menus.
-            _footerLayout.RowStyles[1].Height = advanced ? 0 : 58;
             _workflowBar.Visible = !advanced;
+            // The Wizard bar now has its own fixed top-level row and never
+            // competes with the bottom project and tools menus.
         }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
@@ -118,60 +119,61 @@ public sealed partial class MainForm
     {
         if (_workflowHint.IsDisposed) return;
         string[] hints = [
-            "1 / 5  Add image files or import a folder.",
-            "2 / 5  Arrange image order (optional if already correct).",
-            "3 / 5  Configure dates, weekdays and change time.",
-            "4 / 5  Review images and save the local project.",
-            "5 / 5  Optional: connect AD and deploy GPO."
+            "1 / 6  Connect to AD to check directory access, or work offline.",
+            "2 / 6  Import image files or choose a folder.",
+            "3 / 6  Review and arrange image order.",
+            "4 / 6  Configure schedule and change time.",
+            "5 / 6  Validate and save the campaign locally.",
+            "6 / 6  Deploy GPO: select OU/group and check write permissions."
         ];
         _workflowHint.Text = _advancedMode
-            ? "Advanced: all tools available. AD deployment checks permissions."
-            : hints[Math.Clamp(_workflowStep, 0, 4)] +
-              $"  Images: {_project.ImagePaths.Count}";
+            ? "Advanced tools: select a command from the menus below."
+            : hints[Math.Clamp(_workflowStep, 0, 5)] +
+              $"  |  Images: {_project.ImagePaths.Count}";
+        _workflowHint.AccessibleDescription = _workflowHint.Text;
         _workflowBack.Enabled = _workflowStep > 0;
-        _workflowNext.Text = _workflowStep == 3 ? "Optional AD" : "Next";
-        _workflowNext.Visible = _workflowStep < 4;
-        _workflowNext.Enabled = _project.ImagePaths.Count > 0;
+        _workflowNext.Visible = _workflowStep < 5;
+        _workflowNext.Text = _workflowStep == 0
+            ? (AdReady ? "Next" : "Skip AD") : _workflowStep == 4 ? "Deploy >" : "Next";
+        _workflowNext.Enabled = _workflowStep == 0 || _project.ImagePaths.Count > 0;
         _workflowAction.Text = _workflowStep switch
         {
-            0 => "Add images...",
-            1 => "Arrange / edit...",
-            2 => "Edit schedule...",
-            3 => "Save project...",
-            _ => AdReady ? "Deploy wizard..." : "Connect to AD..."
+            0 => AdReady ? "AD connected" : "Connect to AD...",
+            1 => "Add images...",
+            2 => "Arrange images...",
+            3 => "Edit schedule...",
+            4 => "Validate / save...",
+            _ => AdReady ? "GPO deployment..." : "Connect to AD..."
         };
-        _workflowAction.Enabled = _workflowStep != 1 ||
-            _project.ImagePaths.Count > 0;
+        _workflowAction.Enabled = _workflowStep == 0 ? !AdReady :
+            _workflowStep is 1 || _project.ImagePaths.Count > 0;
+        _workflowAction.BackColor = UiStyle.Accent;
+        _workflowAction.ForeColor = Color.White;
         _imageScheduleButton.Enabled = _project.ImagePaths.Count > 0;
     }
 
     private void AdvanceWorkflow()
     {
         ReadControls();
-        if (_workflowStep < 4 && _project.ImagePaths.Count == 0) return;
-        if (_workflowStep == 2)
+        if (_workflowStep is > 0 and < 5 && _project.ImagePaths.Count == 0)
         {
-            try
-            {
-                CampaignSchedule.Validate(_project, requireImages: true);
-            }
-            catch (CampaignValidationException ex)
-            {
-                ShowCampaignValidation(ex.Message);
-                return;
-            }
+            _status.Text = "Add at least one image before continuing.";
+            return;
+        }
+        if (_workflowStep == 3 || _workflowStep == 4)
+        {
+            try { CampaignSchedule.Validate(_project, requireImages: true); }
+            catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); return; }
             catch (FileNotFoundException)
             {
-                ShowCampaignValidation("One or more image files no longer exist.");
-                return;
+                ShowCampaignValidation("An image file no longer exists."); return;
             }
-            catch (Exception ex)
-            {
-                UiErrorDialog.Show(this, "Check campaign schedule", ex);
-                return;
-            }
+            catch (Exception ex) { UiErrorDialog.Show(this, "Validate campaign", ex); return; }
         }
-        _workflowStep = Math.Min(4, _workflowStep + 1);
+        _workflowStep = Math.Min(5, _workflowStep + 1);
+        _status.Text = _workflowStep == 5
+            ? "Final stage: connect to AD (if needed), then choose OU/group and check GPO rights."
+            : "Step " + (_workflowStep + 1) + ": follow the highlighted action above.";
         UpdateWorkflow();
     }
 
@@ -225,11 +227,23 @@ public sealed partial class MainForm
     {
         switch (_workflowStep)
         {
-            case 0: AddImages(); break;
-            case 1: _arrangeImagesButton?.PerformClick(); break;
-            case 2: OpenScheduleEditor(); break;
-            case 3: SaveProject(); break;
+            case 0:
+                if (!AdReady) ConnectAndReadAd();
+                break;
+            case 1:
+                AddImages();
+                break;
+            case 2:
+                _arrangeImagesButton?.PerformClick();
+                break;
+            case 3:
+                OpenScheduleEditor();
+                break;
             case 4:
+                ValidateCurrent();
+                SaveProject();
+                break;
+            case 5:
                 if (AdReady) OpenDomainDeployment();
                 else ConnectAndReadAd();
                 break;
