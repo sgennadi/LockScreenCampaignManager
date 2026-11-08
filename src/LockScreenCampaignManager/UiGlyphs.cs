@@ -52,6 +52,18 @@ internal static class UiGlyphs
         return "grid";
     }
 
+    private static void DrawRounded(Graphics g, Pen pen, Rectangle rect, Size radius)
+    {
+        int d = Math.Max(2, radius.Width * 2);
+        using var path = new GraphicsPath();
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        g.DrawPath(pen, path);
+    }
+
     internal static Bitmap ForButton(string label)
     {
         string kind = Kind(label);
@@ -72,7 +84,7 @@ internal static class UiGlyphs
                     new Point(10, 5), new Point(3, 5)]);
                 break;
             case "image":
-                g.DrawRoundedRectangle(p, new Rectangle(2, 3, 20, 18), new Size(3, 3));
+                DrawRounded(g, p, new Rectangle(2, 3, 20, 18), new Size(3, 3));
                 g.DrawEllipse(p, 15, 6, 3, 3);
                 g.DrawLines(p, [new Point(4, 17), new Point(10, 10),
                     new Point(14, 14), new Point(17, 12), new Point(21, 17)]);
@@ -82,9 +94,9 @@ internal static class UiGlyphs
                 g.DrawLine(p, 5, 14, 19, 14);
                 g.DrawLine(p, 5, 14, 5, 17);
                 g.DrawLine(p, 19, 14, 19, 17);
-                g.DrawRoundedRectangle(p, new Rectangle(8, 2, 8, 6), new Size(2, 2));
-                g.DrawRoundedRectangle(p, new Rectangle(1, 17, 8, 6), new Size(2, 2));
-                g.DrawRoundedRectangle(p, new Rectangle(15, 17, 8, 6), new Size(2, 2));
+                DrawRounded(g, p, new Rectangle(8, 2, 8, 6), new Size(2, 2));
+                DrawRounded(g, p, new Rectangle(1, 17, 8, 6), new Size(2, 2));
+                DrawRounded(g, p, new Rectangle(15, 17, 8, 6), new Size(2, 2));
                 break;
             case "company":
                 g.DrawRectangle(p, 5, 4, 14, 18);
@@ -93,7 +105,7 @@ internal static class UiGlyphs
                 g.DrawLine(p, 8, 17, 16, 17);
                 break;
             case "calendar":
-                g.DrawRoundedRectangle(p, new Rectangle(3, 5, 18, 16), new Size(2, 2));
+                DrawRounded(g, p, new Rectangle(3, 5, 18, 16), new Size(2, 2));
                 g.DrawLine(p, 4, 11, 20, 11);
                 g.DrawLine(p, 8, 3, 8, 7);
                 g.DrawLine(p, 16, 3, 16, 7);
@@ -114,7 +126,7 @@ internal static class UiGlyphs
                 g.DrawLines(p, [new Point(18, 4), new Point(20, 9), new Point(15, 9)]);
                 break;
             case "save":
-                g.DrawRoundedRectangle(p, new Rectangle(4, 3, 16, 19), new Size(2, 2));
+                DrawRounded(g, p, new Rectangle(4, 3, 16, 19), new Size(2, 2));
                 g.DrawRectangle(p, 8, 4, 8, 7);
                 g.DrawRectangle(p, 8, 15, 9, 6);
                 break;
@@ -136,7 +148,7 @@ internal static class UiGlyphs
                 g.DrawLines(p, [new Point(6, 12), new Point(10, 16), new Point(18, 8)]);
                 break;
             default:
-                g.DrawRoundedRectangle(p, new Rectangle(3, 3, 18, 18), new Size(4, 4));
+                DrawRounded(g, p, new Rectangle(3, 3, 18, 18), new Size(4, 4));
                 g.DrawLine(p, 8, 8, 16, 8);
                 g.DrawLine(p, 8, 12, 16, 12);
                 g.DrawLine(p, 8, 16, 16, 16);

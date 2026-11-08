@@ -9,6 +9,7 @@
     <AssemblyName>LockScreenCampaignManager</AssemblyName>
     <RootNamespace>LockScreenCampaignManager</RootNamespace>
     <Version>0.4.0-preview.31</Version>
+    <ApplicationIcon>Assets\LockScreen.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
     <PublishSingleFile>true</PublishSingleFile>
@@ -19,6 +20,7 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Assets\LockScreen.ico" LogicalName="LockScreenCampaignManager.AppIcon" />
     <EmbeddedResource Include="Assets\LockScreen-Agent.ps1" LogicalName="LockScreenCampaignManager.Agent.ps1" />
     <EmbeddedResource Include="Assets\AD-Discovery.ps1" LogicalName="LockScreenCampaignManager.ADDiscovery.ps1" />
     <EmbeddedResource Include="Assets\GPO-Deploy.ps1" LogicalName="LockScreenCampaignManager.GPODeploy.ps1" />

@@ -17,6 +17,9 @@ internal static class ImageFilenameMatcher
         CampaignProject Schedule, int ConfidentCount, int ReviewCount);
 
     private static readonly string[] Extensions = [".jpg", ".jpeg", ".png", ".bmp"];
+    internal static bool IsSupportedImage(string path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, DayOfWeek> DayTokens =
         new(StringComparer.OrdinalIgnoreCase)
         {

@@ -105,6 +105,7 @@ internal static class UiStyle
     public static void Apply(Form form, UiPreferences? previewPreferences = null)
     {
         if (form.IsDisposed) return;
+        form.Icon = UiGlyphs.AppIcon;
         var effectivePreferences = previewPreferences is null
             ? Preferences : previewPreferences.Validate();
         var all = Descendants(form).ToArray();
@@ -152,6 +153,13 @@ internal static class UiStyle
     {
         bool primary = Equals(b.Tag, "PrimaryAction") || b.ForeColor == Color.White ||
             b.BackColor == Color.FromArgb(24,102,190) || b.BackColor == Accent;
+        if (b.Image is null && !string.IsNullOrWhiteSpace(b.Text) &&
+            b.Text is not "↑" and not "↓")
+        {
+            b.Image = UiGlyphs.ForButton(b.Text);
+            b.ImageAlign = ContentAlignment.MiddleLeft;
+            b.TextImageRelation = TextImageRelation.ImageBeforeText;
+        }
         b.FlatStyle = FlatStyle.Flat;
         b.UseVisualStyleBackColor = false;
         b.FlatAppearance.BorderSize = 1;
@@ -159,7 +167,8 @@ internal static class UiStyle
         b.ForeColor = primary ? Color.White : Foreground;
         b.FlatAppearance.BorderColor = primary ? Accent : Border;
         b.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(12,70,180) : SoftBlue;
-        int needed = TextRenderer.MeasureText(b.Text, b.Font).Width + 24;
+        int needed = TextRenderer.MeasureText(b.Text, b.Font).Width +
+            (b.Image is null ? 24 : 52);
         if (b.Dock is not (DockStyle.Top or DockStyle.Bottom or DockStyle.Fill))
             b.MinimumSize = new Size(Math.Max(needed, b.MinimumSize.Width), 0);
         b.Height = Math.Max(b.Height, TextRenderer.MeasureText("Ag", b.Font).Height +
