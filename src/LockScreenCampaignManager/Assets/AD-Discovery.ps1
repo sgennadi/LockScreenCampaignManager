@@ -233,9 +233,9 @@ try {
             'DomainControllers' {
                 $computers = @(Search-Entries $conn $baseDn '(&(objectCategory=computer)(|(primaryGroupID=516)(primaryGroupID=521)))' @('name','dNSHostName','primaryGroupID') 5000)
                 $result = @($computers | ForEach-Object {
-                    $host = Get-Attribute $_ 'dNSHostName'
-                    if ($host) {
-                        [pscustomobject]@{ name=$host; site=''; writable=((Get-Attribute $_ 'primaryGroupID') -ne '521') }
+                    $dcHostName = Get-Attribute $_ 'dNSHostName'
+                    if ($dcHostName) {
+                        [pscustomobject]@{ name=$dcHostName; site=''; writable=((Get-Attribute $_ 'primaryGroupID') -ne '521') }
                     }
                 } | Sort-Object name)
                 if (@($result).Count -eq 0) { $result = @([pscustomobject]@{ name=$actualDc;site='';writable=(-not $isRODC) }) }
