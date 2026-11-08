@@ -211,7 +211,7 @@ public sealed partial class MainForm : Form
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
         left.Controls.Add(leftLayout);
         middle.Panel1.Controls.Add(left);
         leftLayout.Controls.Add(new Label {
@@ -231,28 +231,16 @@ public sealed partial class MainForm : Form
         _imageScheduleButton.Height = 36;
         _imageScheduleButton.Click += (_, _) => OpenScheduleEditor();
         imageButtons.Controls.Add(_imageScheduleButton);
-        _replaceImageButton.Text = "Replace";
-        _replaceImageButton.Width = 105;
-        _replaceImageButton.Height = 36;
-        _replaceImageButton.Click += (_, _) => ReplaceImage();
-        imageButtons.Controls.Add(_replaceImageButton);
-        _removeImageButton.Text = "Remove";
-        _removeImageButton.Width = 98;
-        _removeImageButton.Height = 36;
-        _removeImageButton.Click += (_, _) => RemoveImage();
-        imageButtons.Controls.Add(_removeImageButton);
-        _moveUpButton.Text = "Move up";
-        _moveUpButton.Width = 96;
-        _moveUpButton.Height = 36;
-        _moveUpButton.Click += (_, _) => MoveImage(-1);
-        imageButtons.Controls.Add(_moveUpButton);
-        _moveDownButton.Text = "Move down";
-        _moveDownButton.Width = 110;
-        _moveDownButton.Height = 36;
-        _moveDownButton.Click += (_, _) => MoveImage(+1);
-        imageButtons.Controls.Add(_moveDownButton);
-        imageButtons.Controls.Add(MakeButton("Sort A-Z", SortImagesByFilename, 106));
-        imageButtons.Controls.Add(MakeButton("Auto match", AutoMatchImageNames, 122));
+        AddActionMenu(imageButtons, "Arrange / edit", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Replace selected image...", ReplaceImage, () => SelectedIndex >= 0),
+            ("Remove selected image", RemoveImage, () => SelectedIndex >= 0),
+            ("Move image up", () => MoveImage(-1), () => SelectedIndex > 0),
+            ("Move image down", () => MoveImage(+1),
+                () => SelectedIndex >= 0 && SelectedIndex < _project.ImagePaths.Count - 1),
+            ("Sort images A-Z...", SortImagesByFilename, () => _project.ImagePaths.Count > 1),
+            ("Auto match dates / weekdays...", AutoMatchImageNames,
+                () => _project.ImagePaths.Count > 0)
+        });
         leftLayout.Controls.Add(imageButtons, 0, 2);
 
         var right = PanelBox();
