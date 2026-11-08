@@ -764,11 +764,100 @@ public sealed class MainForm : Form
 
     private void StartNewCampaign()
     {
-        if (!ConfirmDiscardChanges()) return;
-        SetProject(CompanyProfilesStore.NewCampaign(_company));
-        _status.Text = _company is null
-            ? "New unassigned campaign"
-            : "New campaign for " + _company.Name;
+        // Creating a campaign is a deliberate action, not an invisible reset.
+        // Show a named, editable draft before discarding the existing project.
+        try
+        {
+            var draft = CompanyProfilesStore.NewCampaign(_company);
+            using var dialog = new Form
+            {
+                Text = "Create new campaign",
+                StartPosition = FormStartPosition.CenterParent,
+                ShowInTaskbar = false,
+                AutoScaleMode = AutoScaleMode.Dpi,
+                Font = new Font("Segoe UI", 10f),
+                MinimumSize = new Size(510, 345),
+                Size = new Size(600, 375),
+                BackColor = UiStyle.Canvas
+            };
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
+                Padding = new Padding(22, 16, 22, 14)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.Controls.Add(new Label
+            {
+                Text = "New lock screen campaign",
+                Dock = DockStyle.Fill,
+                Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold),
+                ForeColor = UiStyle.Navy
+            }, 0, 0);
+            layout.Controls.Add(new Label
+            {
+                Text = _company is null
+                    ? "Company: Unassigned (local campaign)"
+                    : "Company: " + _company.Name + "  |  Domain: " + _company.Domain,
+                Dock = DockStyle.Fill, AutoEllipsis = true,
+                ForeColor = UiStyle.Muted
+            }, 0, 1);
+            layout.Controls.Add(new Label { Text = "Campaign name", Dock = DockStyle.Fill }, 0, 2);
+            var nameBox = new TextBox { Dock = DockStyle.Fill, MaxLength = 100,
+                Text = draft.Name };
+            layout.Controls.Add(nameBox, 0, 3);
+            layout.Controls.Add(new Label { Text = "Start date and time", Dock = DockStyle.Fill }, 0, 4);
+            var start = new DateTimePicker
+            {
+                Dock = DockStyle.Left, Width = 260, Format = DateTimePickerFormat.Custom,
+                CustomFormat = "dd.MM.yyyy HH:mm", ShowUpDown = true,
+                Value = draft.StartLocal
+            };
+            layout.Controls.Add(start, 0, 5);
+            var actions = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false, Padding = new Padding(0, 10, 0, 0)
+            };
+            var create = new Button { Text = "Create campaign", Width = 155,
+                Height = 38, BackColor = UiStyle.Accent, ForeColor = Color.White };
+            var cancel = new Button { Text = "Cancel", Width = 110,
+                Height = 38, DialogResult = DialogResult.Cancel };
+            actions.Controls.Add(create);
+            actions.Controls.Add(cancel);
+            layout.Controls.Add(actions, 0, 6);
+            dialog.Controls.Add(layout);
+            dialog.AcceptButton = create;
+            dialog.CancelButton = cancel;
+            create.Click += (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(nameBox.Text))
+                {
+                    MessageBox.Show(dialog, "Enter a campaign name.",
+                        "New campaign", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    nameBox.Focus();
+                    return;
+                }
+                dialog.DialogResult = DialogResult.OK;
+                dialog.Close();
+            };
+            UiStyle.Apply(dialog);
+            if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            if (!ConfirmDiscardChanges()) return;
+            draft.Name = nameBox.Text.Trim();
+            draft.StartLocal = DateTime.SpecifyKind(start.Value, DateTimeKind.Unspecified);
+            CampaignSchedule.Validate(draft, requireImages: false);
+            SetProject(draft);
+            _status.Text = "Created campaign: " + draft.Name + " (not saved yet)";
+            _name.Focus();
+        }
+        catch (Exception ex) { UiErrorDialog.Show(this, "New campaign", ex); }
     }
 
     private void OpenCompanyProfiles()
