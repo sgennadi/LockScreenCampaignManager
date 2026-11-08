@@ -72,13 +72,15 @@ internal static class DomainPowerShellRunner
                 return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
         }
 
-        // Eligible-host lookup, Preview, and post-Cleanup verification
-        // run in native signed LDAP / read-only SMB, Scheduler RPC and HKLM.
-        // Task creation, Push/Repair/Report/Cleanup remain in the audited
-        // PowerShell module with independently rechecked approval hashes.
+        // Remote host lookup, Preview and VerifyCleanup are native read-only;
+        // Push, Repair, Report and Cleanup use native Scheduler RPC with
+        // exact fresh plan approval and conservative pending/offline statuses.
         if (operation == DomainOperation.Immediate &&
             mode is ("List" or "Preview" or "VerifyCleanup"))
             return NativeImmediateActions.Execute(mode, request, credentials);
+        if (operation == DomainOperation.Immediate &&
+            mode is ("Push" or "Repair" or "Report" or "Cleanup"))
+            return NativeImmediateApply.Execute(mode, request, credentials);
 
         // Deployment Plan is read-only. Deploy independently reruns the
         // entire native Plan, stages hashes, creates only a new GPO through
@@ -97,8 +99,6 @@ internal static class DomainPowerShellRunner
 
             DomainOperation.ConflictScan =>
                 mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
-            DomainOperation.Immediate =>
-                mode is "Push" or "Cleanup" or "Report" or "Repair",
             _ => false
         };
         if (!legacyAllowed)
@@ -112,13 +112,11 @@ internal static class DomainPowerShellRunner
             string asset = operation switch
             {
                     DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
-                DomainOperation.Immediate => "LockScreenCampaignManager.CampaignPushNow.ps1",
                     _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
             string script = Path.Combine(root, operation switch
             {
                 DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
-                DomainOperation.Immediate => "Campaign-PushNow.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             });
             using (var resource = typeof(DomainPowerShellRunner).Assembly.GetManifestResourceStream(asset)
