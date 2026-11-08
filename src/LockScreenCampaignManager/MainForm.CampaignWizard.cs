@@ -47,8 +47,10 @@ public sealed partial class MainForm
 
     // Allows offline UI smoke tests to validate all six wizard pages
     // without ShowDialog, LDAP access or filesystem changes.
-    internal Form CreateCampaignWizardForSmokeTest(int page = 0)
+    internal Form CreateCampaignWizardForSmokeTest(int page = 0, string? imagePath = null)
     {
+        if (!string.IsNullOrWhiteSpace(imagePath))
+            _project.ImagePaths.Add(imagePath);
         var wizard = new CampaignWizardDialog(this);
         wizard.ShowPageForSmokeTest(page);
         return wizard;
@@ -78,6 +80,7 @@ public sealed partial class MainForm
         private ListBox? _images;
         private PictureBox? _wizardImagePreview;
         private Label? _wizardImageName;
+        private Label? _wizardPreviewPlaceholder;
         private RadioButton? _connectChoice;
         private RadioButton? _offlineChoice;
         private RadioButton? _deployChoice;
@@ -327,7 +330,7 @@ public sealed partial class MainForm
             if (_host.IsDisposed) return;
             if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
                 && !page.IsDisposed)
-                page.Height = Math.Max(390,
+                page.Height = Math.Max(_step is 1 or 2 ? 450 : 390,
                     _host.ClientSize.Height - _host.Padding.Vertical);
         }
 
@@ -385,6 +388,7 @@ public sealed partial class MainForm
                 }
                 _wizardImagePreview = null;
                 _wizardImageName = null;
+                _wizardPreviewPlaceholder = null;
                 _images = null;
                 _connectChoice = null;
                 _offlineChoice = null;
@@ -403,19 +407,24 @@ public sealed partial class MainForm
                         i < _step ? UiStyle.Green : UiStyle.Navy;
                 }
 
+                bool imagePage = _step is 1 or 2;
                 var page = new TableLayoutPanel
                 {
                     Dock = DockStyle.Top,
-                    Height = Math.Max(390, _host.ClientSize.Height - _host.Padding.Vertical),
+                    Height = Math.Max(imagePage ? 450 : 390,
+                        _host.ClientSize.Height - _host.Padding.Vertical),
                     ColumnCount = 1, RowCount = 5,
                     Padding = new Padding(10, 7, 10, 9),
                     BackColor = UiStyle.Surface
                 };
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 77));
+                // Images/Arrange dedicate the majority of the viewport to
+                // the actual image. The old fixed headers consumed almost
+                // the entire page at 125-200% DPI and collapsed PictureBox.
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 60 : 72));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 67 : 112));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 66 : 77));
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 37 : 48));
                 _host.Controls.Add(page);
 
                 string[] titles =
@@ -610,9 +619,14 @@ public sealed partial class MainForm
             }
             // A Wizard page is self-contained: list, selection and live
             // image preview are on the SAME page, not in Advanced behind it.
+            // Do not auto-scroll this docked body: it can collapse a nested
+            // percent-sized preview row before the first actual layout pass.
+            body.AutoScroll = false;
+            body.Padding = new Padding(7);
             var imageArea = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                Name = "CampaignWizardImageArea", Dock = DockStyle.Fill,
+                ColumnCount = 2, RowCount = 1,
                 BackColor = UiStyle.SoftBlue, Margin = Padding.Empty
             };
             imageArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43));
@@ -634,13 +648,14 @@ public sealed partial class MainForm
 
             var previewPanel = new TableLayoutPanel
             {
+                Name = "CampaignWizardPreviewPanel",
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
                 BackColor = UiStyle.Surface, Padding = new Padding(7),
                 Margin = new Padding(7, 0, 0, 0)
             };
-            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             previewPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
             previewPanel.Controls.Add(new Label
             {
                 Text = "Selected image preview", Dock = DockStyle.Fill,
@@ -662,7 +677,26 @@ public sealed partial class MainForm
                 image?.Dispose();
             };
             _wizardImagePreview = preview;
-            previewPanel.Controls.Add(preview, 0, 1);
+            var previewContainer = new Panel
+            {
+                Name = "CampaignWizardPreviewFrame",
+                Dock = DockStyle.Fill, BackColor = Color.FromArgb(27, 34, 45),
+                Margin = Padding.Empty
+            };
+            var placeholder = new Label
+            {
+                Name = "CampaignWizardPreviewPlaceholder",
+                Text = "Select an image to preview",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.FromArgb(27, 34, 45),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10f)
+            };
+            _wizardPreviewPlaceholder = placeholder;
+            previewContainer.Controls.Add(preview);
+            previewContainer.Controls.Add(placeholder);
+            placeholder.BringToFront();
+            previewPanel.Controls.Add(previewContainer, 0, 1);
             _wizardImageName = new Label
             {
                 Name = "CampaignWizardImagePath", Dock = DockStyle.Fill,
@@ -692,13 +726,20 @@ public sealed partial class MainForm
             var name = _wizardImageName;
             if (preview is null || preview.IsDisposed || name is null || name.IsDisposed)
                 return;
+            var placeholder = _wizardPreviewPlaceholder;
             var previous = preview.Image;
             preview.Image = null;
             previous?.Dispose();
+            if (placeholder is { IsDisposed: false })
+            {
+                placeholder.Visible = true;
+                placeholder.Text = "Select an image to preview";
+                placeholder.BringToFront();
+            }
             int index = _images?.SelectedIndex ?? -1;
             if (index < 0 || index >= _owner._project.ImagePaths.Count)
             {
-                name.Text = "Select an image to see its preview.";
+                name.Text = "Select an image from the list.";
                 return;
             }
             string path = _owner._project.ImagePaths[index];
@@ -706,16 +747,33 @@ public sealed partial class MainForm
             if (!File.Exists(path))
             {
                 name.Text = "Image not found: " + Path.GetFileName(path);
+                if (placeholder is { IsDisposed: false })
+                    placeholder.Text = "Image file not found";
                 return;
             }
             try
             {
                 using var source = Image.FromFile(path);
-                preview.Image = new Bitmap(source);
+                // A large original image need not occupy hundreds of MB of
+                // bitmap RAM just to render a small wizard thumbnail.
+                const int maxWidth = 1600, maxHeight = 900;
+                double factor = Math.Min(1d, Math.Min(
+                    (double)maxWidth / source.Width,
+                    (double)maxHeight / source.Height));
+                var size = new Size(Math.Max(1, (int)(source.Width * factor)),
+                    Math.Max(1, (int)(source.Height * factor)));
+                preview.Image = new Bitmap(source, size);
+                name.Text = Path.GetFileName(path) + "  (" +
+                    source.Width + " x " + source.Height + ")" +
+                    Environment.NewLine + path;
+                if (placeholder is { IsDisposed: false })
+                    placeholder.Visible = false;
             }
             catch (Exception ex)
             {
-                name.Text = "Unable to preview image: " + Path.GetFileName(path);
+                name.Text = "Unable to preview: " + Path.GetFileName(path);
+                if (placeholder is { IsDisposed: false })
+                    placeholder.Text = "Image cannot be opened";
                 AppLog.Write(ex, "Campaign Wizard image preview");
             }
         }
