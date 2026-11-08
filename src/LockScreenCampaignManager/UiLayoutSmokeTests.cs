@@ -448,8 +448,8 @@ internal static class UiLayoutSmokeTests
                     foreach (Control pane in Descendants(form).Where(x =>
                         x is TableLayoutPanel or Panel))
                         pane.PerformLayout();
-                    if (imagePreview.Width < 130 || imagePreview.Height < 90 ||
-                        frame.Width < 130 || frame.Height < 90)
+                    if (imagePreview.Width < 180 || imagePreview.Height < 200 ||
+                        frame.Width < 180 || frame.Height < 200)
                         throw new InvalidOperationException(
                             $"Wizard preview is visually collapsed at {profile.Name}: " +
                             $"{imagePreview.Width} x {imagePreview.Height}.");
