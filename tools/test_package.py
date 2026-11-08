@@ -75,6 +75,19 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+# Deployment Plan is read-only native C#; actual Deploy remains the
+# independently guarded ADSI/gpedit.dll PowerShell write engine.
+native_deploy_plan = (project / 'NativeGpoDeploymentPlan.cs').read_text(encoding='utf-8')
+assert 'operation == DomainOperation.Deployment && mode == "Plan"' in runner
+assert 'NativeGpoDeploymentPlan.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.GPODeploy.ps1' in csproj
+for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
+              'VerifyLocalPackageForTest', 'WindowsIdentity.RunImpersonated',
+              'TimeZoneInfo.FindSystemTimeZoneById', 'CountDirectMembers',
+              'ReadRootDse', 'SessionOptions.ReferralChasing', 'SHA256.HashData',
+              'isRODC', 'SearchPaged', 'Math.Abs((long)skew) > 300'):
+    assert guard in native_deploy_plan, guard
+
 # Immediate Actions List/Preview run through read-only native LDAP/SYSVOL.
 # Legacy Task Scheduler RPC, VerifyCleanup and Apply remain embedded.
 native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
