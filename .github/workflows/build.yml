@@ -304,10 +304,10 @@ jobs:
                       if exe[:2] != b'MZ':
                           raise SystemExit(f'Invalid PE header: {archive}')
                       pe_offset = struct.unpack_from('<I', exe, 0x3c)[0]
-                      if exe[pe_offset:pe_offset+4] != b'PE\\x00\\x00' or struct.unpack_from('<H', exe, pe_offset+4)[0] != machine:
+                      if exe[pe_offset:pe_offset+4] != bytes((80, 69, 0, 0)) or struct.unpack_from('<H', exe, pe_offset+4)[0] != machine:
                           raise SystemExit(f'Incorrect Windows PE architecture: {archive}')
           lines = [f'{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}' for f in sorted(root.glob('*.zip'))]
-          (root / 'SHA256SUMS.txt').write_text('\\n'.join(lines) + '\\n', encoding='ascii')
+          (root / 'SHA256SUMS.txt').write_text(chr(10).join(lines) + chr(10), encoding='ascii')
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
