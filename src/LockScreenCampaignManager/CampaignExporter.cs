@@ -66,6 +66,12 @@ public static class CampaignExporter
                     ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1");
             if (project.ClientType == CampaignClientType.Executable)
             {
+                // Do not publish a non-functional EXE startup path. Enable
+                // only once native Install/Apply/Repair/Cleanup and health
+                // checks pass the dedicated endpoint test suite.
+                if (!NativeClientAgent.IsReadyForProduction)
+                    throw new NotSupportedException(
+                        "Native EXE client is not ready; use PowerShell or install a validated EXE build.");
                 // The portable manager contains the independent, headless
                 // --client-agent entrypoint; a pinned copy becomes the client.
                 string source = Environment.ProcessPath ?? "";
