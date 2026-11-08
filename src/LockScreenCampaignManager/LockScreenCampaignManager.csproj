@@ -8,7 +8,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>LockScreenCampaignManager</AssemblyName>
     <RootNamespace>LockScreenCampaignManager</RootNamespace>
-    <Version>0.4.0-preview.44</Version>
+    <Version>0.4.0-preview.45</Version>
     <ApplicationIcon>Assets\LockScreen.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
@@ -20,9 +20,11 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.11" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Assets\LockScreen.ico" LogicalName="LockScreenCampaignManager.AppIcon" />
     <EmbeddedResource Include="Assets\LockScreen-Agent.ps1" LogicalName="LockScreenCampaignManager.Agent.ps1" />
-    <EmbeddedResource Include="Assets\AD-Discovery.ps1" LogicalName="LockScreenCampaignManager.ADDiscovery.ps1" />
     <EmbeddedResource Include="Assets\GPO-Deploy.ps1" LogicalName="LockScreenCampaignManager.GPODeploy.ps1" />
     <EmbeddedResource Include="Assets\Gpo-Lifecycle.ps1" LogicalName="LockScreenCampaignManager.GpoLifecycle.ps1" />
     <EmbeddedResource Include="Assets\Gpo-ConflictScan.ps1" LogicalName="LockScreenCampaignManager.GpoConflictScan.ps1" />

@@ -52,6 +52,17 @@ assert 'Import-Module GroupPolicy' not in ad
 assert 'LdapConnection' in ad and 'SessionOptions.Signing' in ad and 'SessionOptions.Sealing' in ad
 assert 'Invoke-Command' not in gpo and 'WinRM' not in gpo
 assert 'RemoteScriptPath' not in (project / 'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
+# Read-only discovery must run through native .NET LDAP; the historical
+# script remains as a legacy reference, but must not be bundled into EXE.
+native = (project / 'NativeAdDiscovery.cs').read_text(encoding='utf-8')
+runner = (project / 'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
+csproj = (project / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
+assert 'SessionOptions.Signing = true' in native
+assert 'SessionOptions.Sealing = true' in native
+assert 'NativeAdDiscovery.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.ADDiscovery.ps1' not in csproj
+assert 'System.DirectoryServices.Protocols' in csproj
+
 assert 'psscripts.ini' in gpo and 'gPCMachineExtensionNames' in gpo
 assert 'Set-SecurityFilter' in gpo and 'edacfd8f-ffb3-11d1-b41d-00a0c968f939' in gpo
 assert "if ($Mode -eq 'Plan')" in gpo

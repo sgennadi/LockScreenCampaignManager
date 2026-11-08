@@ -30,6 +30,7 @@ internal static class SelfTests
         TestFilenameScheduleInference();
         TestExpectedCampaignValidation();
         TestAdDirectorySnapshot();
+        TestNativeAdDiscoveryContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -211,6 +212,25 @@ internal static class SelfTests
             !scope.Matches(snapshot with { Domain = "other.example.com" },
                 profile, now),
             "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
+    private static void TestNativeAdDiscoveryContracts()
+    {
+        // No AD connection: these pure validation contracts run on hosted CI.
+        Check(NativeAdDiscovery.DomainFromDn("DC=example,DC=com") == "example.com",
+            "Native LDAP RootDSE domain mapping");
+        NativeAdDiscovery.ValidateNames("example.com", "dc01.example.com");
+        Check(NativeAdDiscovery.EscapeFilter(@"user*(test)\name") ==
+            @"user\2a\28test\29\5cname",
+            "Native LDAP search terms escape RFC4515 meta-characters");
+        bool invalidDcRejected = false;
+        try { NativeAdDiscovery.ValidateNames("example.com", "192.0.2.1"); }
+        catch (ArgumentException) { invalidDcRejected = true; }
+        Check(invalidDcRejected, "Native LDAP rejects direct IP as Kerberos DC name");
+        bool wrongDomainRejected = false;
+        try { NativeAdDiscovery.DomainFromDn("OU=Computers,DC=other,DC=com"); }
+        catch (InvalidOperationException) { wrongDomainRejected = true; }
+        Check(wrongDomainRejected, "Native LDAP rejects non-root naming context");
     }
 
     private static void TestAdDirectorySnapshot()

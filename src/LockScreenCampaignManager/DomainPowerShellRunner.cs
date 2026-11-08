@@ -25,13 +25,17 @@ internal static class DomainPowerShellRunner
     internal static JsonElement Execute(DomainOperation operation, string mode, object request,
         DomainCredentials credentials, int timeoutMilliseconds = 180000)
     {
+        // Read-only directory discovery runs entirely in C#, even for alternate
+        // credentials. No temporary PS1 and no powershell.exe are launched.
+        if (operation == DomainOperation.Discovery)
+            return NativeAdDiscovery.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             string asset = operation switch
             {
-                DomainOperation.Discovery => "LockScreenCampaignManager.ADDiscovery.ps1",
                 DomainOperation.Deployment => "LockScreenCampaignManager.GPODeploy.ps1",
                 DomainOperation.Lifecycle => "LockScreenCampaignManager.GpoLifecycle.ps1",
                 DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
@@ -43,7 +47,6 @@ internal static class DomainPowerShellRunner
             };
             string script = Path.Combine(root, operation switch
             {
-                DomainOperation.Discovery => "AD-Discovery.ps1",
                 DomainOperation.Deployment => "GPO-Deploy.ps1",
                 DomainOperation.Lifecycle => "Gpo-Lifecycle.ps1",
                 DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
