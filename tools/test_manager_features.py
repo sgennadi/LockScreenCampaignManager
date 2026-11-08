@@ -367,7 +367,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("Add folder...", main)
         self.assertIn("AddActionMenu", main)
         self.assertIn("ImagePreviewSplitPercent", main)
-        self.assertIn("Local editing works without administrator rights", main)
+        self.assertIn("No organization selected; no AD privileges required", main)
 
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
