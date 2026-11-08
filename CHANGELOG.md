@@ -1,3 +1,10 @@
+## 0.4.0-preview.31 — AD wizard, DNS auto-discovery, image import and icons (2026-11-08)
+- Public GitHub Release updater uses the pinned /releases?per_page=100 endpoint for both channels. Stable-only with no stable release returns a normal empty result instead of an HTTP 404.
+- AD-first start is a three-step BitKeyBridge-style connection wizard with left-side progress, read-only LDAP inventory and explicit final review. Windows DNS SRV automatically discovers DC FQDNs for the detected domain. Long DC names remain visible in a wide dropdown and tooltip.
+- Campaign editor offers Add Files... (multi-select JPG/PNG/BMP) and Add Folder... (top-level supported files), with duplicate/file validity checks and GPO deployment remaining separate.
+- Fix header clipping at higher DPI. Embed a custom EXE/application icon and consistently assign visual icons to action buttons across all WinForms dialogs.
+- Keep strict Windows x86/x64 CI gates, privacy/source checks, updater SHA-256 validation and manual install policy. Production DC/GPO and physical Win11 acceptance remain pending.
+
 ## 0.4.0-preview.30 — public updater and diagnostics acceptance (2026-11-08)
 - Fix the original Windows GUI CI false-positive: self-tests now run with Start-Process -Wait -PassThru, check the actual WinExe process exit code, and verify an explicit non-zero exit probe. The older green pipeline incorrectly hid a failed updater test.
 - Repair the updater synthetic future-release fixture and test both public anonymous and private token-scoped metadata/downloads, GitHub CDN redirects, SHA-256, ZIP safety, PE architecture and unsigned Authenticode rejection. No unattended installation.

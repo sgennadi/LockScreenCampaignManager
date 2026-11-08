@@ -37,9 +37,7 @@ public static class GitHubCredentialScope
     {
         if (!IsPinnedApiHost(url)) return false;
         var expected = $"/repos/{options.Repository}/releases/";
-        return options.Channel == UpdateChannel.Stable
-            ? url.AbsolutePath == expected + "latest" && url.Query.Length == 0
-            : url.AbsolutePath == expected && url.Query == "?per_page=100";
+        return url.AbsolutePath == expected.TrimEnd('/') && url.Query == "?per_page=100";
     }
 
     public static bool IsAssetEndpoint(Uri url, string repository, long assetId) =>

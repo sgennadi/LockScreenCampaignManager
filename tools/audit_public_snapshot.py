@@ -7,6 +7,7 @@ Reports filenames and violation categories, never raw matched secrets.
 """
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ WORKSTATION_HOME = re.compile(r"(?i)\b[A-Z]:\\{1,2}Users\\{1,2}(?!Public(?:\\|$)
 PRIVATE_DOMAIN = re.compile(r"(?i)\b(?:[a-z0-9_-]+\.)+ac\.il\b|\b(?:[a-z0-9_-]+\.){2,}(?:corp|internal|local)\b")
 ALLOWED_EMAIL_SUFFIX = ("@example.com", "@example.net", "@example.org",
                         "@example.test", "@users.noreply.github.com")
+REVIEWED_ICON = "src/LockScreenCampaignManager/Assets/LockScreen.ico"
+REVIEWED_ICON_SHA256 = "bfb50b2a71a517ed53bcfb4a4e1ceb5f9476b44852a58e05cec10240b4d056c0"
 
 
 def tracked() -> list[Path]:
@@ -43,6 +46,8 @@ def check_one(relative: Path) -> list[str]:
         return ["oversized tracked file (review binary/artifact)"]
     raw = path.read_bytes()
     if b"\0" in raw:
+        if relative.as_posix() == REVIEWED_ICON and hashlib.sha256(raw).hexdigest() == REVIEWED_ICON_SHA256:
+            return []
         return ["tracked binary: manual review required"]
     try:
         content = raw.decode("utf-8-sig")

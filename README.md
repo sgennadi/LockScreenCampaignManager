@@ -2,7 +2,7 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Current preview:** `0.4.0-preview.30` — universal Active Directory Lock Screen campaign manager for Windows 11. BitKeyBridge-inspired navy/blue/green GUI begins with **Connect to DC & Read AD**. Windows x86/x64 self-tests, diagnostics and updater tests are required to pass before publishing the GitHub prerelease; production DC/Windows 11 acceptance is still pending.
+**Current preview:** `0.4.0-preview.31` — universal Active Directory Lock Screen campaign manager for Windows 11. BitKeyBridge-inspired navy/blue/green GUI begins with **Connect to DC & Read AD**. Windows x86/x64 self-tests, diagnostics and updater tests are required to pass before publishing the GitHub prerelease; production DC/Windows 11 acceptance is still pending.
 
 > **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 
