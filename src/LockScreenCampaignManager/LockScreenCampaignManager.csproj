@@ -26,6 +26,5 @@
     <EmbeddedResource Include="Assets\LockScreen.ico" LogicalName="LockScreenCampaignManager.AppIcon" />
     <EmbeddedResource Include="Assets\LockScreen-Agent.ps1" LogicalName="LockScreenCampaignManager.Agent.ps1" />
     <EmbeddedResource Include="Assets\Gpo-ConflictScan.ps1" LogicalName="LockScreenCampaignManager.GpoConflictScan.ps1" />
-    <EmbeddedResource Include="Assets\Campaign-PushNow.ps1" LogicalName="LockScreenCampaignManager.CampaignPushNow.ps1" />
   </ItemGroup>
 </Project>
