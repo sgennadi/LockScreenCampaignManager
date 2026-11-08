@@ -227,7 +227,7 @@ internal static class NativeGpoLifecyclePreview
     {
         if (!Actions.Contains(action))
             throw new ArgumentException("Unsupported GPO lifecycle action.");
-        if (action is "Disable" or "Enable" or "Unlink" && !linked)
+        if ((action is "Disable" or "Enable" or "Unlink") && !linked)
             throw new InvalidOperationException("GPO is not linked to selected OU.");
         if (action == "Relink" && linked)
             throw new InvalidOperationException("GPO is already linked to selected OU.");
