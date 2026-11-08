@@ -58,7 +58,7 @@ internal static class UiStyle
     public static void ApplyStatus(Label label, string value, UiStatusKind status)
     {
         label.Text = value;
-        label.AutoEllipsis = false;
+        label.AutoEllipsis = true;
         label.TabStop = false;
         label.AccessibleName = "Active Directory connection status";
         label.AccessibleDescription = value;
