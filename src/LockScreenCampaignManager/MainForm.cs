@@ -39,13 +39,6 @@ public sealed partial class MainForm : Form
     private readonly Button _workflowNext = new();
     private readonly Button _workflowBack = new();
     private readonly Button _workflowAction = new();
-    private readonly Button _manualDeploy = new();
-    private readonly Button _manualValidate = new();
-    private readonly Button _manualExport = new();
-    private readonly Button _replaceImageButton = new();
-    private readonly Button _removeImageButton = new();
-    private readonly Button _moveUpButton = new();
-    private readonly Button _moveDownButton = new();
     private int _workflowStep;
     private bool _advancedMode;
 
