@@ -26,6 +26,8 @@ public sealed partial class MainForm : Form
     private readonly PictureBox _preview = new();
     private readonly Label _previewName = new();
     private readonly Label _summary = new();
+    private SplitContainer? _imagePreviewSplit;
+    private int _savedSplitPercent = 61;
     private readonly Label _status = new();
     private readonly Label _workflowHint = new();
     private readonly TableLayoutPanel _workflowButtons = new();
@@ -88,10 +90,10 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 186));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
@@ -188,21 +190,28 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 9,
             BackColor = Bg
         };
-        Shown += (_, _) =>
-        {
-            if (middle.Width > 800)
-            {
-                middle.SplitterDistance = (int)(middle.Width * 0.61);
-                middle.Panel1MinSize = 450;
-                middle.Panel2MinSize = 290;
-            }
+        _imagePreviewSplit = middle;
+        Shown += (_, _) => {
+            if (middle.Width < 600) return;
+            int available = middle.Width - middle.SplitterWidth;
+            int minLeft = Math.Min(350, Math.Max(150, available / 3));
+            int minRight = Math.Min(260, Math.Max(150, available / 3));
+            middle.Panel1MinSize = minLeft;
+            middle.Panel2MinSize = minRight;
+            int proposed = (int)Math.Round(available * Math.Clamp(_savedSplitPercent, 30, 80) / 100.0);
+            middle.SplitterDistance = Math.Clamp(proposed, minLeft, available - minRight);
+        };
+        middle.SplitterMoved += (_, _) => {
+            int available = middle.Width - middle.SplitterWidth;
+            if (available > 0) _savedSplitPercent = Math.Clamp(
+                (int)Math.Round(100.0 * middle.SplitterDistance / available), 30, 80);
         };
         root.Controls.Add(middle, 0, 2);
         var left = PanelBox();
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         left.Controls.Add(leftLayout);
         middle.Panel1.Controls.Add(left);
         leftLayout.Controls.Add(new Label {
@@ -269,8 +278,8 @@ public sealed partial class MainForm : Form
         rightLayout.Controls.Add(_previewName, 0, 2);
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
@@ -318,6 +327,7 @@ public sealed partial class MainForm : Form
         footer.Controls.Add(flowBar, 0, 1);
         _advancedButtons.Dock = DockStyle.Fill;
         _advancedButtons.WrapContents = true;
+        _advancedButtons.Padding = new Padding(4, 8, 4, 0);
         _advancedButtons.AutoScroll = true;
         var actions = _advancedButtons;
         AddActionMenu(actions, "Project", new (string Label, Action Execute, Func<bool>? Allowed)[] {
@@ -358,6 +368,7 @@ public sealed partial class MainForm : Form
         _status.Margin = new Padding(22, 9, 0, 0);
         actions.Controls.Add(_status);
         _quickButtons.Dock = DockStyle.Fill;
+        _quickButtons.Padding = new Padding(4, 8, 4, 0);
         _quickButtons.AutoScroll = true;
         _quickButtons.WrapContents = true;
         AddActionMenu(_quickButtons, "Project", new (string Label, Action Execute, Func<bool>? Allowed)[] {
@@ -377,7 +388,7 @@ public sealed partial class MainForm : Form
             ForeColor = UiStyle.Muted, AutoSize = true,
             Margin = new Padding(16, 11, 0, 0)
         });
-        var toolsHost = new Panel { Dock = DockStyle.Fill };
+        var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
         footer.Controls.Add(toolsHost, 0, 2);
@@ -1127,6 +1138,7 @@ public sealed partial class MainForm : Form
             if (!Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(bounds))) return;
             StartPosition = FormStartPosition.Manual;
             Bounds = bounds;
+            _savedSplitPercent = Math.Clamp(state.ImagePreviewSplitPercent, 30, 80);
             if (state.Maximized) this.WindowState = FormWindowState.Maximized;
         }
         catch (Exception ex) { AppLog.Write(ex); }
@@ -1149,7 +1161,8 @@ public sealed partial class MainForm : Form
             var bounds = this.WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
             var state = new SavedWindowState {
                 Left = bounds.Left, Top = bounds.Top, Width = bounds.Width, Height = bounds.Height,
-                Maximized = this.WindowState == FormWindowState.Maximized
+                Maximized = this.WindowState == FormWindowState.Maximized,
+                ImagePreviewSplitPercent = _savedSplitPercent
             };
             File.WriteAllText(Path.Combine(AppLog.DirectoryPath, "window.json"), JsonSerializer.Serialize(state));
         }
@@ -1165,5 +1178,6 @@ public sealed partial class MainForm : Form
         public int Width { get; set; }
         public int Height { get; set; }
         public bool Maximized { get; set; }
+        public int ImagePreviewSplitPercent { get; set; } = 61;
     }
 }
