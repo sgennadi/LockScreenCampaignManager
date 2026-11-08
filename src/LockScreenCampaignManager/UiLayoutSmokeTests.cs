@@ -169,6 +169,64 @@ internal static class UiLayoutSmokeTests
         return wizard;
     }
 
+    private static void CheckCampaignNameLayout(Form form, string profile)
+    {
+        var labels = Descendants(form).OfType<Label>()
+            .Where(x => x.Name is "CampaignNameLabel" or "WizardCampaignNameLabel")
+            .ToArray();
+        foreach (Label title in labels)
+        {
+            if (title.Parent is not TableLayoutPanel box ||
+                box.RowStyles.Count < 2)
+                throw new InvalidOperationException(
+                    $"Campaign name label has no two-row layout at {profile}");
+            int row = box.GetRow(title);
+            if (row != 0)
+                throw new InvalidOperationException(
+                    $"Campaign name label misplaced in {form.Text} at {profile}");
+            int measured = TextRenderer.MeasureText("Agpqy", title.Font,
+                new Size(4096, 4096),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+                title.Padding.Vertical + title.Margin.Vertical + 7;
+            if (box.RowStyles[row].Height < measured)
+                throw new InvalidOperationException(
+                    $"Campaign name descenders clipped in {form.Text} at {profile}");
+            var field = box.GetControlFromPosition(0, 1);
+            if (field is not TextBox input)
+                throw new InvalidOperationException(
+                    $"Campaign name input missing in {form.Text} at {profile}");
+            if (box.RowStyles[1].Height <
+                    Math.Max(input.Height, input.PreferredSize.Height) + input.Margin.Vertical)
+                throw new InvalidOperationException(
+                    $"Campaign name input row clipped in {form.Text} at {profile}");
+            if (box.Height < box.RowStyles[0].Height + box.RowStyles[1].Height +
+                    box.Padding.Vertical)
+                throw new InvalidOperationException(
+                    $"Campaign name text/input overlap in {form.Text} at {profile}");
+
+            // The main editor's former 98px row cropped the whole label
+            // group even after the label itself was made taller.
+            if (title.Name == "CampaignNameLabel" &&
+                box.Parent is FlowLayoutPanel flow &&
+                flow.Parent?.Parent is TableLayoutPanel editor)
+            {
+                int contentBottom = flow.Controls.Cast<Control>()
+                    .Select(x => x.Bottom + x.Margin.Bottom)
+                    .DefaultIfEmpty(box.Height).Max();
+                int requiredRow = contentBottom + flow.Padding.Bottom +
+                    flow.Parent.Padding.Vertical + flow.Parent.Margin.Vertical;
+                if (editor.RowStyles[1].Height + 3 < requiredRow)
+                    throw new InvalidOperationException(
+                        $"Campaign name settings strip still clipped at {profile}: " +
+                        $"{editor.RowStyles[1].Height:N0}px available, {requiredRow}px required");
+            }
+        }
+        if ((form is MainForm || form.Text.Contains("Campaign Wizard",
+                StringComparison.OrdinalIgnoreCase)) && labels.Length != 1)
+            throw new InvalidOperationException(
+                $"Missing Campaign name label in {form.Text} at {profile}");
+    }
+
     private static void CheckMainEditorHeader(Form form, string profile)
     {
         Label[] labels = Descendants(form).OfType<Label>().ToArray();
@@ -260,6 +318,9 @@ internal static class UiLayoutSmokeTests
                 form.PerformLayout();
                 CheckMainEditorHeader(form, profile.Name);
                 CheckWizardHeader(form, profile.Name);
+                if (form is MainForm || form.Text.Contains("Campaign Wizard",
+                        StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
+                    CheckCampaignNameLayout(form, profile.Name);
                 var controls = Descendants(form).ToArray();
                 var actual = controls.OfType<Button>().ToArray();
                 foreach (string label in window.ExpectedButtons)
