@@ -38,6 +38,16 @@ internal sealed class DomainDeploymentForm : Form
     private int _lastConflictWarnings;
     private bool _suppressConnectionChanged;
     private readonly Color _accent = UiStyle.Accent;
+    private readonly bool _advancedInitially;
+    private bool _advancedMode;
+    private int _wizardStep;
+    private readonly Button _wizardModeButton = new();
+    private readonly Button _advancedModeButton = new();
+    private readonly Button _wizardNext = new();
+    private readonly Button _wizardBack = new();
+    private readonly Label _wizardHint = new();
+    private FlowLayoutPanel? _deploymentActionRow;
+    private Button? _gpoOperationsButton;
 
     private sealed record DirectoryRow(string Name, string Dn, string Sam = "")
     {
@@ -55,9 +65,10 @@ internal sealed class DomainDeploymentForm : Form
     }
 
     internal DomainDeploymentForm(CampaignProject project, CompanyProfile? company = null,
-        AdDirectorySnapshot? readOnlyInventory = null)
+        AdDirectorySnapshot? readOnlyInventory = null, bool advanced = false)
     {
         _project = project;
+        _advancedInitially = advanced;
         if (company is not null && !string.Equals(project.CompanyProfileId,
                 company.Id, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
@@ -66,8 +77,8 @@ internal sealed class DomainDeploymentForm : Form
         Text = "LockScreen Campaign Manager - Active Directory Deployment" +
             (_company is null ? "" : " — " + _company.Name);
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(1180, 800);
-        MinimumSize = new Size(930, 680);
+        Size = new Size(1280, 870);
+        MinimumSize = new Size(1060, 770);
         Font = new Font("Segoe UI", 9.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = UiStyle.Canvas;
@@ -90,6 +101,7 @@ internal sealed class DomainDeploymentForm : Form
         SetCredentialFields();
         InvalidatePlan();
         UiStyle.Apply(this);
+        SetDeploymentMode(_advancedInitially);
         UiStyle.ApplyStatus(_connectionStatus,
             readOnlyInventory is null
                 ? "NOT CONNECTED — Connect / Refresh before GPO Preview."
