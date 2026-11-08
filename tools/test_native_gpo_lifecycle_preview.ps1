@@ -62,9 +62,10 @@ try {
         links=@([pscustomobject]@{ou=$ouDn;flags=0;enabled=$true;enforced=$false})
     }
 
+    $global:LifecyclePreviewFixtureRoot = $fixture
     # Mock these external dependencies only. Production Plan and Hash
     # above run unmodified, including their original SHA-256 preimage.
-    function Get-FileHash {
+    function global:Get-FileHash {
         param([string]$LiteralPath,[string]$Algorithm)
         $leaf = Split-Path -Path $LiteralPath -Leaf
         if ($leaf -eq 'campaign.json') {
@@ -75,11 +76,11 @@ try {
         }
         return [pscustomobject]@{Hash=('A'*64)}
     }
-    function Test-Path {
+    function global:Test-Path {
         param([string]$LiteralPath)
-        return ($LiteralPath -eq (Join-Path $fixture 'gpt.ini'))
+        return ($LiteralPath -eq (Join-Path $global:LifecyclePreviewFixtureRoot 'gpt.ini'))
     }
-    function ReadPackage {
+    function global:ReadPackage {
         param([string]$folder,[datetime]$dcUtc)
         return [pscustomobject]@{id='new_campaign'}
     }
