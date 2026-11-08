@@ -29,6 +29,7 @@ internal static class NativeGpoConflictScan
     private sealed record GpoLink(string Dn, int Flags, int Order);
     private sealed record Level(string Dn, bool Blocked, int Depth, IReadOnlyList<GpoLink> Links);
     private sealed record ScanLevel(string dn, bool blocked, int depth);
+    private sealed record RemoteRegistryResult(bool reachable, IReadOnlyList<Hit> values, string note);
     private sealed record Match(
         string gpo, string gpoId, string linkedAt, bool enforced, bool disabled,
         bool inheritanceBlocked, bool computerPartDisabled, bool wmiFilterPresent,
@@ -144,9 +145,9 @@ internal static class NativeGpoConflictScan
             object? remoteRegistry = null;
             if (computer.Length > 0)
             {
-                remoteRegistry = ReadRemoteRegistry(computer);
-                // If remote registry cannot be read, a warning remains visible.
-                // This is never proof that a policy is absent on the client.
+                var remote = ReadRemoteRegistry(computer);
+                remoteRegistry = remote;
+                if (!remote.reachable) notes.Add(remote.note);
             }
             int high = found.Count(x => x.risk == "High");
             int warningCount = found.Count(x => x.risk == "Warning");
@@ -240,14 +241,15 @@ internal static class NativeGpoConflictScan
             var parsed = new List<GpoLink>();
             for (int j = 0; j < matches.Count; j++)
             {
-                Match m = matches[j];
+                System.Text.RegularExpressions.Match m = matches[j];
                 if (!int.TryParse(m.Groups["flags"].Value, NumberStyles.None,
                         CultureInfo.InvariantCulture, out int flags))
                     throw new InvalidDataException("Invalid GPO link state.");
                 parsed.Add(new GpoLink(m.Groups["dn"].Value, flags, matches.Count - j));
             }
-            if (parsed.Count > 0 && matches.Count != parsed.Count)
-                throw new InvalidDataException("Invalid linked GPO inventory.");
+            string leftovers = Links.Replace(links, "");
+            if (!string.IsNullOrWhiteSpace(leftovers))
+                throw new InvalidDataException("Unrecognized or malformed linked GPO inventory.");
             int flagsOption = IntAttribute(entry, "gPOptions");
             levels.Add(new Level(dn, (flagsOption & 1) != 0, i, parsed));
         }
@@ -294,11 +296,16 @@ internal static class NativeGpoConflictScan
 
     private static bool FileExistsSafe(string path)
     {
-        if (!File.Exists(path)) return false;
+        FileAttributes attributes;
+        try { attributes = File.GetAttributes(path); }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        // Access denied / network failure is not a legitimate "missing file".
+        if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+            throw new InvalidDataException("Linked GPO registry file is unsafe.");
         var info = new FileInfo(path);
-        if ((info.Attributes & FileAttributes.ReparsePoint) != 0 ||
-            info.Length is < 1 or > 2097152)
-            throw new InvalidDataException("Linked GPO registry file is unsafe or too large.");
+        if (info.Length is < 1 or > 2097152)
+            throw new InvalidDataException("Linked GPO registry file is empty or too large.");
         return true;
     }
 
@@ -429,7 +436,7 @@ internal static class NativeGpoConflictScan
         return hits;
     }
 
-    private static object ReadRemoteRegistry(string computer)
+    private static RemoteRegistryResult ReadRemoteRegistry(string computer)
     {
         var values = new List<Hit>();
         try
@@ -453,21 +460,15 @@ internal static class NativeGpoConflictScan
                     if (hit is not null) values.Add(hit);
                 }
             }
-            return new
-            {
-                reachable = true, values,
-                note = "Read-only remote HKLM. GPO source still requires gpresult."
-            };
+            return new RemoteRegistryResult(true, values,
+                "Read-only remote HKLM. GPO source still requires gpresult.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or System.Security.SecurityException or System.ComponentModel.Win32Exception)
         {
-            return new
-            {
-                reachable = false, values,
-                note = "Remote Registry unavailable/denied; this is NOT proof of no conflict. " +
-                    "Check RemoteRegistry/firewall/RPC and run gpresult locally."
-            };
+            return new RemoteRegistryResult(false, values,
+                "Remote Registry unavailable/denied; this is NOT proof of no conflict. " +
+                    "Check RemoteRegistry/firewall/RPC and run gpresult locally.");
         }
     }
 
