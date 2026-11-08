@@ -387,6 +387,12 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("TestAdDirectorySnapshot()", tests)
         self.assertIn("AD first-step connect/read", smoke)
         self.assertIn("DcDnsDiscovery.FindControllers", first)
+        self.assertIn("if (_dc.Items.Count == 0)", first)
+        self.assertIn("ScheduleDcDiscovery();", first)
+        self.assertIn("_serverOptions.Visible = _advancedDc.Checked;", first)
+        self.assertNotIn('if (!_advancedDc.Checked && !_mutating) _dc.Text = "";', first)
+        self.assertIn("if (!snapshot.DomainControllers.Contains(snapshot.Dc,", first)
+
         self.assertIn("ShowPage(1)", first)
         self.assertIn("ShowPage(2)", first)
         self.assertIn("AddImagesFromFolder", main)
