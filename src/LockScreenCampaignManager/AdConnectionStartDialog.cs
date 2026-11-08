@@ -127,7 +127,6 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly CheckBox _rememberUsername = new();
     private readonly CheckBox _saveEncryptedPassword = new();
     private readonly Button _forgetCredential = new();
-    private readonly Label _credentialHint = new();
     private string _loadedCredentialDomain = "";
     private readonly Button _connect = new();
     private readonly Button _continue = new();
@@ -349,7 +348,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 250));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 153));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -362,7 +361,7 @@ internal sealed class AdConnectionStartDialog : Form
         // Stable two-column form. Avoid FlowLayoutPanel wrapping textboxes into
         // narrow/scrolling rows when Windows display scaling exceeds 100%.
         var authentication = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4,
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(14, 10, 14, 8)
         };
         authentication.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -370,6 +369,7 @@ internal sealed class AdConnectionStartDialog : Form
         authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
         authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+        authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         authentication.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         _current.Text = "Use current Windows account";
@@ -401,6 +401,12 @@ internal sealed class AdConnectionStartDialog : Form
         remember.Controls.Add(_saveEncryptedPassword);
         authentication.Controls.Add(remember, 0, 3);
         authentication.SetColumnSpan(remember, 2);
+        _forgetCredential.Text = "Forget saved login";
+        _forgetCredential.AutoSize = true;
+        _forgetCredential.Margin = new Padding(2, 5, 8, 3);
+        _forgetCredential.Click += (_, _) => ForgetCredentials();
+        authentication.Controls.Add(_forgetCredential, 0, 4);
+        authentication.SetColumnSpan(_forgetCredential, 2);
         connection.Controls.Add(authentication, 0, 1);
 
         // The operator is signing in, not selecting a server. DC override is
@@ -411,11 +417,10 @@ internal sealed class AdConnectionStartDialog : Form
         _dc.IntegralHeight = false;
         _serverOptions.Dock = DockStyle.Fill;
         _serverOptions.ColumnCount = 2;
-        _serverOptions.RowCount = 3;
+        _serverOptions.RowCount = 2;
         _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138));
         _serverOptions.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
-        _serverOptions.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
         _serverOptions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _serverOptions.Padding = new Padding(12, 0, 12, 3);
         _serverOptions.Controls.Add(ConnectionField("Domain controller (optional)", _dc), 0, 0);
@@ -431,15 +436,7 @@ internal sealed class AdConnectionStartDialog : Form
         _dcDiscoveryStatus.Padding = new Padding(2, 4, 0, 0);
         _serverOptions.Controls.Add(_dcDiscoveryStatus, 0, 1);
         _serverOptions.SetColumnSpan(_dcDiscoveryStatus, 2);
-        _forgetCredential.Text = "Forget saved credentials";
-        _forgetCredential.AutoSize = true;
-        _forgetCredential.Margin = new Padding(3, 0, 8, 0);
-        _forgetCredential.Click += (_, _) => ForgetCredentials();
-        _serverOptions.Controls.Add(_forgetCredential, 0, 2);
-        _credentialHint.Text = "Password is stored for this Windows user only.";
-        _credentialHint.AutoSize = true;
-        _credentialHint.ForeColor = UiStyle.Muted;
-        _serverOptions.Controls.Add(_credentialHint, 1, 2);
+
 
         _advancedDc.Text = "Advanced connection options  •  Specify domain controller";
         _advancedDc.AutoSize = true;
