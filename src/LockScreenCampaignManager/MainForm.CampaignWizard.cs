@@ -336,7 +336,7 @@ public sealed partial class MainForm
                 var body = new Panel
                 {
                     Dock = DockStyle.Fill, BackColor = UiStyle.SoftBlue,
-                    Padding = new Padding(14)
+                    Padding = new Padding(14), AutoScroll = true
                 };
                 page.Controls.Add(body, 0, 3);
                 var status = new Label
@@ -615,18 +615,40 @@ public sealed partial class MainForm
             }, 190, true);
             var group = new TableLayoutPanel
             {
+                Name = "WizardCampaignNameField",
                 Dock = DockStyle.Top, ColumnCount = 1, RowCount = 3,
-                Height = 180, Padding = new Padding(10)
+                Height = 204, Padding = new Padding(10)
             };
-            group.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
             group.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            group.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
             group.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            group.Controls.Add(Information("Campaign name", 10f), 0, 0);
+            var campaignName = Information("Campaign name", 10f);
+            campaignName.Name = "WizardCampaignNameLabel";
+            campaignName.Padding = new Padding(6, 5, 6, 5);
+            group.Controls.Add(campaignName, 0, 0);
             var name = new TextBox
             {
+                Name = "WizardCampaignNameInput",
                 Dock = DockStyle.Top, Text = _owner._name.Text,
                 Font = new Font("Segoe UI", 11f)
             };
+            void FitCampaignName()
+            {
+                if (group.IsDisposed || name.IsDisposed || campaignName.IsDisposed) return;
+                int labelHeight = TextRenderer.MeasureText("Agpqy", campaignName.Font,
+                    new Size(4096, 4096),
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+                    campaignName.Padding.Vertical + campaignName.Margin.Vertical + 12;
+                int editorHeight = Math.Max(name.Height, name.PreferredSize.Height) +
+                    name.Margin.Vertical + 12;
+                group.RowStyles[0].Height = Math.Max(44, labelHeight);
+                group.RowStyles[1].Height = Math.Max(52, editorHeight);
+                int minimum = (int)Math.Ceiling(group.RowStyles[0].Height +
+                    group.RowStyles[1].Height) + 95 + group.Padding.Vertical;
+                if (group.Height < minimum) group.Height = minimum;
+            }
+            campaignName.FontChanged += (_, _) => FitCampaignName();
+            name.FontChanged += (_, _) => FitCampaignName();
             name.TextChanged += (_, _) =>
             {
                 if (_editingPage) return;
@@ -640,6 +662,7 @@ public sealed partial class MainForm
                 $"Time zone: {_owner._project.TimeZoneId}. " +
                 "Save the project locally before proceeding to deployment."), 0, 2);
             body.Controls.Add(group);
+            FitCampaignName();
             status.Text = _saved ? "Project saved. Continue to Deploy or Finish offline." :
                 "Unsaved project. Use Save project or Next to choose a file.";
         }
