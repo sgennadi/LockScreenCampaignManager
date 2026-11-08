@@ -7,6 +7,11 @@ public sealed partial class MainForm
 {
     private CampaignWizardDialog? _activeCampaignWizard;
 
+    // Save is optional for the guided campaign flow. The GPO Deployment
+    // wizard already exports the validated in-memory campaign independently.
+    internal static bool ShouldSaveCampaignProject(bool saved, bool skipSaving) =>
+        !saved && !skipSaving;
+
     // All native file pickers and existing AD/schedule/deployment dialogs
     // are owned by the visible wizard rather than the disabled editor below.
     private IWin32Window CampaignDialogOwner =>
@@ -51,10 +56,11 @@ public sealed partial class MainForm
         private static readonly string[] StepNames =
         [
             "1  AD connection", "2  Images", "3  Arrange",
-            "4  Schedule", "5  Save", "6  Deploy"
+            "4  Schedule", "5  Save / Skip", "6  Deploy"
         ];
         private readonly MainForm _owner;
         private readonly TableLayoutPanel _root = new();
+        private readonly TableLayoutPanel _footer = new();
         private readonly TableLayoutPanel _header = new();
         private readonly Label _heading = new();
         private readonly Label _subheading = new();
@@ -72,6 +78,7 @@ public sealed partial class MainForm
         private RadioButton? _deployChoice;
         private int _step;
         private bool _saved;
+        private bool _skipProjectSave;
         private bool _editingPage;
         private bool _everConfiguredSchedule;
 
@@ -91,23 +98,31 @@ public sealed partial class MainForm
             UiStyle.Apply(this);
             UpdateAvailableNotice();
             FitHeader();
-            DpiChanged += (_, _) => BeginInvoke(new Action(FitHeader));
+            DpiChanged += (_, _) => BeginInvoke(new Action(() =>
+            {
+                FitHeader();
+                FitFooter();
+            }));
             UiWindowPlacement.Attach(this, "campaign-setup-wizard");
-            Shown += (_, _) => { FitHeader(); RenderPage(); };
+            Shown += (_, _) =>
+            {
+                FitHeader();
+                RenderPage();
+                FitFooter();
+            };
         }
 
         private void BuildLayout()
         {
             _root.Dock = DockStyle.Fill;
             _root.ColumnCount = 2;
-            _root.RowCount = 3;
+            _root.RowCount = 2;
             _root.Padding = new Padding(14, 12, 14, 12);
             _root.BackColor = UiStyle.Canvas;
             _root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 215));
             _root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
             _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
             Controls.Add(_root);
 
             _header.Dock = DockStyle.Fill;
@@ -173,21 +188,29 @@ public sealed partial class MainForm
             _root.Controls.Add(rail, 0, 1);
 
             _host.Dock = DockStyle.Fill;
+            _host.AutoScroll = true;
             _host.Padding = new Padding(18, 16, 18, 10);
             _host.BackColor = UiStyle.Surface;
             _root.Controls.Add(_host, 1, 1);
 
-            var footer = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1,
-                Padding = new Padding(8, 10, 8, 4),
-                Margin = Padding.Empty
-            };
+            // Footer is a direct, bottom-docked FORM child, not a row inside
+            // the scrollable main layout. This keeps Back/Next/Close visible
+            // even when a high-DPI page exceeds available vertical space.
+            var footer = _footer;
+            footer.Name = "CampaignWizardFooter";
+            footer.Dock = DockStyle.Bottom;
+            footer.Height = 82;
+            footer.MinimumSize = new Size(0, 62);
+            footer.ColumnCount = 5;
+            footer.RowCount = 1;
+            footer.Padding = new Padding(12, 9, 12, 8);
+            footer.Margin = Padding.Empty;
+            footer.BackColor = UiStyle.Canvas;
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 144));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 162));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 153));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
             _footnote.Dock = DockStyle.Fill;
             _footnote.ForeColor = UiStyle.Muted;
             _footnote.TextAlign = ContentAlignment.MiddleLeft;
@@ -224,8 +247,12 @@ public sealed partial class MainForm
             _close.Margin = new Padding(4, 2, 4, 2);
             _close.Click += (_, _) => Close();
             footer.Controls.Add(_close, 4, 0);
-            _root.Controls.Add(footer, 0, 2);
-            _root.SetColumnSpan(footer, 2);
+            Controls.Add(footer);
+            footer.ClientSizeChanged += (_, _) => FitFooter();
+            _back.FontChanged += (_, _) => FitFooter();
+            _next.FontChanged += (_, _) => FitFooter();
+            _close.FontChanged += (_, _) => FitFooter();
+            _updateAvailable.FontChanged += (_, _) => FitFooter();
             AcceptButton = _next;
             CancelButton = _close;
             RenderPage();
@@ -236,11 +263,16 @@ public sealed partial class MainForm
             if (IsDisposed) return;
             string? version = _owner.AvailableUpdateVersion;
             _updateAvailable.Visible = version is not null;
-            if (version is null) return;
+            if (version is null)
+            {
+                FitFooter();
+                return;
+            }
             _updateAvailable.Text = "Update " + version;
             _updateAvailable.Tag = "UpdateNotice";
             UiStyle.DecorateForUpdateNotice(_updateAvailable);
             _updateHelp.SetToolTip(_updateAvailable, _owner.AvailableUpdateSummary);
+            FitFooter();
         }
 
         internal void ShowPageForSmokeTest(int page)
@@ -254,6 +286,45 @@ public sealed partial class MainForm
             if (IsDisposed || _root.IsDisposed || _header.IsDisposed) return;
             UiStyle.FitWizardHeader(_root, _header, _heading, _subheading, 120);
         }
+
+        private void FitFooter()
+        {
+            if (IsDisposed || _footer.IsDisposed || _footer.ColumnStyles.Count != 5)
+                return;
+            int available = Math.Max(0, _footer.ClientSize.Width - _footer.Padding.Horizontal);
+            if (available < 200) return; // initial WinForms layout is not sized yet
+
+            int textHeight = new[] { _back, _next, _close, _updateAvailable }
+                .Max(x => TextRenderer.MeasureText("Agpqy", x.Font).Height);
+            int height = Math.Clamp(textHeight + _footer.Padding.Vertical + 19, 68, 118);
+            if (_footer.Height != height) _footer.Height = height;
+
+            // Constrain all fixed columns by the actual viewport width;
+            // the status note yields space first, never the navigation.
+            int back = Math.Clamp(RequiredWidth(_back, 28), 94, 160);
+            int next = Math.Clamp(RequiredWidth(_next, 32), 125, 205);
+            int close = Math.Clamp(RequiredWidth(_close, 28), 115, 185);
+            int update = _updateAvailable.Visible
+                ? Math.Clamp(RequiredWidth(_updateAvailable, 28), 130, 245) : 0;
+            int total = back + next + close + update;
+            if (total > available)
+            {
+                double scale = (double)available / total;
+                back = Math.Max(62, (int)Math.Floor(back * scale));
+                next = Math.Max(76, (int)Math.Floor(next * scale));
+                close = Math.Max(75, (int)Math.Floor(close * scale));
+                update = update == 0 ? 0 : Math.Max(75, (int)Math.Floor(update * scale));
+            }
+            _footer.ColumnStyles[1].Width = update;
+            _footer.ColumnStyles[2].Width = back;
+            _footer.ColumnStyles[3].Width = next;
+            _footer.ColumnStyles[4].Width = close;
+            _footnote.Visible = available - back - next - close - update >= 115;
+        }
+
+        private static int RequiredWidth(Button button, int padding) =>
+            TextRenderer.MeasureText(button.Text, button.Font).Width +
+            padding + button.Margin.Horizontal;
 
         private void RenderPage(int selected = 0)
         {
@@ -281,7 +352,8 @@ public sealed partial class MainForm
 
                 var page = new TableLayoutPanel
                 {
-                    Dock = DockStyle.Fill,
+                    Dock = DockStyle.Top,
+                    Height = Math.Max(390, _host.ClientSize.Height - _host.Padding.Vertical),
                     ColumnCount = 1, RowCount = 5,
                     Padding = new Padding(10, 7, 10, 9),
                     BackColor = UiStyle.Surface
@@ -292,6 +364,11 @@ public sealed partial class MainForm
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
                 _host.Controls.Add(page);
+                _host.ClientSizeChanged += (_, _) =>
+                {
+                    if (page.IsDisposed || _host.IsDisposed || !page.IsHandleCreated) return;
+                    page.Height = Math.Max(390, _host.ClientSize.Height - _host.Padding.Vertical);
+                };
 
                 string[] titles =
                 [
@@ -299,7 +376,7 @@ public sealed partial class MainForm
                     "Choose your campaign images",
                     "Arrange the image order",
                     "Choose days and times",
-                    "Review and save the campaign",
+                    "Save or skip saving",
                     "Deploy or finish offline"
                 ];
                 string[] descriptions =
@@ -308,7 +385,7 @@ public sealed partial class MainForm
                     "Select multiple image files or import a complete folder. You can add more images before continuing.",
                     "Place images in the desired order. The first image is assigned to the first scheduled change.",
                     "Set the start date, weekdays, exact dates and change time. Review the schedule before saving.",
-                    "Review the configuration and save a local campaign project. Saving never modifies Active Directory.",
+                    "Save a project for reopening later, or skip saving and continue directly to deployment. No AD changes here.",
                     "Deploy using the AD/GPO Wizard, or finish offline and deploy later. No automatic GPO changes."
                 ];
                 page.Controls.Add(new Label
@@ -372,14 +449,19 @@ public sealed partial class MainForm
                 _back.Enabled = _step > 0;
                 _next.Text = _step == 5 && _deployChoice?.Checked == true
                     ? "Deploy GPO..." : _step == 5 ? "Finish" :
+                    _step == 4 && _skipProjectSave ? "Continue (no save)" :
+                    _step == 4 && !_saved ? "Save & Next" :
                     _step == 0 ? "Continue" : "Next";
                 _next.Enabled = _step is 0 or 5 || _owner._project.ImagePaths.Count > 0;
                 _footnote.Text = _step == 0 ? "AD sign-in is optional" :
-                    _owner._project.ImagePaths.Count + " image(s) selected";
+                    _step >= 4 && _skipProjectSave && !_saved
+                        ? "Local project not saved"
+                        : _owner._project.ImagePaths.Count + " image(s) selected";
                 _host.ResumeLayout(true);
                 UiStyle.Apply(this);
                 UpdateAvailableNotice();
                 FitHeader();
+                FitFooter();
             }
             finally { _editingPage = false; }
         }
@@ -603,7 +685,11 @@ public sealed partial class MainForm
                 {
                     _owner.ReadControls();
                     CampaignSchedule.Validate(_owner._project, requireImages: true);
-                    _saved = _owner.TrySaveProject();
+                    if (_owner.TrySaveProject())
+                    {
+                        _saved = true;
+                        _skipProjectSave = false;
+                    }
                     RenderPage();
                 }
                 catch (CampaignValidationException ex)
@@ -613,6 +699,11 @@ public sealed partial class MainForm
                 }
                 catch (Exception ex) { UiErrorDialog.Show(this, "Save campaign", ex); }
             }, 190, true);
+            Action(actions, "Skip saving & continue", () =>
+            {
+                _skipProjectSave = true;
+                NextStep(); // Same validation as Save & Next; no SaveFileDialog
+            }, 230);
             var group = new TableLayoutPanel
             {
                 Name = "WizardCampaignNameField",
@@ -660,11 +751,16 @@ public sealed partial class MainForm
             group.Controls.Add(Information(
                 $"{_owner._project.ImagePaths.Count} image(s). " +
                 $"Time zone: {_owner._project.TimeZoneId}. " +
-                "Save the project locally before proceeding to deployment."), 0, 2);
+                "Saving the local .json project is optional. If skipped, " +
+                "settings remain in the editor; deployment exports its " +
+                "own campaign package."), 0, 2);
             body.Controls.Add(group);
             FitCampaignName();
-            status.Text = _saved ? "Project saved. Continue to Deploy or Finish offline." :
-                "Unsaved project. Use Save project or Next to choose a file.";
+            status.Text = _saved
+                ? "Project saved. Continue to Deploy or finish offline."
+                : _skipProjectSave
+                    ? "Local save skipped. Continue to Deploy without a project file."
+                    : "Choose Save project or Skip saving & continue. Validation is required either way.";
         }
 
         private void RenderDeploy(FlowLayoutPanel actions, Panel body, Label status)
@@ -693,7 +789,9 @@ public sealed partial class MainForm
             };
             var offline = new RadioButton
             {
-                Text = "Finish offline - only the local project is saved",
+                Text = _saved
+                    ? "Finish offline - local project is saved"
+                    : "Finish offline - keep the campaign in the editor",
                 Dock = DockStyle.Fill, Checked = !_owner.AdReady
             };
             _deployChoice.CheckedChanged += (_, _) =>
@@ -704,9 +802,11 @@ public sealed partial class MainForm
             options.Controls.Add(_deployChoice, 0, 0);
             options.Controls.Add(offline, 0, 1);
             body.Controls.Add(options);
-            status.Text = _owner.AdReady
-                ? "AD connected: choose deployment or finish without making AD changes."
-                : "Offline: connect to AD in the deployment wizard only if needed.";
+            status.Text = _skipProjectSave && !_saved
+                ? "No local project file was saved. Deploy or return to the editor."
+                : _owner.AdReady
+                    ? "AD connected: choose deployment or finish without making AD changes."
+                    : "Offline: connect to AD in the deployment wizard only if needed.";
         }
 
         private void Deploy()
@@ -758,19 +858,20 @@ public sealed partial class MainForm
                     }
                     break;
                 case 4:
-                    if (!_saved)
+                    // Skip saving never bypasses image/schedule validation.
+                    try
                     {
-                        try
-                        {
-                            _owner.ReadControls();
-                            CampaignSchedule.Validate(_owner._project, requireImages: true);
-                        }
-                        catch (Exception ex) when (ex is CampaignValidationException or FileNotFoundException)
-                        {
-                            MessageBox.Show(this, ex.Message, "Check campaign",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return;
-                        }
+                        _owner.ReadControls();
+                        CampaignSchedule.Validate(_owner._project, requireImages: true);
+                    }
+                    catch (Exception ex) when (ex is CampaignValidationException or FileNotFoundException)
+                    {
+                        MessageBox.Show(this, ex.Message, "Check campaign",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    if (ShouldSaveCampaignProject(_saved, _skipProjectSave))
+                    {
                         if (!_owner.TrySaveProject()) return;
                         _saved = true;
                     }
