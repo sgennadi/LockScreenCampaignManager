@@ -106,7 +106,7 @@ public sealed partial class MainForm
             _workflowBar.Visible = !advanced;
             // Reclaim the wizard row in Advanced; keep it pinned above images in Wizard.
             if (_workflowBar.Parent is TableLayoutPanel owner)
-                owner.RowStyles[2].Height = advanced ? 0 : 64;
+                owner.RowStyles[2].Height = advanced ? 0 : 106;
         }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
@@ -129,8 +129,9 @@ public sealed partial class MainForm
             "6 / 6  Deploy GPO: select OU/group and check write permissions."
         ];
         _workflowHint.Text = _advancedMode
-            ? "Advanced tools: select a command from the menus below."
-            : hints[Math.Clamp(_workflowStep, 0, 5)] +
+            ? "Advanced tools: choose Project, Images, Review or AD / GPO below."
+            : "STEP " + (_workflowStep + 1) + " OF 6  •  " +
+              hints[Math.Clamp(_workflowStep, 0, 5)].Split("  ", 2).Last() +
               $"  |  Images: {_project.ImagePaths.Count}";
         _workflowHint.AccessibleDescription = _workflowHint.Text;
         _workflowBack.Enabled = _workflowStep > 0;
@@ -152,6 +153,10 @@ public sealed partial class MainForm
             _workflowStep is 1 || _project.ImagePaths.Count > 0;
         _workflowAction.BackColor = UiStyle.Accent;
         _workflowAction.ForeColor = Color.White;
+        _workflowNext.BackColor = UiStyle.Surface;
+        _workflowNext.ForeColor = UiStyle.Navy;
+        _workflowBack.BackColor = UiStyle.Surface;
+        _workflowBack.ForeColor = UiStyle.Navy;
         _imageScheduleButton.Enabled = _project.ImagePaths.Count > 0;
     }
 
