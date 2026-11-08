@@ -102,7 +102,7 @@ function Get-PrincipalSids {
             } catch { }
         }
     }
-    return $sids
+    return ,$sids
 }
 function Test-PotentialDirectoryAccess {
     param($Descriptor,$Sids,[int]$DesiredMask,[guid]$ObjectType)
