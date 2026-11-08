@@ -46,10 +46,10 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.ConflictScan && mode == "Scan")
             return NativeGpoConflictScan.Execute(mode, request, credentials);
 
-        // Read-only SYSVOL Scan uses native C# with the same DC/identity for
-        // signed LDAP inventory and SMB hashes. Legacy Preview/Cleanup stay
-        // behind their original guard and explicit admin confirmation.
-        if (operation == DomainOperation.Storage && mode == "Scan")
+        // Read-only SYSVOL Scan and Cleanup Preview use native signed LDAP
+        // and selected-DC SMB. The actual Cleanup remains on the historical
+        // independently revalidating PS1 and requires typed admin approval.
+        if (operation == DomainOperation.Storage && mode is ("Scan" or "Preview"))
             return NativeSysvolStorage.Execute(mode, request, credentials);
 
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));

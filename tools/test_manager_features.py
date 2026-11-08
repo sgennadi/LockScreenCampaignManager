@@ -297,6 +297,11 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('ConvertTimeFromUtc($info.dcUtc', deploy)
         self.assertIn('ConvertTimeFromUtc($info.dcUtc', lifecycle)
         self.assertIn('DomainOperation.Storage', runner)
+        native = read('NativeSysvolStorage.cs')
+        self.assertIn('mode == "Preview"', native)
+        self.assertIn('CleanupPreviewHash', native)
+        self.assertIn('ValidatePreviewConditions', native)
+        self.assertIn('mode is ("Scan" or "Preview")', runner)
         self.assertIn('Sysvol-Storage.ps1', project)
         self.assertIn('new SysvolStoragePanel(', ops)
         self.assertIn('Delete source folder', gui)
@@ -412,7 +417,7 @@ class ClientManagementContracts(unittest.TestCase):
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         project = (APP / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-        self.assertIn('<Version>0.4.0-preview.49</Version>', project)
+        self.assertIn('<Version>0.4.0-preview.50</Version>', project)
         self.assertIn('test_manager_features.py', workflow)
         # Package name must derive from the project, never a stale preview string.
         self.assertIn('-getProperty:Version', workflow)

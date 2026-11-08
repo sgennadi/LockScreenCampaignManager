@@ -256,6 +256,39 @@ internal static class SelfTests
         try { NativeSysvolStorage.ExtractReferences(new byte[2_097_153]); }
         catch (InvalidDataException) { capped = true; }
         Check(capped, "Native SYSVOL refuses oversized GPO evidence");
+        string golden = NativeSysvolStorage.CleanupPreviewHash(
+            "example.com", "dc01.example.com", "alpha", "abc123",
+            "2026-11-08T18:00:00.0000000Z", 3);
+        Check(golden ==
+            "4392f41f095de3796c1d74982b88afcda7eba2351993e9c2b08b98cfc6667c84",
+            "Native Preview hash exactly follows legacy SYSVOL cleanup plan format");
+        NativeSysvolStorage.ValidatePreviewConditions(true, 0, false,
+            now.AddDays(-32), now, 0);
+        var invalidPreviews = new Action[]
+        {
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                false, 0, false, now.AddDays(-32), now, 0),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, 301, false, now.AddDays(-32), now, 0),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, -301, false, now.AddDays(-32), now, 0),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, 0, true, now.AddDays(-32), now, 0),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, 0, false, now.AddDays(-29), now, 0),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, 0, false, now.AddDays(-32), now, 1),
+            () => NativeSysvolStorage.ValidatePreviewConditions(
+                true, 0, false, DateTime.SpecifyKind(
+                    now.AddDays(-32), DateTimeKind.Unspecified), now, 0)
+        };
+        foreach (Action invalid in invalidPreviews)
+        {
+            bool rejected = false;
+            try { invalid(); }
+            catch (InvalidOperationException) { rejected = true; }
+            Check(rejected, "Native cleanup preview refuses unsafe or incomplete evidence");
+        }
     }
 
     private static void TestNativeGpoConflictScanContracts()
