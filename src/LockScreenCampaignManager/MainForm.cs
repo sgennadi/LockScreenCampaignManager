@@ -264,6 +264,7 @@ public sealed partial class MainForm : Form
         _lastHours.Width = 98;
         _lastHours.ValueChanged += (_, _) => OnDataChanged();
         settingsFlow.Controls.Add(WithLabel("Last slide (hours)", _lastHours, 170));
+        _timeZone.Name = "MainTimeZoneSelector";
         _timeZone.DropDownStyle = ComboBoxStyle.DropDown;
         _timeZone.Width = 350;
         _timeZone.DropDownWidth = 530;
