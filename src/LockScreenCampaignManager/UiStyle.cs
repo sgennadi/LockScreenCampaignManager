@@ -145,6 +145,25 @@ internal static class UiStyle
                 }
                 else if (c is FlowLayoutPanel flow) flow.AutoScroll = true;
             }
+            // Header labels with large fonts need enough vertical room at
+            // 125-200% DPI. Adapt absolute table rows instead of clipping the
+            // descenders of letters such as g, p, q and y.
+            foreach (var label in all.OfType<Label>())
+            {
+                if (label.Font.SizeInPoints < 13f ||
+                    label.Parent is not TableLayoutPanel table ||
+                    label.AutoSize || label.Dock != DockStyle.Fill)
+                    continue;
+                int row = table.GetRow(label);
+                if (row < 0 || row >= table.RowStyles.Count ||
+                    table.RowStyles[row].SizeType != SizeType.Absolute)
+                    continue;
+                int required = TextRenderer.MeasureText("Agpqy",
+                    label.Font, Size.Empty, TextFormatFlags.SingleLine).Height +
+                    label.Padding.Vertical + label.Margin.Vertical + 7;
+                if (table.RowStyles[row].Height < required)
+                    table.RowStyles[row].Height = required;
+            }
             form.BackColor = Canvas;
         }
         finally { form.ResumeLayout(true); }
