@@ -2777,7 +2777,9 @@ internal static class SelfTests
                       request.Headers.Authorization.Scheme == "Bearer",
                     "Public metadata is anonymous; private token stays on pinned GitHub API");
                 MetadataCount++;
-                const string tag = "v0.4.0-preview.32";
+                // A synthetic candidate must be newer than the installed build.
+                // This is not a published release or a version bump.
+                const string tag = "v0.4.0-preview.33";
                 var body = new[] { new {
                     tag_name = tag, draft = false, prerelease = true,
                     html_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/tag/" + tag,
