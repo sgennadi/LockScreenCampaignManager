@@ -115,12 +115,12 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(5, 5, 7, 4)
         };
-        _adConnectButton.Text = "Connect AD (optional)";
+        _adConnectButton.Text = "AD connection (optional)";
         _adConnectButton.MinimumSize = new Size(218, 36);
         _adConnectButton.AutoSize = true;
-        _adConnectButton.BackColor = UiStyle.Accent;
-        _adConnectButton.ForeColor = Color.White;
-        _adConnectButton.Tag = "PrimaryAction";
+        _adConnectButton.BackColor = UiStyle.Surface;
+        _adConnectButton.ForeColor = UiStyle.Navy;
+        _adConnectButton.Tag = "NoIcon";
         _adConnectButton.Click += (_, _) => ConnectAndReadAd();
         adFirstStep.Controls.Add(_adConnectButton);
         _adConnectionStatus.AutoSize = true;
@@ -344,10 +344,11 @@ public sealed partial class MainForm : Form
             ("Check updates...", OpenUniversalUpdater, null)
         });
         _status.Text = "Ready — add images or open a project";
-        _status.ForeColor = Color.DimGray;
-        _status.AutoSize = true;
-        _status.Margin = new Padding(22, 9, 0, 0);
-        actions.Controls.Add(_status);
+        _status.ForeColor = UiStyle.Muted;
+        _status.Dock = DockStyle.Fill;
+        _status.TextAlign = ContentAlignment.MiddleLeft;
+        _status.AutoEllipsis = true;
+        _status.Margin = new Padding(8, 5, 0, 0);
         _quickButtons.Dock = DockStyle.Fill;
         _quickButtons.Padding = new Padding(4, 8, 4, 0);
         _quickButtons.AutoScroll = true;
@@ -372,7 +373,15 @@ public sealed partial class MainForm : Form
         var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
-        footer.Controls.Add(toolsHost, 0, 2);
+        var bottomBar = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 305));
+        bottomBar.Controls.Add(toolsHost, 0, 0);
+        bottomBar.Controls.Add(_status, 1, 0);
+        footer.Controls.Add(bottomBar, 0, 2);
         root.Controls.Add(footer, 0, 3);
     }
 
@@ -1116,9 +1125,11 @@ public sealed partial class MainForm : Form
             var state = JsonSerializer.Deserialize<SavedWindowState>(File.ReadAllText(path));
             if (state is null || state.Width < MinimumSize.Width || state.Height < MinimumSize.Height) return;
             var bounds = new Rectangle(state.Left, state.Top, state.Width, state.Height);
-            if (!Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(bounds))) return;
+            var screens = Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
+            if (screens.Length == 0) return;
+            var safeBounds = UiWindowPlacement.ClampToScreens(bounds, MinimumSize, screens);
             StartPosition = FormStartPosition.Manual;
-            Bounds = bounds;
+            Bounds = safeBounds;
             _savedSplitPercent = Math.Clamp(state.ImagePreviewSplitPercent, 30, 80);
             if (state.Maximized) this.WindowState = FormWindowState.Maximized;
         }
