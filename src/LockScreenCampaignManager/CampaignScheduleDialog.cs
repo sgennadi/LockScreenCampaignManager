@@ -10,6 +10,7 @@ internal sealed class CampaignScheduleDialog : Form
 {
     private readonly CampaignProject _draft;
     private readonly ComboBox _mode = new();
+    private readonly ComboBox _timeZone = new();
     private readonly FlowLayoutPanel _intervalInputs = new();
     private readonly NumericUpDown _intervalHours = new();
     private readonly NumericUpDown _intervalMinutes = new();
@@ -77,11 +78,12 @@ internal sealed class CampaignScheduleDialog : Form
     private void Build()
     {
         var root = new TableLayoutPanel {
-            Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1,
+            Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1,
             Padding = new Padding(14), AutoScroll = true
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
@@ -178,10 +180,43 @@ internal sealed class CampaignScheduleDialog : Form
         choices.Controls.Add(_previewComputer);
         root.Controls.Add(choices, 0, 1);
 
+        // A visible, wide Windows time-zone selector is part of Schedule
+        // itself, not hidden in the main editor. Keep the real zone ID
+        // in the draft for DST validation and client deployment.
+        var zoneRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Padding = new Padding(2, 7, 2, 7)
+        };
+        zoneRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
+        zoneRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        zoneRow.Controls.Add(new Label
+        {
+            Text = "Campaign time zone:",
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 10f)
+        }, 0, 0);
+        _timeZone.Name = "ScheduleTimeZoneSelect";
+        _timeZone.Dock = DockStyle.Fill;
+        _timeZone.DropDownWidth = 540;
+        _timeZone.AccessibleName = "Windows time zone for scheduled images";
+        TimeZoneChoices.Populate(_timeZone, _draft.TimeZoneId);
+        _timeZone.SelectedIndexChanged += (_, _) =>
+        {
+            if (_loading) return;
+            string chosen = TimeZoneChoices.SelectedId(_timeZone);
+            if (chosen.Length == 0) return;
+            _draft.TimeZoneId = chosen;
+            Draw();
+        };
+        zoneRow.Controls.Add(_timeZone, 1, 0);
+        root.Controls.Add(zoneRow, 0, 2);
+
         var middle = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66));
         middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
-        root.Controls.Add(middle, 0, 2);
+        root.Controls.Add(middle, 0, 3);
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -246,7 +281,7 @@ internal sealed class CampaignScheduleDialog : Form
 
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
-        root.Controls.Add(_summary, 0, 3);
+        root.Controls.Add(_summary, 0, 4);
         var actions = new FlowLayoutPanel {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
             WrapContents = true, AutoScroll = true
@@ -261,7 +296,7 @@ internal sealed class CampaignScheduleDialog : Form
         _apply.ForeColor = Color.White;
         _apply.Click += (_, _) => Apply();
         actions.Controls.Add(_apply);
-        root.Controls.Add(actions, 0, 4);
+        root.Controls.Add(actions, 0, 5);
         AcceptButton = _apply;
     }
 
