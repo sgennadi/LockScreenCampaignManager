@@ -60,6 +60,10 @@ internal static class NativeGpoDeploymentApply
             string id = Required(plan, "campaignId");
             string targetPath = Required(plan, "sysvolOnDc");
             string clientScript = Required(plan, "clientScriptPath");
+            CampaignClientType clientType = NativeGpoDeploymentPlan.ParseClientType(
+                Required(plan, "clientType"));
+            if (NativeGpoDeploymentPlan.ParseClientType(Get(args, "clientType")) != clientType)
+                throw new InvalidOperationException("Client type changed after preflight.");
             int imageCount = plan.GetProperty("imageCount").GetInt32();
             if (!NativeSysvolStorage.ValidCampaignId(id) ||
                 imageCount is < 1 or > 30)
@@ -137,7 +141,7 @@ internal static class NativeGpoDeploymentApply
 
                 RestrictApplyToGroup(ldap, gpoDn, selectedSid);
                 RegisterStartup(ldap, gpoDn, actualDc, domain,
-                    created.Value, clientScript);
+                    created.Value, clientScript, clientType);
                 LinkNewGpo(ldap, ouDn, gpoDn);
                 linked = true;
                 return JsonSerializer.SerializeToElement(new
@@ -153,6 +157,9 @@ internal static class NativeGpoDeploymentApply
                         imageCount, imageBytes = plan.GetProperty("imageBytes").GetInt64(),
                         sysvolOnDc = targetPath,
                         clientScriptPath = clientScript,
+                        clientType = clientType.ToString(),
+                        gpoMethod = clientType == CampaignClientType.Executable
+                            ? "ClassicStartupCmd" : "PowerShellStartup",
                         operation = mode, rsatRequired = false,
                         nativeEngine = "C# LDAP + Windows GPO COM + SMB",
                         dcUtc = Required(plan, "dcUtc"),
@@ -205,12 +212,19 @@ internal static class NativeGpoDeploymentApply
     {
         if (!Path.IsPathFullyQualified(source) || !Directory.Exists(source))
             throw new DirectoryNotFoundException("Source campaign package is missing.");
-        foreach (string name in new[] { "campaign.json", "LockScreen-Agent.ps1" })
-            CopyAndVerify(Path.Combine(source, name), Path.Combine(destination, name),
-                name == "campaign.json" ? 1_048_576 : 5 * 1_048_576);
+        CopyAndVerify(Path.Combine(source, "campaign.json"),
+            Path.Combine(destination, "campaign.json"), 1_048_576);
         using var cfg = JsonDocument.Parse(File.ReadAllBytes(
             Path.Combine(source, "campaign.json")),
             new JsonDocumentOptions { MaxDepth = 12 });
+        var clientType = NativeGpoDeploymentPlan.ParseClientType(
+            cfg.RootElement.TryGetProperty("clientType", out var kind) &&
+            kind.ValueKind == JsonValueKind.String ? kind.GetString() ?? "" : "");
+        string agentName = clientType == CampaignClientType.Executable
+            ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
+        CopyAndVerify(Path.Combine(source, agentName),
+            Path.Combine(destination, agentName),
+            clientType == CampaignClientType.Executable ? 250L * 1_048_576 : 5 * 1_048_576);
         var slides = cfg.RootElement.GetProperty("slides");
         if (slides.ValueKind != JsonValueKind.Array || slides.GetArrayLength() is < 1 or > 30)
             throw new InvalidDataException("Source campaign slide count is invalid.");
@@ -228,7 +242,7 @@ internal static class NativeGpoDeploymentApply
                 throw new InvalidDataException("Staged image SHA-256 mismatches manifest.");
         }
         // Recheck the source and copy as a matched pair before commit.
-        foreach (var file in new[] { "campaign.json", "LockScreen-Agent.ps1" })
+        foreach (var file in new[] { "campaign.json", agentName })
             if (!Sha256(Path.Combine(source, file)).Equals(
                     Sha256(Path.Combine(destination, file)), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Source package changed during staging.");
@@ -348,7 +362,8 @@ internal static class NativeGpoDeploymentApply
     }
 
     private static void RegisterStartup(LdapConnection ldap, string gpoDn,
-        string dc, string domain, Guid gpoId, string clientScript)
+        string dc, string domain, Guid gpoId, string clientScript,
+        CampaignClientType clientType)
     {
         string sysvol = @"\\" + dc + @"\SYSVOL\" + domain +
             @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
@@ -357,12 +372,40 @@ internal static class NativeGpoDeploymentApply
             throw new FileNotFoundException("New GPO GPT is missing from selected DC.", gpt);
         string scripts = Path.Combine(sysvol, "Machine", "Scripts");
         Directory.CreateDirectory(scripts);
-        string ini = Path.Combine(scripts, "psscripts.ini");
-        if (File.Exists(ini))
-            throw new InvalidDataException("New GPO already contains a startup script.");
-        string text = "[ScriptsConfig]\r\nStartExecutePSFirst=true\r\n" +
-            "[Startup]\r\n0CmdLine=" + clientScript +
-            "\r\n0Parameters=-Mode Install\r\n";
+        // Independent GPO startup registrations:
+        // PS1 uses PowerShell Startup Scripts (psscripts.ini).
+        // EXE uses classic Startup Scripts (scripts.ini + CMD launcher).
+        string ini = Path.Combine(scripts, clientType == CampaignClientType.Executable
+            ? "scripts.ini" : "psscripts.ini");
+        if (File.Exists(ini) ||
+            File.Exists(Path.Combine(scripts, clientType == CampaignClientType.Executable
+                ? "psscripts.ini" : "scripts.ini")))
+            throw new InvalidDataException("New GPO already has startup metadata.");
+        string text;
+        if (clientType == CampaignClientType.PowerShell)
+        {
+            text = "[ScriptsConfig]\r\nStartExecutePSFirst=true\r\n" +
+                "[Startup]\r\n0CmdLine=" + clientScript +
+                "\r\n0Parameters=-Mode Install\r\n";
+        }
+        else if (clientType == CampaignClientType.Executable)
+        {
+            if (!clientScript.EndsWith(@"\LockScreen-Agent.exe",
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Native client path is invalid.");
+            string startup = Path.Combine(scripts, "Startup");
+            Directory.CreateDirectory(startup);
+            string cmd = Path.Combine(startup, "Start-LockScreen-Agent.cmd");
+            if (File.Exists(cmd))
+                throw new InvalidDataException("GPO launcher already exists.");
+            File.WriteAllText(cmd, "@echo off\r\n\"" + clientScript +
+                "\" --client-agent Install\r\nexit /b %ERRORLEVEL%\r\n", Encoding.ASCII);
+            string command = @"\\" + domain + @"\SYSVOL\" + domain +
+                @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() +
+                @"}\Machine\Scripts\Startup\Start-LockScreen-Agent.cmd";
+            text = "[Startup]\r\n0CmdLine=" + command + "\r\n0Parameters=\r\n";
+        }
+        else throw new NotSupportedException("Unsupported client type.");
         File.WriteAllText(ini, text, new UnicodeEncoding(false, true));
         var gptText = File.ReadAllText(gpt, Encoding.ASCII);
         if (!GptZero.IsMatch(gptText))
