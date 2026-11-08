@@ -41,7 +41,8 @@ internal static class NativeAdDiscovery
             throw new InvalidOperationException("Selected domain controller belongs to another AD domain.");
         if (string.IsNullOrWhiteSpace(actualDc))
             throw new InvalidOperationException("LDAP RootDSE did not return a controller DNS name.");
-        bool writable = !Attr(root, "isRODC").Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+        // Unknown RODC metadata must never be reported as write-capable.
+        bool writable = Attr(root, "isRODC").Equals("FALSE", StringComparison.OrdinalIgnoreCase);
 
         object data = mode switch
         {
@@ -358,6 +359,9 @@ internal static class NativeAdDiscovery
         if (acl.DiscretionaryAcl is null) return "NO_MATCHING_ALLOW";
         foreach (GenericAce ace in acl.DiscretionaryAcl)
         {
+            // Inherit-only ACEs govern descendants, not this target object.
+            if ((ace.AceFlags & AceFlags.InheritOnly) != 0)
+                continue;
             if (ace is not QualifiedAce qualified ||
                 !sids.Contains(qualified.SecurityIdentifier.Value))
                 continue;
