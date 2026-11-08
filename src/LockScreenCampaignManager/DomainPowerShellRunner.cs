@@ -61,10 +61,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Lifecycle && mode == "Preview")
             return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
 
-        // Read-only eligible-host lookup and action Preview are native C#.
-        // RPC task registration and VerifyCleanup still run through the
-        // guarded PowerShell module, which independently recomputes the hash.
-        if (operation == DomainOperation.Immediate && mode is ("List" or "Preview"))
+        // Eligible-host lookup, Preview, and post-Cleanup verification
+        // run in native signed LDAP / read-only SMB, Scheduler RPC and HKLM.
+        // Task creation, Push/Repair/Report/Cleanup remain in the audited
+        // PowerShell module with independently rechecked approval hashes.
+        if (operation == DomainOperation.Immediate &&
+            mode is ("List" or "Preview" or "VerifyCleanup"))
             return NativeImmediateActions.Execute(mode, request, credentials);
 
         // Deployment preflight reads only: OU/group, GPO name availability,
