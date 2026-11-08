@@ -5,6 +5,90 @@ namespace LockScreenCampaignManager;
 
 public sealed partial class MainForm
 {
+    // Explicit launch choice. Cancel closes onboarding, never the editor.
+    // The Wizard never connects to AD without a separate user action.
+    private void ShowStartupWizardChoice()
+    {
+        if (IsDisposed || Disposing) return;
+        using var dialog = new Form
+        {
+            Text = "Start a lock screen campaign",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            AutoScaleMode = AutoScaleMode.Dpi,
+            Font = new Font("Segoe UI", 10f),
+            ClientSize = new Size(555, 270),
+            MinimumSize = new Size(550, 300),
+            BackColor = UiStyle.Canvas
+        };
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            Padding = new Padding(22, 20, 22, 16)
+        };
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+        panel.Controls.Add(new Label
+        {
+            Text = "How would you like to start?",
+            Dock = DockStyle.Fill,
+            ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 16f, FontStyle.Bold)
+        }, 0, 0);
+        panel.Controls.Add(new Label
+        {
+            Text = "Wizard guides you through images, arranging their order, schedule and saving. " +
+                "Active Directory deployment is optional. Advanced opens all tools. " +
+                "Cancel keeps the editor open.",
+            Dock = DockStyle.Fill,
+            ForeColor = UiStyle.Foreground
+        }, 0, 1);
+        var buttons = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
+        var guided = new Button { Text = "Start Wizard", Dock = DockStyle.Fill,
+            Margin = new Padding(0, 5, 8, 5), DialogResult = DialogResult.Yes,
+            Tag = "NoIcon", BackColor = UiStyle.Accent, ForeColor = Color.White };
+        var advanced = new Button { Text = "Advanced", Dock = DockStyle.Fill,
+            Margin = new Padding(0, 5, 8, 5), DialogResult = DialogResult.No,
+            Tag = "NoIcon" };
+        var cancel = new Button { Text = "Cancel", Dock = DockStyle.Fill,
+            Margin = new Padding(0, 5, 0, 5), DialogResult = DialogResult.Cancel,
+            Tag = "NoIcon" };
+        buttons.Controls.Add(guided, 0, 0);
+        buttons.Controls.Add(advanced, 1, 0);
+        buttons.Controls.Add(cancel, 2, 0);
+        panel.Controls.Add(buttons, 0, 2);
+        dialog.Controls.Add(panel);
+        dialog.AcceptButton = guided;
+        dialog.CancelButton = cancel;
+        UiStyle.Apply(dialog);
+        var result = dialog.ShowDialog(this);
+        if (result == DialogResult.Yes)
+        {
+            _workflowStep = _project.ImagePaths.Count > 0 ? 1 : 0;
+            SetWorkflowMode(false);
+            _status.Text = _workflowStep == 0
+                ? "Wizard: add images or import a folder."
+                : "Wizard: arrange imported images, then set the schedule.";
+        }
+        else if (result == DialogResult.No)
+        {
+            SetWorkflowMode(true);
+            _status.Text = "Advanced tools are available. No AD changes have been made.";
+        }
+        else
+        {
+            _status.Text = "Wizard cancelled. Local editor remains available.";
+        }
+        UpdateWorkflow();
+    }
+
     private bool AdReady => _adScope.Matches(
         _adSnapshot, _company, DateTimeOffset.UtcNow);
 
