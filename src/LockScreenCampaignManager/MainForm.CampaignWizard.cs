@@ -6,6 +6,9 @@ namespace LockScreenCampaignManager;
 public sealed partial class MainForm
 {
     private CampaignWizardDialog? _activeCampaignWizard;
+    // CI-only readback for an unsaved, local wizard time-zone change.
+    internal string CampaignTimeZoneForSmokeTest => _project.TimeZoneId;
+
 
     // Save is optional for the guided campaign flow. The GPO Deployment
     // wizard already exports the validated in-memory campaign independently.
