@@ -200,6 +200,11 @@ jobs:
             throw "Native client must reject invalid mode with exit 2 (got $($reject.ExitCode))."
           }
 
+      - name: Validate native client Status and pinned EXE SHA-256
+        shell: pwsh
+        run: |
+          ./tools/test_native_agent_cli.ps1 -PublishedExe "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe"
+
       - name: Run full self-tests (fail closed)
         shell: pwsh
         run: |
