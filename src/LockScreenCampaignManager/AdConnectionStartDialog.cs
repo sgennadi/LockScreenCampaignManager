@@ -119,7 +119,7 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly Button _refreshDc = new();
     private readonly Label _dcDiscoveryStatus = new();
     private readonly CheckBox _advancedDc = new();
-    private readonly FlowLayoutPanel _serverOptions = new();
+    private readonly TableLayoutPanel _serverOptions = new();
     private readonly RadioButton _current = new();
     private readonly RadioButton _alternate = new();
     private readonly TextBox _user = new();
@@ -214,6 +214,25 @@ internal sealed class AdConnectionStartDialog : Form
         return holder;
     }
 
+    private static TableLayoutPanel ConnectionField(string caption, Control editor)
+    {
+        var field = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(2, 1, 10, 2)
+        };
+        field.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+        field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        field.Controls.Add(new Label {
+            Text = caption, Dock = DockStyle.Fill,
+            ForeColor = UiStyle.Muted, TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true, Margin = Padding.Empty
+        }, 0, 0);
+        editor.Dock = DockStyle.Top;
+        editor.Margin = new Padding(0, 1, 0, 0);
+        field.Controls.Add(editor, 0, 1);
+        return field;
+    }
+
     private static Button ActionButton(string text, int width, bool primary = false)
     {
         return new Button
@@ -303,7 +322,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 215));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -313,54 +332,71 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
-        var authentication = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(12, 12, 8, 4)
+        // Stable two-column form. Avoid FlowLayoutPanel wrapping textboxes into
+        // narrow/scrolling rows when Windows display scaling exceeds 100%.
+        var authentication = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4,
+            BackColor = UiStyle.SoftBlue, Padding = new Padding(14, 10, 14, 8)
         };
+        authentication.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        authentication.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+        authentication.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+        authentication.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
         _current.Text = "Use current Windows account";
-        _alternate.Text = "Use another Active Directory account";
+        _alternate.Text = "Use another AD account";
         _current.AutoSize = true;
         _alternate.AutoSize = true;
-        _current.MinimumSize = new Size(280, 30);
-        _alternate.MinimumSize = new Size(330, 30);
-        authentication.Controls.Add(_current);
-        authentication.Controls.Add(_alternate);
-        _user.PlaceholderText = @"DOMAIN\user or user@domain";
+        _current.Margin = new Padding(2, 3, 9, 3);
+        _alternate.Margin = new Padding(2, 3, 9, 3);
+        authentication.Controls.Add(_current, 0, 0);
+        authentication.Controls.Add(_alternate, 1, 0);
+        _user.PlaceholderText = @"DOMAIN\\user or user@domain";
         _password.UseSystemPasswordChar = true;
-        authentication.Controls.Add(Field("AD username", _user, 325));
-        authentication.Controls.Add(Field("Password (session only, never saved)", _password, 325));
-        authentication.Controls.Add(Field("AD DNS domain (auto-detected)", _domain, 325));
+        authentication.Controls.Add(ConnectionField("AD username", _user), 0, 1);
+        authentication.Controls.Add(ConnectionField("Password (session only)", _password), 1, 1);
+        _domain.PlaceholderText = "example.com";
+        authentication.Controls.Add(ConnectionField("Active Directory DNS domain", _domain), 0, 2);
+        authentication.SetColumnSpan(authentication.GetControlFromPosition(0, 2), 2);
         connection.Controls.Add(authentication, 0, 1);
 
-        _serverOptions.Dock = DockStyle.Fill;
-        _serverOptions.WrapContents = true;
-        _serverOptions.AutoScroll = true;
-        _serverOptions.BackColor = UiStyle.Surface;
-        _serverOptions.Padding = new Padding(9, 5, 6, 1);
-        _domain.PlaceholderText = "ad.company.example";
+        // The operator is signing in, not selecting a server. DC override is
+        // advanced and never required for normal automatic domain connection.
         _dc.DropDownStyle = ComboBoxStyle.DropDown;
         _dc.DropDownWidth = 750;
         _dc.MaxDropDownItems = 18;
         _dc.IntegralHeight = false;
-        _serverOptions.Controls.Add(Field("Optional DC / server (automatic by default)", _dc, 420));
+        _dc.PlaceholderText = "Automatic (recommended)";
+        _serverOptions.Dock = DockStyle.Fill;
+        _serverOptions.ColumnCount = 2;
+        _serverOptions.RowCount = 2;
+        _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138));
+        _serverOptions.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+        _serverOptions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _serverOptions.Padding = new Padding(12, 0, 12, 3);
+        _serverOptions.Controls.Add(ConnectionField("Domain controller (optional)", _dc), 0, 0);
         _refreshDc.Text = "Find DCs";
-        _refreshDc.AutoSize = true;
-        _refreshDc.MinimumSize = new Size(110, 34);
+        _refreshDc.Dock = DockStyle.Fill;
+        _refreshDc.Margin = new Padding(6, 24, 0, 9);
         _refreshDc.Click += async (_, _) => await DiscoverDcListAsync();
-        _serverOptions.Controls.Add(_refreshDc);
-        _dcDiscoveryStatus.AutoSize = true;
+        _serverOptions.Controls.Add(_refreshDc, 1, 0);
+        _dcDiscoveryStatus.Dock = DockStyle.Fill;
+        _dcDiscoveryStatus.AutoEllipsis = true;
         _dcDiscoveryStatus.ForeColor = UiStyle.Muted;
-        _dcDiscoveryStatus.Text = "DC selection is optional";
-        _dcDiscoveryStatus.Margin = new Padding(8, 12, 0, 0);
-        _serverOptions.Controls.Add(_dcDiscoveryStatus);
+        _dcDiscoveryStatus.Text = "Automatic selection is recommended. Manual DC is optional.";
+        _dcDiscoveryStatus.Padding = new Padding(2, 4, 0, 0);
+        _serverOptions.Controls.Add(_dcDiscoveryStatus, 0, 1);
+        _serverOptions.SetColumnSpan(_dcDiscoveryStatus, 2);
 
-        _advancedDc.Text = "Advanced: choose domain controller manually";
+        _advancedDc.Text = "Advanced connection options  •  Specify domain controller";
         _advancedDc.AutoSize = true;
-        _advancedDc.Checked = false;
+        _advancedDc.Dock = DockStyle.Left;
+        _advancedDc.Margin = new Padding(10, 9, 0, 4);
         _advancedDc.CheckedChanged += (_, _) => {
             _serverOptions.Visible = _advancedDc.Checked;
-            // A manually selected DC is not silently retained when advanced
-            // selection is disabled. Domain selection stays unchanged.
             if (!_advancedDc.Checked && !_mutating) _dc.Text = "";
         };
         var serverPanel = new TableLayoutPanel {
