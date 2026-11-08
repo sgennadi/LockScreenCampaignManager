@@ -52,10 +52,14 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Storage && mode is ("Scan" or "Preview"))
             return NativeSysvolStorage.Execute(mode, request, credentials);
 
-        // Managed GPO listing uses signed LDAP and selected-DC SYSVOL.
-        // Preview and Apply remain paired in the guarded legacy engine.
+        // Read-only Lifecycle List and Preview use signed LDAP and
+        // selected-DC SYSVOL without launching PowerShell. The legacy
+        // Apply independently recomputes the exact same preview hash from
+        // fresh AD/SYSVOL data before any write.
         if (operation == DomainOperation.Lifecycle && mode == "List")
             return NativeGpoLifecycleList.Execute(mode, request, credentials);
+        if (operation == DomainOperation.Lifecycle && mode == "Preview")
+            return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
 
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
