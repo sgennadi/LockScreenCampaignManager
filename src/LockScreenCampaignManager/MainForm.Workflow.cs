@@ -54,13 +54,6 @@ public sealed partial class MainForm
         };
         _workflowAction.Enabled = true;
         _imageScheduleButton.Enabled = _project.ImagePaths.Count > 0;
-        int index = SelectedIndex;
-        _replaceImageButton.Enabled = _removeImageButton.Enabled = index >= 0;
-        _moveUpButton.Enabled = index > 0;
-        _moveDownButton.Enabled = index >= 0 && index < _project.ImagePaths.Count - 1;
-        _manualValidate.Enabled = _project.ImagePaths.Count > 0;
-        _manualExport.Enabled = _project.ImagePaths.Count > 0;
-        _manualDeploy.Enabled = AdReady && _project.ImagePaths.Count > 0;
     }
 
     private void AdvanceWorkflow()
