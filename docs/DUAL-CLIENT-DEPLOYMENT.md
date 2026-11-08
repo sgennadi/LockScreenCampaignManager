@@ -7,7 +7,7 @@ The administrator chooses **Client / GPO method** at the OU and computer-group s
 | Client | GPO setting | Startup command | Scheduled changes |
 | --- | --- | --- | --- |
 | PowerShell (.ps1) | Computer Configuration → Policies → Windows Settings → Scripts (Startup/Shutdown) → **PowerShell Scripts** | `LockScreen-Agent.ps1 -Mode Install` through `Machine/Scripts/psscripts.ini` | LocalSystem Windows PowerShell client task |
-| Native (.exe) | Computer Configuration → Policies → Windows Settings → Scripts (Startup/Shutdown) → **Scripts** | `Machine/Scripts/scripts.ini` invokes the GPO-owned `Startup/Start-LockScreen-Agent.cmd`, which calls the SHA-256-pinned `LockScreen-Agent.exe --client-agent Install` | LocalSystem Task Scheduler executable action, without PowerShell |
+| Native (.exe) | Computer Configuration → Policies → Windows Settings → Scripts (Startup/Shutdown) → **Scripts** | `Machine/Scripts/scripts.ini` directly calls the pinned `LockScreen-Agent.exe` with `0Parameters=--client-agent Install` (no CMD or PowerShell) | LocalSystem Task Scheduler executable action, without PowerShell |
 
 The selected method belongs to the campaign project. Changing it invalidates the prior AD Preview; deployment independently checks that the chosen method matches the campaign manifest and source hashes. A GPO can have only one of these manager-owned startup methods. Never silently convert existing GPO startup methods.
 
@@ -28,7 +28,7 @@ A running executable cannot delete itself. The native engine schedules its execu
 ## Acceptance checklist for the isolated test OU
 
 - Test **PS1** first to confirm prior campaign / policy behavior did not change.
-- Test **EXE** only after the safety gate is consciously removed on a dedicated test build. Confirm that `scripts.ini` and the GPO startup CMD, not `psscripts.ini`, are present.
+- Test **EXE** only after the safety gate is consciously removed on a dedicated test build. Confirm that `scripts.ini` calls the EXE directly and `psscripts.ini` / CMD launchers are absent.
 - Apply `gpupdate`, reboot, and confirm an administrator-selected client successfully starts as SYSTEM without a GUI or PowerShell.
 - Verify startup installation, the configured first slide, exact scheduled changes, time-zone / DST handling and the daily self-check.
 - Verify image hash repair, broken manifest/agent refusal, owner collision, conflicting registry policy refusal and delegated GPO permissions.
