@@ -14,8 +14,22 @@
 - Read-only checks run at startup, on window activation after the interval and every 10 minutes while the application is open.
 - Clicking Check updates or the update notice opens the existing two-step Updater (Check -> Install). The manager does not download or install silently.
 
+## Campaign Wizard image preview
+
+- **Images** and **Arrange** now render the selected bitmap inside the Wizard itself, alongside the file list; Advanced is not opened behind the Wizard.
+- The 100–200% DPI layout reserves actual space for the bitmap instead of allowing headers and buttons to collapse the preview.
+- A dark preview frame, missing-image placeholder, file name, dimensions and image-loading errors remain visible inside the current page.
+- A Windows UI regression test now creates a real temporary PNG and checks that the selected image is decoded and the rendered preview has nonzero usable dimensions at the smallest supported window size.
+
+## Native administrative C# migration
+
+- Administrative AD inventory, permission hints, computer/group assignment, GPO deployment, GPO lifecycle including reuse/delete, SYSVOL storage/cleanup, immediate remote actions and GPO effective/conflict/evidence inspection all route to native C#.
+- GPO write operations use LDAP/Windows GPO COM, remote one-time actions use Task Scheduler COM/RPC, endpoint snapshots use native Registry64, RSoP DCOM and read-only SMB hashes.
+- The old administrative PowerShell runner and its script resources are removed from the EXE. Legacy PS1 source files may remain in GitHub as **test fixtures or reference implementations** but are not packaged.
+- **The client-side LockScreen-Agent.ps1 remains** because it is the separate endpoint worker deployed by the campaign's GPO. Converting the client agent to a signed EXE is a distinct migration with per-client installation/rollback requirements.
+
 ## CI and safety
 
 - Windows x86/x64 compile, WinForms DPI smoke and existing offline AD/PowerShell contract tests are required before publishing this prerelease.
-- The legacy PS1 administrative actions that have not yet been migrated remain guarded. This update does not claim all PS1 has been removed.
+- All administrative entrypoints in the manager are routed through native C#. The separate client agent is still PowerShell; Windows lab tests do not prove that every domain write, GPO filter, remote RPC or visual lock screen behavior works on real client machines.
 - Real DC and Windows endpoint deployment validation must be performed separately on an isolated OU; CI runners do not join the organization's AD domain.
