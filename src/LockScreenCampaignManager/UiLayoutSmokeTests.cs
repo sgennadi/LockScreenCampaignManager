@@ -162,11 +162,26 @@ internal static class UiLayoutSmokeTests
 
     private static Form CreateWizardPage(int page)
     {
-        // The ordinary editor stays invisible and is disposed when its
-        // corresponding standalone Wizard page is disposed.
+        // The editor stays invisible; no AD or disk writes are made.
         var editor = new MainForm();
         var wizard = editor.CreateCampaignWizardForSmokeTest(page);
         wizard.Disposed += (_, _) => editor.Dispose();
+        if (page == 3)
+        {
+            var picker = Descendants(wizard).OfType<ComboBox>()
+                .Single(x => x.Name == "WizardTimeZoneSelect");
+            string initial = editor.CampaignTimeZoneForSmokeTest;
+            string alternative = TimeZoneChoices.Ids()
+                .First(x => !x.Equals(initial, StringComparison.OrdinalIgnoreCase));
+            picker.SelectedItem = alternative;
+            var mainPicker = Descendants(editor).OfType<ComboBox>()
+                .Single(x => x.Name == "MainTimeZoneSelector");
+            if (editor.CampaignTimeZoneForSmokeTest != alternative ||
+                mainPicker.Text != alternative ||
+                TimeZoneChoices.SelectedId(picker) != alternative)
+                throw new InvalidOperationException(
+                    "Campaign Wizard time-zone selection did not persist in the local project and main editor.");
+        }
         return wizard;
     }
 
@@ -290,9 +305,14 @@ internal static class UiLayoutSmokeTests
 
     private static void CheckTimeZoneSelectors(Form form, string profile)
     {
-        var picker = Descendants(form).OfType<ComboBox>()
-            .FirstOrDefault(x => x.Name is "WizardTimeZoneSelect" or
-                "ScheduleTimeZoneSelect");
+        var all = Descendants(form).OfType<ComboBox>().ToArray();
+        var main = all.FirstOrDefault(x => x.Name == "MainTimeZoneSelector");
+        if (form is MainForm && (main is null || main.Width < 320 ||
+            main.DropDownWidth < 500))
+            throw new InvalidOperationException(
+                $"Main Windows time-zone field or menu is clipped at {profile}.");
+        var picker = all.FirstOrDefault(x => x.Name is
+            "WizardTimeZoneSelect" or "ScheduleTimeZoneSelect");
         if (picker is null) return;
         if (picker.Dock != DockStyle.Fill ||
             picker.DropDownStyle != ComboBoxStyle.DropDownList ||
