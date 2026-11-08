@@ -87,16 +87,33 @@ public sealed partial class MainForm : Form
 
     private void ConfigureLayout()
     {
+        // An outer scrolling viewport is essential for laptop displays,
+        // Remote Desktop and high-DPI sessions: a section must never disappear
+        // when minimum sensible content height exceeds the monitor viewport.
+        var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         var root = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
-            Padding = new Padding(18, 12, 18, 12), BackColor = Bg
+            Dock = DockStyle.None, ColumnCount = 1, RowCount = 4,
+            Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
+            Location = Point.Empty
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 166));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
-        Controls.Add(root);
+        viewport.Controls.Add(root);
+        Controls.Add(viewport);
+        void FitContentToViewport()
+        {
+            if (viewport.IsDisposed || root.IsDisposed) return;
+            var visible = viewport.ClientSize;
+            var required = new Size(Math.Max(1030, visible.Width),
+                Math.Max(790, visible.Height));
+            if (root.Size != required) root.Size = required;
+        }
+        viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
+        Shown += (_, _) => FitContentToViewport();
+        FitContentToViewport();
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
         header.RowStyles.Add(new RowStyle(SizeType.Absolute, 61));
