@@ -438,7 +438,7 @@ class ClientManagementContracts(unittest.TestCase):
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         project = (APP / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-        self.assertRegex(project, r'<Version>0\\.4\\.0-preview\\.\\d+</Version>')
+        self.assertRegex(project, r'<Version>0\.4\.0-preview\.\d+</Version>')
         self.assertIn('test_manager_features.py', workflow)
         # Package name must derive from the project, never a stale preview string.
         self.assertIn('-getProperty:Version', workflow)
