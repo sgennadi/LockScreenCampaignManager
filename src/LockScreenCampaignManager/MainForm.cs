@@ -133,7 +133,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
-            Text = "1 Images    2 Arrange    3 Schedule    4 Save    5 Optional AD deployment",
+            Text = "1 AD sign-in / Skip    2 Images    3 Arrange    4 Schedule    5 Save    6 Deploy",
             AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
             Margin = new Padding(3, 0, 0, 0)
