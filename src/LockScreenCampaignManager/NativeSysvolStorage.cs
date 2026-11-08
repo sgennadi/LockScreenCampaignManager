@@ -18,6 +18,10 @@ namespace LockScreenCampaignManager;
 /// </summary>
 internal static class NativeSysvolStorage
 {
+    // Windows LOGON_NETCREDENTIALS_ONLY (9): use alternate credentials
+    // exclusively for outbound LDAP/SMB without changing local privileges.
+    private const int LogonNetCredentialsOnly = 9;
+    private const int LogonProviderWinNt50 = 3;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex CampaignIdPattern = new(
         @"\A[a-z0-9][a-z0-9_-]{0,70}\z",
@@ -184,7 +188,8 @@ internal static class NativeSysvolStorage
         else if (!name.Contains('@'))
             name += "@" + credentials.Domain.Trim();
         if (credentials.Password.Length == 0 ||
-            !LogonUser(name, accountDomain, credentials.Password, 9, 3,
+            !LogonUser(name, accountDomain, credentials.Password,
+                LogonNetCredentialsOnly, LogonProviderWinNt50,
                 out SafeAccessTokenHandle token))
             throw new InvalidOperationException(
                 "Could not establish alternate network credentials for SYSVOL inspection.");
