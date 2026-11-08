@@ -89,9 +89,9 @@ for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
     assert guard in native_deploy_plan, guard
 
 # Immediate Actions List/Preview run through read-only native LDAP/SYSVOL.
-# Legacy Task Scheduler RPC, VerifyCleanup and Apply remain embedded.
+# Legacy Task Scheduler RPC write actions remain embedded for Push/Repair/Report/Cleanup.
 native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
-assert 'operation == DomainOperation.Immediate && mode is ("List" or "Preview")' in runner
+assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
 assert 'NativeImmediateActions.Execute(mode, request, credentials)' in runner
 # Native VerifyCleanup reads client post-deletion evidence but never writes.
 assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
