@@ -762,6 +762,11 @@ internal sealed class DomainDeploymentForm : Form
                 string conflictSummary = string.Join("\r\n", scan.GetProperty("matches").EnumerateArray()
                     .Take(20).Select(hit =>
                         $"{hit.GetProperty("risk").GetString()} | {hit.GetProperty("gpo").GetString()} | {hit.GetProperty("name").GetString()} = {hit.GetProperty("value").GetString()}"));
+                string coverageNotes = string.Join("\r\n",
+                    scan.GetProperty("notes").EnumerateArray().Take(15)
+                        .Select(item => item.GetString() ?? ""));
+                if (coverageNotes.Length != 0)
+                    conflictSummary += "\r\nCOVERAGE WARNINGS (verify in GPMC/gpresult):\r\n" + coverageNotes;
                 _details.Text = $"PREVIEW - NO CHANGES MADE\r\n\r\nDomain: {x.domain}\r\nWritable DC: {x.dc}\r\n" +
                     $"DC UTC time: {d.GetProperty("dcUtc").GetString()}  |  Local/DC offset: {d.GetProperty("clockSkewSeconds").GetInt32()} seconds\r\n" +
                     $"Time source: selected AD DC (RootDSE currentTime), schedule interpreted in chosen campaign time zone.\r\n" +

@@ -64,7 +64,10 @@ internal static class NativeGpoConflictScan
                 (!string.Equals(actualDc, dc, StringComparison.OrdinalIgnoreCase) &&
                  !string.Equals(actualDc.Split('.')[0], dc, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("AD domain/DC identity mismatch.");
-            if (!Inside(ouDn, baseDn) || (ouDn.Length > 0 && ouDn.Any(char.IsControl)))
+            if (!Inside(ouDn, baseDn) ||
+                (!ouDn.Equals(baseDn, StringComparison.OrdinalIgnoreCase) &&
+                 !ouDn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase)) ||
+                (ouDn.Length > 0 && ouDn.Any(char.IsControl)))
                 throw new InvalidDataException("Selected OU is outside the verified AD domain.");
 
             var levels = ReadLevels(ldap, baseDn, ouDn);
@@ -79,10 +82,8 @@ internal static class NativeGpoConflictScan
                     bool blockedBelow = levels.Any(x => x.Depth > level.Depth && x.Blocked);
                     bool inScope = enabled && (enforced || !blockedBelow);
                     if (!TryLinkedGuid(link.Dn, baseDn, out Guid id))
-                    {
-                        notes.Add("Invalid GPO link in the selected OU hierarchy.");
-                        continue;
-                    }
+                        throw new InvalidDataException(
+                            "A linked GPO is invalid or outside the selected domain; scan incomplete.");
                     var entry = ReadObject(ldap, link.Dn,
                         "(objectClass=groupPolicyContainer)", "displayName", "flags", "gPCWQLFilter");
                     string gpoName = NativeAdDiscovery.Attr(entry, "displayName");
