@@ -75,6 +75,23 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+# Immediate Actions List/Preview run through read-only native LDAP/SYSVOL.
+# Legacy Task Scheduler RPC, VerifyCleanup and Apply remain embedded.
+native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
+assert 'operation == DomainOperation.Immediate && mode is ("List" or "Preview")' in runner
+assert 'NativeImmediateActions.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.CampaignPushNow.ps1' in csproj
+for guard in ('LegacyPlanHash', 'Selected(args, candidates)', 'ReadManagedGpo',
+              'SearchPaged', 'WindowsIdentity.RunImpersonated',
+              'RegistryValueOptions' if False else 'LogonUser',
+              'TimeZoneInfo.ConvertTimeFromUtc', 'ReadManifest',
+              'SHA256.HashData', 'MaxSelected = 25',
+              'ReferralChasingOptions.None'):
+    assert guard in native_immediate, guard
+legacy_action_fixture = (root / 'tools/test_native_immediate_preview.ps1').read_text(encoding='utf-8')
+assert 'AssignmentStatementAst' in legacy_action_fixture
+assert 'c33eacacdffb9233' in legacy_action_fixture
+
 # New version notice only checks pinned GitHub metadata and requires
 # explicit user interaction for all downloads and installations.
 update_notice = (project / 'MainForm.UpdateNotification.cs').read_text(encoding='utf-8')

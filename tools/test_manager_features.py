@@ -395,6 +395,11 @@ class ClientManagementContracts(unittest.TestCase):
         assert "InstallSelectedAsync" not in notice
         assert "Campaign editor - update available" in smoke
         assert "Campaign Wizard - deploy" in smoke
+        immediate = read("NativeImmediateActions.cs")
+        runner = read("DomainPowerShellRunner.cs")
+        assert 'mode is ("List" or "Preview")' in runner
+        assert 'LegacyPlanHash' in immediate
+        assert 'Task Scheduler RPC' in immediate
         self.assertIn("UiStyle.Navy", main)
         self.assertIn("Color.FromArgb(11,46,90)", theme)
         self.assertIn("Color.FromArgb(10,134,76)", theme)
@@ -426,7 +431,7 @@ class ClientManagementContracts(unittest.TestCase):
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         project = (APP / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-        self.assertIn('<Version>0.4.0-preview.53</Version>', project)
+        self.assertIn('<Version>0.4.0-preview.54</Version>', project)
         self.assertIn('test_manager_features.py', workflow)
         # Package name must derive from the project, never a stale preview string.
         self.assertIn('-getProperty:Version', workflow)
