@@ -265,14 +265,16 @@ public sealed partial class MainForm : Form
         _lastHours.ValueChanged += (_, _) => OnDataChanged();
         settingsFlow.Controls.Add(WithLabel("Last slide (hours)", _lastHours, 170));
         _timeZone.DropDownStyle = ComboBoxStyle.DropDown;
-        _timeZone.Width = 173;
-        _timeZone.DropDownWidth = 310;
+        _timeZone.Width = 350;
+        _timeZone.DropDownWidth = 530;
+        _timeZone.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+        _timeZone.AutoCompleteSource = AutoCompleteSource.ListItems;
         _timeZone.Items.AddRange(TimeZoneInfo.GetSystemTimeZones()
             .OrderBy(zone => zone.BaseUtcOffset)
             .ThenBy(zone => zone.Id, StringComparer.OrdinalIgnoreCase)
             .Select(zone => (object)zone.Id).ToArray());
         _timeZone.TextChanged += (_, _) => OnDataChanged();
-        settingsFlow.Controls.Add(WithLabel("Windows time zone", _timeZone, 198));
+        settingsFlow.Controls.Add(WithLabel("Windows time zone", _timeZone, 390));
         root.Controls.Add(settings, 0, 1);
 
         // The old fixed 98px settings band cropped "Campaign name" at
@@ -779,6 +781,29 @@ public sealed partial class MainForm : Form
         }
     }
 
+    // Called by the guided Wizard on its Schedule page. Synchronize the
+    // main editor control and in-memory project without relying on a Text
+    // event while the modal wizard is open.
+    private void ChooseCampaignTimeZone(string zoneId)
+    {
+        if (string.IsNullOrWhiteSpace(zoneId) ||
+            _project.TimeZoneId.Equals(zoneId, StringComparison.OrdinalIgnoreCase))
+            return;
+        // Reject invalid IDs before updating the project. The selected
+        // Windows ID is exported into the endpoint campaign manifest.
+        _ = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+        bool oldLoading = _loading;
+        _loading = true;
+        try
+        {
+            _timeZone.Text = zoneId;
+            _project.TimeZoneId = zoneId;
+        }
+        finally { _loading = oldLoading; }
+        _projectDirty = true;
+        UpdateRows();
+    }
+
     private void OpenScheduleEditor()
     {
         ReadControls();
@@ -795,6 +820,7 @@ public sealed partial class MainForm : Form
                 _startDate.Value = edited.StartLocal.Date;
                 _startTime.Value = DateTime.Today.Add(edited.StartLocal.TimeOfDay);
                 _lastHours.Value = edited.LastImageHours;
+                _timeZone.Text = edited.TimeZoneId;
             }
             finally { _loading = false; }
             _startDate.Enabled = _startTime.Enabled =
