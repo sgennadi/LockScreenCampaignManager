@@ -1,0 +1,422 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.DirectoryServices.Protocols;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using Microsoft.Win32.SafeHandles;
+
+namespace LockScreenCampaignManager;
+
+/// <summary>
+/// Native read-only Preview for managed LockScreen GPO lifecycle actions.
+/// The legacy PowerShell Apply independently rebuilds the SAME plan digest
+/// from LDAP, SYSVOL and the optional Reuse package before performing writes.
+/// No AD, GPO or SYSVOL changes occur in this class.
+/// </summary>
+internal static class NativeGpoLifecyclePreview
+{
+    private const int MaxLinks = 12000;
+    private const int MaxContainers = 10000;
+    private static readonly TimeSpan AuditTimeout = TimeSpan.FromMinutes(4);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly Regex GptVersionPattern = new(
+        @"(?im)^Version=(?<version>\d+)\s*$",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
+    private static readonly HashSet<string> Actions =
+        ["Disable", "Enable", "Unlink", "Relink", "Delete", "Reuse"];
+
+    internal sealed record Link(string ou, int flags, bool enabled, bool enforced,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? type);
+    private sealed record GpoState(string Dn, string Name, long Version, int Flags);
+    private sealed record ReusePackage(string CampaignId, string Hash);
+
+    private sealed record PreviewData(
+        string action, string name, string gpoId, string campaignId,
+        string newCampaignId, string domain, string dc, string ou,
+        bool linked, bool linkEnabled, IReadOnlyList<Link> links,
+        string hash, long version, string note);
+
+    internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
+    {
+        if (mode != "Preview")
+            throw new ArgumentException("The native lifecycle preview is read-only.");
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("LDAP and SYSVOL require Windows.");
+
+        JsonElement args = JsonSerializer.SerializeToElement(request, Json);
+        string domain = Get(args, "domain").Trim().ToLowerInvariant();
+        string requestedDc = Get(args, "dc").Trim();
+        NativeAdDiscovery.ValidateNames(domain, requestedDc);
+        if (requestedDc.Length == 0)
+            throw new ArgumentException("Select a domain controller before preparing a GPO plan.");
+
+        string ouDn = Get(args, "ouDn");
+        string requestedId = Get(args, "gpoId");
+        string action = Get(args, "action");
+        string packagePath = Get(args, "packagePath");
+        if (!Actions.Contains(action) ||
+            !Guid.TryParse(requestedId, out Guid gpoId) || gpoId == Guid.Empty)
+            throw new ArgumentException("Choose a supported action and a valid GPO GUID.");
+
+        JsonElement Run()
+        {
+            using var ldap = NativeAdDiscovery.Connect(requestedDc, credentials);
+            ldap.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+            var root = NativeAdDiscovery.ReadRootDse(ldap);
+            string baseDn = Required(root, "defaultNamingContext");
+            string actualDc = Required(root, "dnsHostName");
+            string configDn = Required(root, "configurationNamingContext");
+            string clock = Required(root, "currentTime");
+            if (!NativeAdDiscovery.DomainFromDn(baseDn).Equals(domain,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !NativeGpoLifecycleList.SameController(requestedDc, actualDc))
+                throw new InvalidOperationException(
+                    "The connected domain controller does not match the selected AD domain/DC.");
+            if (!NativeAdDiscovery.Attr(root, "isRODC").Equals("FALSE",
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Writable AD controller cannot be verified.");
+            DateTime dcUtc = NativeDcConsistency.ParseDcTime(clock);
+            int skewSeconds = (int)Math.Round((DateTime.UtcNow - dcUtc).TotalSeconds);
+            var timer = Stopwatch.StartNew();
+
+            if (!ouDn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
+                !NativeGpoConflictScan.Inside(ouDn, baseDn) ||
+                ouDn.Length > 2048 || ouDn.Any(char.IsControl) ||
+                !string.Equals(ouDn.Trim(), ouDn, StringComparison.Ordinal))
+                throw new InvalidDataException("Selected OU is invalid or outside the connected domain.");
+
+            _ = ReadOne(ldap, ouDn, "(objectClass=organizationalUnit)",
+                "distinguishedName");
+            string gpoDn = NativeGpoLifecycleList.PolicyDn(gpoId, baseDn);
+            var gpoEntry = ReadOne(ldap, gpoDn,
+                "(objectClass=groupPolicyContainer)",
+                "displayName", "versionNumber", "flags");
+            long version = LongAttr(gpoEntry, "versionNumber");
+            int flags = checked((int)LongAttr(gpoEntry, "flags", optional: true));
+            if (version < 0 || version > uint.MaxValue || flags is < 0 or > 3)
+                throw new InvalidDataException("Invalid AD GPO version or flags.");
+            string display = NativeAdDiscovery.Attr(gpoEntry, "displayName");
+            var gpo = new GpoState(gpoDn, display, version, flags);
+
+            var managed = NativeGpoLifecycleList.ReadManagedGpo(actualDc, domain, gpoId)
+                ?? throw new InvalidOperationException(
+                    "Selected policy is not a managed LockScreen campaign. Refusing a preview.");
+
+            string gpt = @"\\" + actualDc + @"\SYSVOL\" + domain +
+                @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
+            string scriptFile = Path.Combine(gpt, "Machine", "Scripts", "psscripts.ini");
+            string iniHash = FileSha256(scriptFile, 1, 1_048_576);
+            string gptText = ReadBoundedText(Path.Combine(gpt, "gpt.ini"),
+                1, 1_048_576, Encoding.UTF8);
+            var m = GptVersionPattern.Match(gptText);
+            if (!m.Success ||
+                !long.TryParse(m.Groups["version"].Value,
+                    NumberStyles.None, CultureInfo.InvariantCulture, out long gptVersion) ||
+                gptVersion != gpo.Version)
+                throw new InvalidOperationException(
+                    "GPO version mismatch between AD and SYSVOL. Refresh before applying.");
+
+            string rawLinks = NativeAdDiscovery.Attr(ReadOne(ldap, ouDn,
+                "(objectClass=organizationalUnit)", "gPLink"), "gPLink");
+            var linkEntries = NativeGpoLifecycleList.ParseLinks(rawLinks)
+                .Where(x => x.Dn.Equals(gpoDn, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (linkEntries.Length > 1)
+                throw new InvalidOperationException("Duplicate GPO links detected in selected OU.");
+            var selectedLink = linkEntries.FirstOrDefault();
+            var allLinks = CollectLinks(ldap, actualDc, baseDn, configDn, gpoDn, timer);
+
+            CheckAction(action, selectedLink is not null, allLinks.Count);
+            string newCampaignId = "";
+            string packageHash = "";
+            if (action == "Reuse")
+            {
+                if (Math.Abs((long)skewSeconds) > 300)
+                    throw new InvalidOperationException("Computer and selected DC clocks differ by more than five minutes.");
+                var package = ValidateReusePackage(packagePath, dcUtc);
+                newCampaignId = package.CampaignId;
+                packageHash = package.Hash;
+                if (newCampaignId.Equals(managed.campaignId,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Reuse requires a new campaign ID.");
+
+                string oldManifest = @"\\" + actualDc + @"\SYSVOL\" + domain +
+                    @"\scripts\LockScreenCampaigns\" + managed.campaignId + @"\campaign.json";
+                using var old = JsonDocument.Parse(ReadBoundedBytes(oldManifest, 10, 1_048_576),
+                    new JsonDocumentOptions { MaxDepth = 12 });
+                string endText = RequiredString(old.RootElement, "endLocal");
+                string zoneId = RequiredString(old.RootElement, "timeZoneId");
+                DateTime endLocal = ParseLocal(endText);
+                TimeZoneInfo zone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+                if (TimeZoneInfo.ConvertTimeFromUtc(dcUtc, zone) < endLocal)
+                    throw new InvalidOperationException("The existing campaign has not yet ended.");
+
+                string newSource = @"\\" + actualDc + @"\SYSVOL\" + domain +
+                    @"\scripts\LockScreenCampaigns\" + newCampaignId;
+                if (ExistsStrict(newSource))
+                    throw new InvalidOperationException("The new campaign is already present in SYSVOL.");
+            }
+
+            string planHash = LegacyPlanHash(domain, actualDc, gpo.Dn, ouDn,
+                rawLinks, gpo.Version, gpo.Flags, iniHash, action,
+                newCampaignId, packageHash);
+            var preview = new PreviewData(
+                action, gpo.Name, gpoId.ToString("D"), managed.campaignId,
+                newCampaignId, domain, actualDc, ouDn,
+                selectedLink is not null,
+                selectedLink is not null && (selectedLink.Flags & 1) == 0,
+                allLinks, planHash, gptVersion, Note(action));
+            return JsonSerializer.SerializeToElement(new
+            {
+                success = true,
+                message = "Native read-only GPO lifecycle preview. No changes made.",
+                data = preview
+            }, Json);
+        }
+
+        if (!credentials.IsAlternate) return Run();
+        string username = credentials.UserName.Trim();
+        string? accountDomain = null;
+        int slash = username.IndexOf('\\');
+        if (slash > 0 && slash < username.Length - 1)
+        {
+            accountDomain = username[..slash];
+            username = username[(slash + 1)..];
+        }
+        else if (!username.Contains('@'))
+            username += "@" + credentials.Domain.Trim();
+        if (credentials.Password.Length == 0 ||
+            !LogonUser(username, accountDomain, credentials.Password, 9, 3,
+                out SafeAccessTokenHandle token))
+            throw new Win32Exception(Marshal.GetLastWin32Error(),
+                "Cannot establish alternate network credentials for a GPO lifecycle preview.");
+        using (token)
+            return WindowsIdentity.RunImpersonated(token, Run);
+    }
+
+    internal static string LegacyPlanHash(string domain, string dc,
+        string gpoDn, string ouDn, string rawGpoLink, long version, int flags,
+        string psscriptsHash, string action, string newCampaignId,
+        string packageHash)
+    {
+        if (!Actions.Contains(action) ||
+            !Regex.IsMatch(psscriptsHash, @"\A[0-9a-fA-F]{64}\z") ||
+            (packageHash.Length > 0 &&
+             !Regex.IsMatch(packageHash, @"\A[0-9a-fA-F]{64}:[0-9a-fA-F]{64}\z")))
+            throw new InvalidDataException("Invalid GPO lifecycle preview hash components.");
+        // PowerShell 5.1 Get-FileHash.Hash returns UPPERCASE hex. Crucially,
+        // do not normalize the AD DN, selected OU, gPLink or DC spelling.
+        // The guarded Apply recomputes exactly this UTF-8 preimage.
+        string source = string.Join("|", new[] {
+            domain, dc, gpoDn, ouDn, rawGpoLink,
+            version.ToString(CultureInfo.InvariantCulture),
+            flags.ToString(CultureInfo.InvariantCulture),
+            psscriptsHash.ToUpperInvariant(), action, newCampaignId,
+            packageHash.ToUpperInvariant()
+        });
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(source)));
+    }
+
+    internal static void CheckAction(string action, bool linked, int linkCount)
+    {
+        if (!Actions.Contains(action))
+            throw new ArgumentException("Unsupported GPO lifecycle action.");
+        if (action is "Disable" or "Enable" or "Unlink" && !linked)
+            throw new InvalidOperationException("GPO is not linked to selected OU.");
+        if (action == "Relink" && linked)
+            throw new InvalidOperationException("GPO is already linked to selected OU.");
+        if (action == "Delete" && linkCount > 0)
+            throw new InvalidOperationException("Unlink the GPO from all OUs and sites before deletion.");
+    }
+
+    private static string Note(string action) => action switch
+    {
+        "Disable" => "Disables ONLY the chosen OU link. Already installed local tasks CONTINUE until separately cleaned up.",
+        "Enable" => "Re-enables ONLY the chosen OU link. Expired campaigns do not restart. Use Reuse to replace the manifest.",
+        "Unlink" => "Removes ONLY the selected OU link. GPO and SYSVOL content stay available.",
+        "Relink" => "Recreates an enabled link to the selected OU. Existing GPO and security filtering stay unchanged.",
+        "Delete" => "Permanently deletes the UNLINKED GPO. The campaign source folder stays in SYSVOL for separate manual review.",
+        "Reuse" => "Updates SAME GPO with a NEW campaign manifest/script. Keeps its GUID, link states and security filtering unchanged.",
+        _ => throw new ArgumentException("Unsupported GPO lifecycle action.")
+    };
+
+    private static string Get(JsonElement obj, string name) =>
+        obj.ValueKind == JsonValueKind.Object &&
+        obj.TryGetProperty(name, out JsonElement item) &&
+        item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : "";
+
+    private static string Required(SearchResultEntry entry, string name)
+    {
+        string value = NativeAdDiscovery.Attr(entry, name);
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidDataException("The selected DC did not return required GPO metadata.");
+        return value;
+    }
+
+    private static SearchResultEntry ReadOne(LdapConnection ldap, string dn,
+        string filter, params string[] attributes)
+    {
+        var result = (SearchResponse)ldap.SendRequest(
+            new SearchRequest(dn, filter, SearchScope.Base, attributes));
+        if (result.Entries.Count != 1)
+            throw new InvalidDataException("GPO or OU record is missing on the selected DC.");
+        return result.Entries[0];
+    }
+
+    private static long LongAttr(SearchResultEntry entry, string name, bool optional = false)
+    {
+        string raw = NativeAdDiscovery.Attr(entry, name);
+        if (optional && raw.Length == 0) return 0;
+        if (!long.TryParse(raw, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out long value))
+            throw new InvalidDataException("GPO numeric property is malformed.");
+        return value;
+    }
+
+    private static List<Link> CollectLinks(LdapConnection ldap, string actualDc,
+        string baseDn, string configDn, string targetGpoDn, Stopwatch timer)
+    {
+        var links = new List<Link>();
+        foreach (var (rootDn, filter, site) in new[] {
+            (baseDn, "(|(objectClass=organizationalUnit)(objectClass=domainDNS))", false),
+            ("CN=Sites," + configDn, "(objectClass=site)", true)
+        })
+        {
+            foreach (SearchResultEntry entry in NativeGpoLifecycleList.SearchPaged(
+                         ldap, rootDn, filter, 10000, timer, "gPLink"))
+            {
+                string raw = NativeAdDiscovery.Attr(entry, "gPLink");
+                if (raw.Length == 0) continue;
+                foreach (var link in NativeGpoLifecycleList.ParseLinks(raw))
+                {
+                    if (links.Count >= MaxLinks)
+                        throw new InvalidDataException("GPO link inventory exceeds safe limits.");
+                    if (!link.Dn.Equals(targetGpoDn, StringComparison.OrdinalIgnoreCase)) continue;
+                    links.Add(new Link(site
+                        ? "LDAP://" + actualDc + "/" + entry.DistinguishedName
+                        : entry.DistinguishedName,
+                        link.Flags, (link.Flags & 1) == 0,
+                        (link.Flags & 2) != 0, site ? "Site" : null));
+                }
+            }
+        }
+        return links;
+    }
+
+    private static ReusePackage ValidateReusePackage(string packageFolder, DateTime dcUtc)
+    {
+        if (string.IsNullOrWhiteSpace(packageFolder) ||
+            packageFolder.Length > 2000 || !Path.IsPathFullyQualified(packageFolder))
+            throw new InvalidDataException("Export the campaign before reusing the GPO.");
+        SafeDirectory(packageFolder);
+        string manifest = Path.Combine(packageFolder, "campaign.json");
+        string agent = Path.Combine(packageFolder, "LockScreen-Agent.ps1");
+        string manifestHash = FileSha256(manifest, 10, 1_048_576);
+        string agentHash = FileSha256(agent, 1, 5 * 1_048_576);
+        using var doc = JsonDocument.Parse(ReadBoundedBytes(manifest, 10, 1_048_576),
+            new JsonDocumentOptions { MaxDepth = 12 });
+        JsonElement cfg = doc.RootElement;
+        string campaignId = RequiredString(cfg, "campaignId");
+        if (!NativeSysvolStorage.ValidCampaignId(campaignId) ||
+            cfg.GetProperty("schemaVersion").GetInt32() != 1)
+            throw new InvalidDataException("Invalid exported campaign manifest.");
+        string timeZoneId = RequiredString(cfg, "timeZoneId");
+        TimeZoneInfo timezone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        DateTime end = ParseLocal(RequiredString(cfg, "endLocal"));
+        if (timezone.IsAmbiguousTime(end) || timezone.IsInvalidTime(end) ||
+            TimeZoneInfo.ConvertTimeFromUtc(dcUtc, timezone) >= end)
+            throw new InvalidOperationException("New campaign has ended or has an ambiguous end time.");
+        if (cfg.TryGetProperty("agentSha256", out JsonElement expectedAgent) &&
+            !string.Equals(expectedAgent.GetString(), agentHash,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Exported campaign agent SHA-256 mismatches manifest.");
+        var slides = cfg.GetProperty("slides");
+        if (slides.ValueKind != JsonValueKind.Array || slides.GetArrayLength() is < 1 or > 30)
+            throw new InvalidDataException("Expected 1-30 campaign images.");
+        SafeDirectory(Path.Combine(packageFolder, "images"));
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        DateTime previous = DateTime.MinValue;
+        foreach (JsonElement slide in slides.EnumerateArray())
+        {
+            string file = RequiredString(slide, "fileName");
+            string expected = RequiredString(slide, "sha256");
+            DateTime at = ParseLocal(RequiredString(slide, "atLocal"));
+            if (!Regex.IsMatch(file, @"\A[0-9]{2}\.jpg\z") ||
+                !seen.Add(file) ||
+                !Regex.IsMatch(expected, @"\A[0-9a-fA-F]{64}\z") ||
+                at <= previous || at >= end ||
+                timezone.IsAmbiguousTime(at) || timezone.IsInvalidTime(at))
+                throw new InvalidDataException("Campaign image or slide schedule is invalid.");
+            previous = at;
+            string actual = FileSha256(Path.Combine(packageFolder, "images", file),
+                1, 30 * 1_048_576);
+            if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Campaign image SHA-256 mismatches manifest.");
+        }
+        return new ReusePackage(campaignId, manifestHash + ":" + agentHash);
+    }
+
+    private static string RequiredString(JsonElement json, string name) =>
+        json.ValueKind == JsonValueKind.Object &&
+        json.TryGetProperty(name, out var item) &&
+        item.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(item.GetString()) ?
+        item.GetString()! : throw new InvalidDataException(
+            "Required campaign manifest data is missing.");
+
+    private static DateTime ParseLocal(string value) =>
+        DateTime.ParseExact(value, "yyyy-MM-ddTHH:mm:ss",
+            CultureInfo.InvariantCulture, DateTimeStyles.None);
+
+    private static void SafeDirectory(string path)
+    {
+        FileAttributes attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.Directory) == 0 ||
+            (attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Campaign folder is not a regular directory.");
+    }
+
+    private static bool ExistsStrict(string path)
+    {
+        try { _ = File.GetAttributes(path); return true; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+    }
+
+    private static byte[] ReadBoundedBytes(string path, long min, long max)
+    {
+        FileAttributes attrs = File.GetAttributes(path);
+        if ((attrs & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+            throw new InvalidDataException("Referenced GPO file is unsafe.");
+        var info = new FileInfo(path);
+        if (info.Length < min || info.Length > max)
+            throw new InvalidDataException("Referenced GPO file has an unexpected size.");
+        return File.ReadAllBytes(path);
+    }
+
+    private static string ReadBoundedText(string path, long min, long max,
+        Encoding encoding) => encoding.GetString(ReadBoundedBytes(path, min, max));
+
+    private static string FileSha256(string path, long min, long max)
+    {
+        FileAttributes attributes = File.GetAttributes(path);
+        if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+            throw new InvalidDataException("Referenced GPO file is not regular.");
+        var info = new FileInfo(path);
+        if (info.Length < min || info.Length > max)
+            throw new InvalidDataException("Referenced GPO file is missing or oversized.");
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return Convert.ToHexString(SHA256.HashData(input));
+    }
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool LogonUser(string username, string? domain,
+        string password, int logonType, int provider, out SafeAccessTokenHandle token);
+}
