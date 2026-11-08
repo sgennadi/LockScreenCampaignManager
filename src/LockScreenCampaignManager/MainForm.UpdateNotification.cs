@@ -154,7 +154,10 @@ public sealed partial class MainForm
         {
             float increase = height - _noticeFooter.RowStyles[1].Height;
             _noticeFooter.RowStyles[1].Height = height;
-            _noticeRoot.RowStyles[4].Height += increase;
+            // The footer is now pinned in the shell's SECOND row, not
+            // inside the editor viewport. Grow that fixed footer in place.
+            if (_noticeRoot.RowStyles.Count > 1)
+                _noticeRoot.RowStyles[1].Height += increase;
         }
         if (_updateNotice.Visible)
         {
