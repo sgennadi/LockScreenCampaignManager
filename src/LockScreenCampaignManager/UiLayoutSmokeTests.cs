@@ -160,6 +160,39 @@ internal static class UiLayoutSmokeTests
         return wizard;
     }
 
+    private static void CheckMainEditorHeader(Form form, string profile)
+    {
+        Label[] labels = Descendants(form).OfType<Label>().ToArray();
+        Label? title = labels.FirstOrDefault(x => x.Name == "MainHeaderTitle");
+        if (title is null) return;
+        Label steps = labels.FirstOrDefault(x => x.Name == "MainHeaderSteps") ??
+            throw new InvalidOperationException("Missing main editor step label.");
+        Label company = labels.FirstOrDefault(x => x.Name == "MainHeaderCompany") ??
+            throw new InvalidOperationException("Missing main editor company label.");
+        if (title.Parent is not TableLayoutPanel header ||
+            header.Parent is not TableLayoutPanel outer ||
+            header.RowStyles.Count < 4)
+            throw new InvalidOperationException("Main editor header layout invalid.");
+        Control actions = header.GetControlFromPosition(0, 3) ??
+            throw new InvalidOperationException("AD controls missing from main header.");
+        UiStyle.FitEditorHeader(outer, header, title, steps, company, actions, 190);
+        int expected = header.RowStyles.Cast<RowStyle>().Take(4)
+            .Sum(x => (int)Math.Ceiling(x.Height)) +
+            header.Padding.Vertical + header.Margin.Vertical;
+        if (outer.RowStyles[0].Height < expected)
+            throw new InvalidOperationException(
+                $"Main editor header overlaps AD controls at {profile}.");
+        foreach (Label label in new[] { title, steps, company })
+        {
+            int measured = TextRenderer.MeasureText("Agpqy", label.Font).Height +
+                label.Padding.Vertical + label.Margin.Vertical + 5;
+            int row = header.GetRow(label);
+            if (header.RowStyles[row].Height < measured)
+                throw new InvalidOperationException(
+                    $"Main editor header clipped {label.Name} at {profile}.");
+        }
+    }
+
     private static void CheckWizardHeader(Form form, string profile)
     {
         Label[] labels = Descendants(form).OfType<Label>().ToArray();
@@ -216,6 +249,7 @@ internal static class UiLayoutSmokeTests
                     FontScalePercent = profile.Settings.FontScalePercent
                 });
                 form.PerformLayout();
+                CheckMainEditorHeader(form, profile.Name);
                 CheckWizardHeader(form, profile.Name);
                 var controls = Descendants(form).ToArray();
                 var actual = controls.OfType<Button>().ToArray();
