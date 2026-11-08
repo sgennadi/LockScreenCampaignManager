@@ -39,7 +39,7 @@ internal static class TimeZoneChoices
                 box.Items.Cast<string>().FirstOrDefault(x =>
                     x.Equals(TimeZoneInfo.Local.Id,
                         StringComparison.OrdinalIgnoreCase));
-            box.DropDownWidth = Math.Max(490, box.Width);
+            box.DropDownWidth = Math.Max(Math.Max(540, box.Width), box.DropDownWidth);
         }
         finally { box.EndUpdate(); }
     }
