@@ -389,6 +389,21 @@ internal static class UiLayoutSmokeTests
                 CheckWizardHeader(form, profile.Name);
                 CheckWizardFooter(form, profile.Name);
                 CheckTimeZoneSelectors(form, profile.Name);
+                if (window.Name is "Campaign Wizard - images" or "Campaign Wizard - arrange")
+                {
+                    var imageList = Descendants(form).OfType<ListBox>()
+                        .SingleOrDefault(x => x.Name == "CampaignWizardImageList");
+                    var imagePreview = Descendants(form).OfType<PictureBox>()
+                        .SingleOrDefault(x => x.Name == "CampaignWizardImagePreview");
+                    var imagePath = Descendants(form).OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "CampaignWizardImagePath");
+                    if (imageList is null || imagePreview is null || imagePath is null ||
+                        imagePreview.FindForm() != form ||
+                        imagePreview.SizeMode != PictureBoxSizeMode.Zoom ||
+                        imagePreview.Dock != DockStyle.Fill)
+                        throw new InvalidOperationException(
+                            $"Wizard image list and live preview must share the same page at {profile.Name}.");
+                }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
                     CheckCampaignNameLayout(form, profile.Name);
