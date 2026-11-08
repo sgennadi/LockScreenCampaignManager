@@ -337,7 +337,7 @@ public sealed partial class MainForm
             if (_host.IsDisposed) return;
             if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
                 && !page.IsDisposed)
-                page.Height = Math.Max(_step is 1 or 2 ? 450 : 390,
+                page.Height = Math.Max(_step is 1 or 2 ? 720 : 390,
                     _host.ClientSize.Height - _host.Padding.Vertical);
         }
 
@@ -418,7 +418,7 @@ public sealed partial class MainForm
                 var page = new TableLayoutPanel
                 {
                     Dock = DockStyle.Top,
-                    Height = Math.Max(imagePage ? 450 : 390,
+                    Height = Math.Max(imagePage ? 720 : 390,
                         _host.ClientSize.Height - _host.Padding.Vertical),
                     ColumnCount = 1, RowCount = 5,
                     Padding = new Padding(10, 7, 10, 9),
@@ -633,6 +633,7 @@ public sealed partial class MainForm
             var imageArea = new TableLayoutPanel
             {
                 Name = "CampaignWizardImageArea", Dock = DockStyle.Fill,
+                MinimumSize = new Size(400, 385),
                 ColumnCount = 2, RowCount = 1,
                 BackColor = UiStyle.SoftBlue, Margin = Padding.Empty
             };
@@ -661,7 +662,10 @@ public sealed partial class MainForm
                 Margin = new Padding(7, 0, 0, 0)
             };
             previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            previewPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            // Reserve real pixels for the bitmap. A percent-only middle row
+            // collapsed to 0 at some DPI/window sizes even when an image
+            // was loaded successfully. The host scrolls on small screens.
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
             previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
             previewPanel.Controls.Add(new Label
             {
@@ -688,6 +692,7 @@ public sealed partial class MainForm
             {
                 Name = "CampaignWizardPreviewFrame",
                 Dock = DockStyle.Fill, BackColor = Color.FromArgb(27, 34, 45),
+                MinimumSize = new Size(130, 235),
                 Margin = Padding.Empty
             };
             var placeholder = new Label
