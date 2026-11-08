@@ -497,11 +497,11 @@ internal static class GmsaNativeSetup
             try
             {
                 dynamic? task = TaskOrNull(SchedulerFolder());
-                if (task is not null && SameTask(task, config)) task.Enabled = false;
+                if (task is not null && SameTask(task, config)) task!.Enabled = false;
                 dynamic? diagnostic = TaskOrNull(SchedulerFolder(), DiagnosticTaskName);
                 if (diagnostic is not null &&
                     SameTask(diagnostic, config, "--gmsa-diagnose-once"))
-                    diagnostic.Enabled = false;
+                    diagnostic!.Enabled = false;
             }
             catch (Exception ex) { AppLog.Write(ex, "Disable failed gMSA task"); }
             throw;
