@@ -62,6 +62,12 @@ assert 'SessionOptions.Sealing = true' in native
 assert 'NativeAdDiscovery.Execute(mode, request, credentials)' in runner
 assert 'LockScreenCampaignManager.ADDiscovery.ps1' not in csproj
 assert 'System.DirectoryServices.Protocols' in csproj
+multi_dc = (project / 'NativeDcConsistency.cs').read_text(encoding='utf-8')
+assert 'NativeDcConsistency.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.DcConsistency.ps1' not in csproj
+assert 'RunImpersonated' in multi_dc and 'LOGON_NETCREDENTIALS_ONLY' in multi_dc
+assert 'SHA256.HashData' in multi_dc and 'RootDSE' in multi_dc
+
 
 assert 'psscripts.ini' in gpo and 'gPCMachineExtensionNames' in gpo
 assert 'Set-SecurityFilter' in gpo and 'edacfd8f-ffb3-11d1-b41d-00a0c968f939' in gpo

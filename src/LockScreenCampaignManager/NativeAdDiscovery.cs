@@ -107,7 +107,7 @@ internal static class NativeAdDiscovery
         request.TryGetProperty(name, out var item) &&
         item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : "";
 
-    private static LdapConnection Connect(string server, DomainCredentials credentials)
+    internal static LdapConnection Connect(string server, DomainCredentials credentials)
     {
         var identifier = new LdapDirectoryIdentifier(server, 389, false, false);
         LdapConnection ldap;
@@ -147,17 +147,17 @@ internal static class NativeAdDiscovery
         }
     }
 
-    private static SearchResultEntry ReadRootDse(LdapConnection ldap)
+    internal static SearchResultEntry ReadRootDse(LdapConnection ldap)
     {
         var response = (SearchResponse)ldap.SendRequest(new SearchRequest("",
             "(objectClass=*)", SearchScope.Base,
-            "defaultNamingContext", "dnsHostName", "isRODC"));
+            "defaultNamingContext", "dnsHostName", "isRODC", "currentTime"));
         if (response.Entries.Count != 1)
             throw new InvalidOperationException("RootDSE did not return exactly one directory root.");
         return response.Entries[0];
     }
 
-    private static string Attr(SearchResultEntry entry, string name)
+    internal static string Attr(SearchResultEntry entry, string name)
     {
         if (!entry.Attributes.Contains(name)) return "";
         var attr = entry.Attributes[name];

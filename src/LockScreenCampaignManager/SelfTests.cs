@@ -31,6 +31,7 @@ internal static class SelfTests
         TestExpectedCampaignValidation();
         TestAdDirectorySnapshot();
         TestNativeAdDiscoveryContracts();
+        TestNativeDcConsistencyContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -212,6 +213,23 @@ internal static class SelfTests
             !scope.Matches(snapshot with { Domain = "other.example.com" },
                 profile, now),
             "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
+    private static void TestNativeDcConsistencyContracts()
+    {
+        Check(NativeDcConsistency.ValidController("dc01.example.com", "example.com"),
+            "Native DC audit permits explicitly scoped hosts");
+        Check(!NativeDcConsistency.ValidController("dc01.other.test", "example.com") &&
+            !NativeDcConsistency.ValidController("-dc01.example.com", "example.com"),
+            "Native DC audit rejects out-of-domain and unsafe DNS hosts");
+        var timestamp = NativeDcConsistency.ParseDcTime("20261108123456.0Z");
+        Check(timestamp.Kind == DateTimeKind.Utc &&
+            timestamp.ToString("yyyyMMddHHmmss") == "20261108123456",
+            "Native DC audit samples UTC generalized time");
+        bool rejected = false;
+        try { NativeDcConsistency.ParseDcTime("invalid"); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Native DC audit rejects untrusted clock formats");
     }
 
     private static void TestNativeAdDiscoveryContracts()

@@ -30,6 +30,11 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Discovery)
             return NativeAdDiscovery.Execute(mode, request, credentials);
 
+        // Explicitly selected DC consistency audits also use native C# and
+        // reuse the same authenticated LDAP library. SMB reads are read-only.
+        if (operation == DomainOperation.DcConsistency)
+            return NativeDcConsistency.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -42,7 +47,6 @@ internal static class DomainPowerShellRunner
                 DomainOperation.Immediate => "LockScreenCampaignManager.CampaignPushNow.ps1",
                 DomainOperation.Assignment => "LockScreenCampaignManager.ComputerGroupAssignment.ps1",
                 DomainOperation.Storage => "LockScreenCampaignManager.SysvolStorage.ps1",
-                DomainOperation.DcConsistency => "LockScreenCampaignManager.DcConsistency.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
             string script = Path.Combine(root, operation switch
@@ -53,7 +57,6 @@ internal static class DomainPowerShellRunner
                 DomainOperation.Immediate => "Campaign-PushNow.ps1",
                 DomainOperation.Assignment => "Computer-GroupAssignment.ps1",
                 DomainOperation.Storage => "Sysvol-Storage.ps1",
-                DomainOperation.DcConsistency => "Dc-Consistency.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             });
             using (var resource = typeof(DomainPowerShellRunner).Assembly.GetManifestResourceStream(asset)
