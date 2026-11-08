@@ -62,8 +62,7 @@ internal static class NativeGpoDeploymentPlan
                 !NativeGpoLifecycleList.SameController(dc, actualDc))
                 throw new InvalidOperationException(
                     "Selected AD domain and domain controller cannot be verified.");
-            if (!NativeAdDiscovery.Attr(root, "isRODC").Equals("FALSE",
-                    StringComparison.OrdinalIgnoreCase))
+            if (NativeAdDiscovery.ReadDcWritable(ldap, root) != true)
                 throw new InvalidOperationException("A writable domain controller is required.");
             DateTime dcUtc = NativeDcConsistency.ParseDcTime(Required(root, "currentTime"));
             int skew = (int)Math.Round((DateTime.UtcNow - dcUtc).TotalSeconds);
