@@ -19,8 +19,8 @@ internal static class AppVersion
         {
             var value = typeof(AppVersion).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                .InformationalVersion.Split('+', 2)[0] ?? "0.4.0-preview.30";
-            return SemanticVersion.TryParse(value, out _) ? value : "0.4.0-preview.30";
+                .InformationalVersion.Split('+', 2)[0] ?? "0.4.0-preview.31";
+            return SemanticVersion.TryParse(value, out _) ? value : "0.4.0-preview.31";
         }
     }
 }
@@ -224,12 +224,12 @@ internal sealed class UniversalUpdaterWindow : Form
             _available = found;
             if (found is null)
             {
-                _output.Text = "No newer compatible release is available in the visible GitHub Releases." +
-                    Environment.NewLine + Environment.NewLine +
-                    "Public releases need no token. HTTP 404 is an access error, " +
-                    "not proof of being up to date." +
-                    Environment.NewLine +
-                    "A published release needs a matching architecture-specific Update ZIP and GitHub SHA-256 digest.";
+                _output.Text = options.Channel == UpdateChannel.Stable
+                    ? "No newer stable release is published. A preview is not a Stable release." +
+                      Environment.NewLine + "Choose Preview + stable to find development previews."
+                    : "No newer compatible preview or stable release is available." +
+                      Environment.NewLine + "The release must include an architecture-specific Update ZIP " +
+                      "with a GitHub SHA-256 digest.";
                 _state.Text = "No newer compatible release returned by the selected access mode.";
             }
             else

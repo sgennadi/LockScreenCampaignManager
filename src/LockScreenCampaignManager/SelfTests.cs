@@ -2770,7 +2770,7 @@ internal static class SelfTests
                 throw new InvalidOperationException("Missing mock request URI.");
             System.Net.Http.HttpResponseMessage response;
             if (address.Host == "api.github.com" &&
-                address.AbsolutePath.EndsWith("/releases/", StringComparison.Ordinal))
+                address.AbsolutePath.EndsWith("/releases", StringComparison.Ordinal))
             {
                 Check(token is null
                     ? request.Headers.Authorization is null
@@ -2778,7 +2778,7 @@ internal static class SelfTests
                       request.Headers.Authorization.Scheme == "Bearer",
                     "Public metadata is anonymous; private token stays on pinned GitHub API");
                 MetadataCount++;
-                const string tag = "v0.4.0-preview.31";
+                const string tag = "v0.4.0-preview.32";
                 var body = new[] { new {
                     tag_name = tag, draft = false, prerelease = true,
                     html_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/tag/" + tag,
@@ -2936,6 +2936,25 @@ internal static class SelfTests
                     File.Exists(publicStaged.ExtractedExecutablePath) &&
                     publicStaged.ArchiveSha256 == archiveDigest,
                     "Public update uses signed GitHub URL to CDN, verifies SHA/PE and requires no token");
+            }
+            // A public repo with only prereleases must never report HTTP 404
+            // in Stable only mode. The result should be 'no newer stable'.
+            var stableOptions = new UniversalUpdater.UpdateOptions {
+                ProductId = isolated.ProductId, Repository = isolated.Repository,
+                InstalledVersion = isolated.InstalledVersion,
+                Architecture = isolated.Architecture,
+                Channel = UniversalUpdater.UpdateChannel.Stable,
+                Assets = isolated.Assets, StateDirectory = root,
+                MaxArchiveBytes = isolated.MaxArchiveBytes,
+                MaxExpandedBytes = isolated.MaxExpandedBytes
+            };
+            using (var stableClient = new UniversalUpdater.GitHubReleaseClient(
+                new System.Net.Http.HttpClient(
+                    new TestReleaseTransport(archive, null, archiveDigest), true)))
+            {
+                var stableOnly = await stableClient.CheckAsync(stableOptions);
+                Check(stableOnly is null,
+                    "Stable-only channel returns no release when only preview builds exist");
             }
             var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!);
             Check(!signer.Trusted && signer.Code.StartsWith("0x", StringComparison.Ordinal),

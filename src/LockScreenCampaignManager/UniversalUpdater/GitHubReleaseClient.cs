@@ -22,15 +22,17 @@ public sealed class GitHubReleaseClient : IDisposable
         options.Validate();
         sessionToken = GitHubCredentialScope.ValidateSessionToken(sessionToken);
         var current = SemanticVersion.Parse(options.InstalledVersion);
-        var url = $"https://api.github.com/repos/{options.Repository}/releases/" +
-                  (options.Channel == UpdateChannel.Stable ? "latest" : "?per_page=100");
+        // GitHub /releases/latest is 404 when a public repository has only
+        // prereleases. Always list releases; filter stable/preview locally.
+        var url = $"https://api.github.com/repos/{options.Repository}/releases?per_page=100";
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         GitHubCredentialScope.AttachIfAllowed(request, sessionToken,
             GitHubCredentialScope.IsMetadataEndpoint(request.RequestUri!, options));
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("UniversalUpdater", "0.1"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        // For a private repository GitHub masks unauthorized requests as 404.
+        // HTTP 404 is an access error only for this pinned list endpoint.
+        // An empty list (or preview-only list in Stable mode) is not an error.
         // Never interpret this as proof that the installed version is current.
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new InvalidOperationException(
