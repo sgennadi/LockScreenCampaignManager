@@ -320,31 +320,38 @@ public sealed partial class MainForm : Form
         _advancedButtons.WrapContents = true;
         _advancedButtons.AutoScroll = true;
         var actions = _advancedButtons;
-        actions.Controls.Add(MakeButton("Companies", OpenCompanyProfiles, 142));
-        actions.Controls.Add(MakeButton("New campaign", StartNewCampaign, 163));
-        actions.Controls.Add(MakeButton("Save project", SaveProject, 158));
-        actions.Controls.Add(MakeButton("Open project", OpenProject, 148));
-        actions.Controls.Add(MakeButton("Schedule", OpenScheduleEditor, 128));
-        _manualValidate.Text = "Validate";
-        _manualValidate.Width = 116;
-        _manualValidate.Height = 36;
-        _manualValidate.Click += (_, _) => ValidateCurrent();
-        actions.Controls.Add(_manualValidate);
-        _manualExport.Text = "Export package";
-        _manualExport.Width = 161;
-        _manualExport.Height = 36;
-        _manualExport.Click += (_, _) => ExportPackage();
-        actions.Controls.Add(_manualExport);
-        _manualDeploy.Text = "GPO deploy...";
-        _manualDeploy.Width = 165;
-        _manualDeploy.Height = 36;
-        _manualDeploy.Click += (_, _) => OpenDomainDeployment(true);
-        actions.Controls.Add(_manualDeploy);
-        actions.Controls.Add(MakeButton("Client feedback", OpenFeedbackSettings, 164));
-        actions.Controls.Add(MakeButton("Settings", OpenUiSettings, 124));
-        actions.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
-        actions.Controls.Add(MakeButton("Updates", OpenUniversalUpdater, 120));
-        actions.Controls.Add(MakeButton("History", OpenCampaignHistory, 118));
+        AddActionMenu(actions, "Project", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("New campaign...", StartNewCampaign, null),
+            ("Open project...", OpenProject, null),
+            ("Save project...", SaveProject, null),
+            ("Companies...", OpenCompanyProfiles, null),
+            ("History...", OpenCampaignHistory, null)
+        });
+        AddActionMenu(actions, "Images / schedule", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Add files...", AddImages, null),
+            ("Add folder...", AddImagesFromFolder, null),
+            ("Edit schedule...", OpenScheduleEditor, () => _project.ImagePaths.Count > 0),
+            ("Replace selected...", ReplaceImage, () => SelectedIndex >= 0),
+            ("Remove selected", RemoveImage, () => SelectedIndex >= 0),
+            ("Move up", () => MoveImage(-1), () => SelectedIndex > 0),
+            ("Move down", () => MoveImage(+1), () => SelectedIndex >= 0 && SelectedIndex < _project.ImagePaths.Count - 1),
+            ("Sort by filename...", SortImagesByFilename, () => _project.ImagePaths.Count > 1),
+            ("Auto match filenames...", AutoMatchImageNames, () => _project.ImagePaths.Count > 0)
+        });
+        AddActionMenu(actions, "Review / export", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Validate campaign...", ValidateCurrent, () => _project.ImagePaths.Count > 0),
+            ("Export package...", ExportPackage, () => _project.ImagePaths.Count > 0)
+        });
+        AddActionMenu(actions, "AD / GPO", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Connect AD account...", ConnectAndReadAd, null),
+            ("Deploy GPO...", () => OpenDomainDeployment(true), () => AdReady && _project.ImagePaths.Count > 0),
+            ("Client feedback...", OpenFeedbackSettings, null)
+        });
+        AddActionMenu(actions, "Tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Settings...", OpenUiSettings, null),
+            ("Diagnostics...", OpenDiagnostics, null),
+            ("Check updates...", OpenUniversalUpdater, null)
+        });
         _status.Text = "Ready — add images or open a project";
         _status.ForeColor = Color.DimGray;
         _status.AutoSize = true;
@@ -353,13 +360,23 @@ public sealed partial class MainForm : Form
         _quickButtons.Dock = DockStyle.Fill;
         _quickButtons.AutoScroll = true;
         _quickButtons.WrapContents = true;
-        _quickButtons.Controls.Add(MakeButton("New campaign", StartNewCampaign, 155));
-        _quickButtons.Controls.Add(MakeButton("Open project", OpenProject, 140));
-        _quickButtons.Controls.Add(MakeButton("Save project", SaveProject, 142));
-        _quickButtons.Controls.Add(MakeButton("Companies", OpenCompanyProfiles, 126));
-        _quickButtons.Controls.Add(MakeButton("Settings", OpenUiSettings, 115));
-        _quickButtons.Controls.Add(MakeButton("Updates", OpenUniversalUpdater, 110));
-        _quickButtons.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
+        AddActionMenu(_quickButtons, "Project", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("New campaign...", StartNewCampaign, null),
+            ("Open project...", OpenProject, null),
+            ("Save project...", SaveProject, null),
+            ("Companies...", OpenCompanyProfiles, null)
+        });
+        AddActionMenu(_quickButtons, "Help / tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
+            ("Settings...", OpenUiSettings, null),
+            ("Diagnostics...", OpenDiagnostics, null),
+            ("Check updates...", OpenUniversalUpdater, null),
+            ("History...", OpenCampaignHistory, null)
+        });
+        _quickButtons.Controls.Add(new Label {
+            Text = "Local editing works without administrator rights. GPO deployment is optional.",
+            ForeColor = UiStyle.Muted, AutoSize = true,
+            Margin = new Padding(16, 11, 0, 0)
+        });
         var toolsHost = new Panel { Dock = DockStyle.Fill };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
@@ -382,6 +399,30 @@ public sealed partial class MainForm : Form
         control.Anchor = AnchorStyles.Left | AnchorStyles.Top;
         box.Controls.Add(control, 0, 1);
         return box;
+    }
+
+    private static void AddActionMenu(FlowLayoutPanel host, string title,
+        (string Label, Action Execute, Func<bool>? Allowed)[] entries)
+    {
+        var button = new Button {
+            Text = title + "  ▾", Width = Math.Max(148, title.Length * 9 + 45),
+            Height = 38, Margin = new Padding(0, 0, 9, 5), Cursor = Cursors.Hand,
+            Tag = "NoIcon"
+        };
+        var menu = new ContextMenuStrip { ShowImageMargin = false };
+        foreach (var entry in entries)
+        {
+            var item = new ToolStripMenuItem(entry.Label);
+            item.Click += (_, _) => entry.Execute();
+            menu.Items.Add(item);
+        }
+        menu.Opening += (_, _) => {
+            for (int i = 0; i < entries.Length; i++)
+                menu.Items[i].Enabled = entries[i].Allowed?.Invoke() ?? true;
+        };
+        button.Click += (_, _) => menu.Show(button, 0, button.Height);
+        button.ContextMenuStrip = menu;
+        host.Controls.Add(button);
     }
 
     private static Button MakeButton(string label, Action action, int width, bool primary = false)
