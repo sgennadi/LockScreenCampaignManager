@@ -2,7 +2,7 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Current preview:** `0.4.0-preview.31` — universal Active Directory Lock Screen campaign manager for Windows 11. BitKeyBridge-inspired navy/blue/green GUI begins with **Connect to DC & Read AD**. Windows x86/x64 self-tests, diagnostics and updater tests are required to pass before publishing the GitHub prerelease; production DC/Windows 11 acceptance is still pending.
+**Current preview:** `0.4.0-preview.35` — universal Active Directory lock-screen campaign manager with an **image-first offline Wizard** and Advanced GPO deployment mode. The GPO **client agent** accepts Windows 10 (build 14393+, Enterprise/Education/IoT Enterprise including applicable LTSC/LTSB) and Windows 11 Enterprise/Education/IoT Enterprise. Windows Pro/Home do not support this GPO-based forced lock-screen approach. Windows x86/x64 manager builds, client OS-gate tests, diagnostics and updater CI run before publishing releases; real Windows 10/11 domain client tests are still required. [Client compatibility](docs/WINDOWS10-CLIENT-COMPATIBILITY.md).
 
 > **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 
