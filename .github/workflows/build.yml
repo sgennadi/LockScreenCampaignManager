@@ -51,6 +51,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_gpo_operations.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_dual_client.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_feedback_protocol.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_manager_features.py
@@ -187,6 +189,15 @@ jobs:
           $probe = Start-Process -FilePath $exe -ArgumentList '--self-test-exit-probe' -Wait -PassThru
           if ($probe.ExitCode -ne 37) {
             throw "WinExe exit-code probe expected 37, got $($probe.ExitCode)"
+          }
+
+      - name: Reject invalid native client mode without starting GUI
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe").Path
+          $reject = Start-Process -FilePath $exe -ArgumentList '--client-agent Invalid' -Wait -PassThru
+          if ($reject.ExitCode -ne 2) {
+            throw "Native client must reject invalid mode with exit 2 (got $($reject.ExitCode))."
           }
 
       - name: Run full self-tests (fail closed)
