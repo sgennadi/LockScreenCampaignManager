@@ -151,7 +151,8 @@ internal static class NativeAdDiscovery
     {
         var response = (SearchResponse)ldap.SendRequest(new SearchRequest("",
             "(objectClass=*)", SearchScope.Base,
-            "defaultNamingContext", "dnsHostName", "isRODC", "currentTime"));
+            "defaultNamingContext", "dnsHostName", "isRODC", "currentTime",
+            "configurationNamingContext"));
         if (response.Entries.Count != 1)
             throw new InvalidOperationException("RootDSE did not return exactly one directory root.");
         return response.Entries[0];

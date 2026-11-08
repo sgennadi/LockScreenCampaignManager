@@ -81,10 +81,10 @@ internal static class NativeGpoLifecycleList
 
             var timer = Stopwatch.StartNew();
             var linksByGpo = new Dictionary<string, List<LinkInfo>>(StringComparer.OrdinalIgnoreCase);
-            CollectLinks(ldap, baseDn,
+            CollectLinks(ldap, actualDc, baseDn,
                 "(|(objectClass=organizationalUnit)(objectClass=domainDNS))",
                 "Domain", linksByGpo, timer);
-            CollectLinks(ldap, "CN=Sites," + configDn,
+            CollectLinks(ldap, actualDc, "CN=Sites," + configDn,
                 "(objectClass=site)", "Site", linksByGpo, timer);
 
             string policiesDn = "CN=Policies,CN=System," + baseDn;
@@ -202,7 +202,7 @@ internal static class NativeGpoLifecycleList
     }
 
     private static void CollectLinks(
-        LdapConnection ldap, string dn, string filter, string kind,
+        LdapConnection ldap, string selectedDc, string dn, string filter, string kind,
         Dictionary<string, List<LinkInfo>> result, Stopwatch timer)
     {
         int counted = result.Values.Sum(x => x.Count);
@@ -222,7 +222,7 @@ internal static class NativeGpoLifecycleList
                     result.Add(item.Dn, list);
                 }
                 string place = kind == "Site"
-                    ? "LDAP://" + ldap.SessionOptions.HostName + "/" + entry.DistinguishedName
+                    ? "LDAP://" + selectedDc + "/" + entry.DistinguishedName
                     : entry.DistinguishedName;
                 list.Add(new LinkInfo(place, item.Flags,
                     (item.Flags & 1) == 0, (item.Flags & 2) != 0,
