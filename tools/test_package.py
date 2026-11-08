@@ -83,7 +83,7 @@ assert 'NativeGpoLifecycleList.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.Lifecycle && mode == "Preview"' in runner
 assert 'NativeGpoLifecyclePreview.Execute(mode, request, credentials)' in runner
 native_preview = (project / 'NativeGpoLifecyclePreview.cs').read_text(encoding='utf-8')
-legacy_fixture = (ROOT / 'tools/test_native_gpo_lifecycle_preview.ps1').read_text(encoding='utf-8')
+legacy_fixture = (root / 'tools/test_native_gpo_lifecycle_preview.ps1').read_text(encoding='utf-8')
 for guard in ('LegacyPlanHash', 'CheckAction', 'FileSha256', 'CollectLinks',
               'ValidateReusePackage', 'SameController', 'RunImpersonated',
               'ReadManagedGpo', 'GetProperty("schemaVersion")',
