@@ -217,9 +217,9 @@ internal static class NativeDcConsistency
             row.dcUtc = utc.ToString("O");
             row.sampledUtc = sampled.ToString("O");
             row.offsetSeconds = (int)Math.Round((utc - sampled).TotalSeconds);
-            string rodcFlag = NativeAdDiscovery.Attr(root, "isRODC");
-            row.rodc = rodcFlag.Length == 0 ? "Unknown" :
-                rodcFlag.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ? "Yes" : "No";
+            bool? writable = NativeAdDiscovery.ReadDcWritable(ldap, root);
+            row.rodc = !writable.HasValue ? "Unknown" :
+                writable.Value ? "No" : "Yes";
 
             string campaignRoot = Path.Combine(@"\\", dc, "SYSVOL", domain,
                 "scripts", "LockScreenCampaigns", campaignId);
