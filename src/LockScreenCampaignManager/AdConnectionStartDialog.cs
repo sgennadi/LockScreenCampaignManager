@@ -380,7 +380,7 @@ internal sealed class AdConnectionStartDialog : Form
         _alternate.Margin = new Padding(2, 3, 9, 3);
         authentication.Controls.Add(_current, 0, 0);
         authentication.Controls.Add(_alternate, 1, 0);
-        _user.PlaceholderText = @"DOMAIN\\user or user@domain";
+        _user.PlaceholderText = @"DOMAIN\user or user@domain";
         _password.UseSystemPasswordChar = true;
         authentication.Controls.Add(ConnectionField("AD username", _user), 0, 1);
         authentication.Controls.Add(ConnectionField("Password (session only)", _password), 1, 1);
