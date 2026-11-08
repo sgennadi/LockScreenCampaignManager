@@ -8,6 +8,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == PortableUpdateCoordinator.HelperSwitch)
+            return PortableUpdateCoordinator.RunHelper(args);
+
         if (args.Contains("--self-test-exit-probe", StringComparer.OrdinalIgnoreCase))
             return 37; // CI verifies that WinExe exit codes propagate to PowerShell.
 
