@@ -105,7 +105,7 @@ internal static class NativeComputerGroupAssignment
     internal static bool PreviewFresh(string value, DateTimeOffset now)
     {
         if (!DateTimeOffset.TryParseExact(value, "o", CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind, out var parsed) ||
+                DateTimeStyles.None, out var parsed) ||
             parsed.Offset != TimeSpan.Zero)
             return false;
         double minutes = (now - parsed).TotalMinutes;
@@ -260,7 +260,7 @@ internal static class NativeComputerGroupAssignment
             "sAMAccountName", "primaryGroupID", "memberOf");
         request.Controls.Add(new PageResultRequestControl(SearchLimit));
         var response = (SearchResponse)ldap.SendRequest(request);
-        var items = new List<object>();
+        var items = new List<(string Name, object Row)>();
         foreach (SearchResultEntry entry in response.Entries)
         {
             if (items.Count == SearchLimit) break;
@@ -268,14 +268,14 @@ internal static class NativeComputerGroupAssignment
             bool direct = Direct(pc, scope.GroupDn);
             bool primary = pc.PrimaryGroupRid == scope.GroupRid;
             bool effective = primary || direct || Effective(ldap, pc, scope.GroupDn);
-            items.Add(new
+            items.Add((pc.Name, new
             {
                 name = pc.Name, sam = pc.Sam, dn = pc.Dn,
                 guid = pc.Guid.ToString("D"),
                 membership = primary ? "Primary" : direct ? "Direct" :
                     effective ? "Nested" : "None",
                 direct, effective
-            });
+            }));
         }
         // The caller displays a bounded list. Search never writes to AD.
         return new
@@ -283,8 +283,8 @@ internal static class NativeComputerGroupAssignment
             domain = scope.Domain, ouDn = scope.OuDn,
             groupDn = scope.GroupDn, groupSam = scope.GroupSam,
             writable = scope.Writable, count = items.Count,
-            computers = items.OrderBy(x => ((dynamic)x).name,
-                StringComparer.OrdinalIgnoreCase).ToArray()
+            computers = items.OrderBy(x => x.Name,
+                StringComparer.OrdinalIgnoreCase).Select(x => x.Row).ToArray()
         };
     }
 
