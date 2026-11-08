@@ -41,7 +41,14 @@ public sealed partial class MainForm
         finally
         {
             _activeCampaignWizard = null;
-            UpdateWorkflow();
+            // Once the modal wizard closes (Close Wizard, title-bar X, ESC,
+            // or Finish), reveal the editable Advanced workspace instead
+            // of leaving the user on the otherwise empty Wizard landing.
+            if (!IsDisposed && !Disposing)
+            {
+                SetWorkflowMode(true);
+                _status.Text = "Campaign Wizard closed. Advanced editor is ready.";
+            }
         }
     }
 
