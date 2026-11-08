@@ -12,6 +12,7 @@ public sealed partial class MainForm
     {
         _advancedMode = advanced;
         _advancedButtons.Visible = advanced;
+        _quickButtons.Visible = !advanced;
         _workflowButtons.Visible = !advanced;
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
@@ -26,10 +27,10 @@ public sealed partial class MainForm
     {
         if (_workflowHint.IsDisposed) return;
         string[] hints = [
-            "1 / 4  Connect to AD with a current or alternate domain user.",
-            "2 / 4  Import and arrange the lock screen images below.",
-            "3 / 4  Configure schedule, weekdays and the change time.",
-            "4 / 4  Select OU and group, preview conflicts, then deploy GPO."
+            "1 / 4  Choose images first. No AD permissions needed.",
+            "2 / 4  Set image order, days and time.",
+            "3 / 4  Review and save project locally (no admin needed).",
+            "4 / 4  Optional: deploy with delegated GPO permissions."
         ];
         _workflowHint.Text = _advancedMode
             ? "Advanced mode  •  All tools available; GPO actions still require fresh AD verification."
@@ -39,20 +40,20 @@ public sealed partial class MainForm
         _workflowNext.Visible = _workflowStep < 3;
         _workflowNext.Enabled = _workflowStep switch
         {
-            0 => AdReady,
+            0 => _project.ImagePaths.Count > 0,
             1 => _project.ImagePaths.Count > 0,
             2 => _project.ImagePaths.Count > 0,
             _ => false
         };
         _workflowAction.Text = _workflowStep switch
         {
-            0 => "Connect to AD...",
-            1 => "Add images...",
-            2 => "Edit schedule...",
-            _ => "Deploy wizard..."
+            0 => "Add images...",
+            1 => "Edit schedule...",
+            2 => "Save project...",
+            _ => AdReady ? "Deploy wizard..." : "Connect to AD..."
         };
-        _workflowAction.Enabled = _workflowStep != 3 ||
-            (AdReady && _project.ImagePaths.Count > 0);
+        _workflowAction.Enabled = true;
+        _imageScheduleButton.Enabled = _project.ImagePaths.Count > 0;
         int index = SelectedIndex;
         _replaceImageButton.Enabled = _removeImageButton.Enabled = index >= 0;
         _moveUpButton.Enabled = index > 0;
@@ -65,9 +66,8 @@ public sealed partial class MainForm
     private void AdvanceWorkflow()
     {
         ReadControls();
-        if (_workflowStep == 0 && !AdReady) return;
-        if (_workflowStep is 1 or 2 && _project.ImagePaths.Count == 0) return;
-        if (_workflowStep == 2)
+        if (_workflowStep is 0 or 1 or 2 && _project.ImagePaths.Count == 0) return;
+        if (_workflowStep == 1)
         {
             try
             {
@@ -143,10 +143,13 @@ public sealed partial class MainForm
     {
         switch (_workflowStep)
         {
-            case 0: ConnectAndReadAd(); break;
-            case 1: AddImages(); break;
-            case 2: OpenScheduleEditor(); break;
-            case 3: OpenDomainDeployment(); break;
+            case 0: AddImages(); break;
+            case 1: OpenScheduleEditor(); break;
+            case 2: SaveProject(); break;
+            case 3:
+                if (AdReady) OpenDomainDeployment();
+                else ConnectAndReadAd();
+                break;
         }
         UpdateWorkflow();
     }
