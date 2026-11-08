@@ -29,7 +29,7 @@ internal static class UiLayoutSmokeTests
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
         ("Updater", () => new UniversalUpdaterWindow(),
-            new[] { "Check for updates", "Download & verify", "Install & restart", "Backup status" }),
+            new[] { "1  Check for updates", "2  Download & verify", "3  Install & restart", "Backup status" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
             "example.com", "OU=Clients,DC=example,DC=com",
             "CN=Clients,OU=Groups,DC=example,DC=com"),
