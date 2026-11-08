@@ -211,7 +211,11 @@ assert "if ($Mode -eq 'Plan')" in gpo
 assert 'Get-DomainInfo' in gpo and 'Get-ExistingGpoByName' in gpo
 assert 'New-NativeGpo' in gpo and 'Add-GpoLinkToOu' in gpo
 assert 'Remote-GPO-Deploy.ps1' not in (project / 'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
-assert 'CreateProcessWithLogonW' in (project / 'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
+assert 'CreateProcessWithLogonW' not in runner
+assert 'powershell.exe' not in runner
+assert 'Process.Start' not in runner
+assert 'LockScreenCampaignManager.Agent.ps1' in csproj
+assert 'GpoConflictScan.ps1' not in csproj
 assert 'ConnectAndReadAd' in (project / 'MainForm.cs').read_text(encoding='utf-8')
 assert 'Deploy GPO...' in (project / 'MainForm.cs').read_text(encoding='utf-8')
 assert 'SetWorkflowMode' in (project / 'MainForm.Workflow.cs').read_text(encoding='utf-8')
