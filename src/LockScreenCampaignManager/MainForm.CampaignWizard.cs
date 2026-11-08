@@ -1,0 +1,714 @@
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace LockScreenCampaignManager;
+
+public sealed partial class MainForm
+{
+    private CampaignWizardDialog? _activeCampaignWizard;
+
+    // All native file pickers and existing AD/schedule/deployment dialogs
+    // are owned by the visible wizard rather than the disabled editor below.
+    private IWin32Window CampaignDialogOwner =>
+        _activeCampaignWizard is { IsDisposed: false } wizard ? wizard : this;
+
+    private void StartGuidedCampaignWizard()
+    {
+        if (IsDisposed || Disposing) return;
+        if (_activeCampaignWizard is { IsDisposed: false } existing)
+        {
+            existing.Activate();
+            return;
+        }
+        _workflowStep = 0;
+        SetWorkflowMode(false);
+        using var wizard = new CampaignWizardDialog(this);
+        _activeCampaignWizard = wizard;
+        try
+        {
+            wizard.ShowDialog(this);
+        }
+        finally
+        {
+            _activeCampaignWizard = null;
+            UpdateWorkflow();
+        }
+    }
+
+    // Allows offline UI smoke tests to validate all six wizard pages
+    // without ShowDialog, LDAP access or filesystem changes.
+    internal Form CreateCampaignWizardForSmokeTest() => new CampaignWizardDialog(this);
+
+    private sealed class CampaignWizardDialog : Form
+    {
+        private static readonly string[] StepNames =
+        [
+            "1  AD connection", "2  Images", "3  Arrange",
+            "4  Schedule", "5  Save", "6  Deploy"
+        ];
+        private readonly MainForm _owner;
+        private readonly TableLayoutPanel _root = new();
+        private readonly TableLayoutPanel _header = new();
+        private readonly Label _heading = new();
+        private readonly Label _subheading = new();
+        private readonly Label[] _rail = new Label[6];
+        private readonly Panel _host = new();
+        private readonly Button _back = new();
+        private readonly Button _next = new();
+        private readonly Button _close = new();
+        private readonly Label _footnote = new();
+        private ListBox? _images;
+        private RadioButton? _connectChoice;
+        private RadioButton? _offlineChoice;
+        private RadioButton? _deployChoice;
+        private int _step;
+        private bool _saved;
+        private bool _editingPage;
+        private bool _everConfiguredSchedule;
+
+        internal CampaignWizardDialog(MainForm owner)
+        {
+            _owner = owner;
+            Text = "LockScreen Campaign Manager - Campaign Wizard";
+            Font = new Font("Segoe UI", 10f);
+            StartPosition = FormStartPosition.CenterParent;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Size = new Size(1120, 805);
+            MinimumSize = new Size(950, 690);
+            BackColor = UiStyle.Canvas;
+            BuildLayout();
+            UiStyle.Apply(this);
+            FitHeader();
+            DpiChanged += (_, _) => BeginInvoke(new Action(FitHeader));
+            UiWindowPlacement.Attach(this, "campaign-setup-wizard");
+            Shown += (_, _) => { FitHeader(); RenderPage(); };
+        }
+
+        private void BuildLayout()
+        {
+            _root.Dock = DockStyle.Fill;
+            _root.ColumnCount = 2;
+            _root.RowCount = 3;
+            _root.Padding = new Padding(14, 12, 14, 12);
+            _root.BackColor = UiStyle.Canvas;
+            _root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 215));
+            _root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+            _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+            Controls.Add(_root);
+
+            _header.Dock = DockStyle.Fill;
+            _header.RowCount = 2;
+            _header.ColumnCount = 1;
+            _header.Padding = new Padding(22, 13, 18, 10);
+            _header.BackColor = UiStyle.Navy;
+            _header.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+            _header.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+
+            _heading.Text = "Campaign Wizard";
+            _heading.Dock = DockStyle.Fill;
+            _heading.TextAlign = ContentAlignment.MiddleLeft;
+            _heading.ForeColor = Color.White;
+            _heading.Font = new Font("Segoe UI Semibold", 17f, FontStyle.Bold);
+            _heading.AutoEllipsis = true;
+            _subheading.Dock = DockStyle.Fill;
+            _subheading.Text = "Step 1 of 6  -  Choose how to connect to Active Directory";
+            _subheading.TextAlign = ContentAlignment.MiddleLeft;
+            _subheading.ForeColor = Color.FromArgb(226, 238, 255);
+            _subheading.Font = new Font("Segoe UI", 10f);
+            _subheading.AutoEllipsis = true;
+            _heading.FontChanged += (_, _) => FitHeader();
+            _subheading.FontChanged += (_, _) => FitHeader();
+            _header.Controls.Add(_heading, 0, 0);
+            _header.Controls.Add(_subheading, 0, 1);
+            _root.Controls.Add(_header, 0, 0);
+            _root.SetColumnSpan(_header, 2);
+
+            var rail = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
+                BackColor = UiStyle.SoftBlue,
+                Padding = new Padding(9, 16, 9, 10),
+                Margin = new Padding(0, 0, 7, 0)
+            };
+            for (int i = 0; i < 6; i++)
+            {
+                rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 59));
+                var label = new Label
+                {
+                    Text = StepNames[i], Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font("Segoe UI Semibold", 10f),
+                    AutoEllipsis = false,
+                    Margin = new Padding(3, 3, 2, 4),
+                    Padding = new Padding(11, 4, 3, 4)
+                };
+                _rail[i] = label;
+                rail.Controls.Add(label, 0, i);
+            }
+            rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            rail.Controls.Add(new Label
+            {
+                Text = "Your edits stay local until you explicitly deploy a GPO.",
+                Dock = DockStyle.Fill, ForeColor = UiStyle.Muted,
+                Font = new Font("Segoe UI", 9f),
+                Padding = new Padding(9, 12, 4, 4),
+                AutoEllipsis = false
+            }, 0, 6);
+            _root.Controls.Add(rail, 0, 1);
+
+            _host.Dock = DockStyle.Fill;
+            _host.Padding = new Padding(18, 16, 18, 10);
+            _host.BackColor = UiStyle.Surface;
+            _root.Controls.Add(_host, 1, 1);
+
+            var footer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1,
+                Padding = new Padding(8, 10, 8, 4),
+                Margin = Padding.Empty
+            };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 144));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 162));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 153));
+            _footnote.Dock = DockStyle.Fill;
+            _footnote.ForeColor = UiStyle.Muted;
+            _footnote.TextAlign = ContentAlignment.MiddleLeft;
+            _footnote.AutoEllipsis = true;
+            footer.Controls.Add(_footnote, 0, 0);
+
+            _back.Text = "Back";
+            _back.Tag = "NoIcon";
+            _back.Dock = DockStyle.Fill;
+            _back.Margin = new Padding(4, 2, 4, 2);
+            _back.Click += (_, _) => { _step = Math.Max(0, _step - 1); RenderPage(); };
+            footer.Controls.Add(_back, 2, 0);
+
+            _next.Text = "Next";
+            _next.Tag = "PrimaryAction";
+            _next.Dock = DockStyle.Fill;
+            _next.Margin = new Padding(4, 2, 4, 2);
+            _next.Click += (_, _) => NextStep();
+            footer.Controls.Add(_next, 3, 0);
+
+            _close.Text = "Close Wizard";
+            _close.Tag = "NoIcon";
+            _close.Dock = DockStyle.Fill;
+            _close.Margin = new Padding(4, 2, 4, 2);
+            _close.Click += (_, _) => Close();
+            footer.Controls.Add(_close, 4, 0);
+            _root.Controls.Add(footer, 0, 2);
+            _root.SetColumnSpan(footer, 2);
+            AcceptButton = _next;
+            CancelButton = _close;
+            RenderPage();
+        }
+
+        private void FitHeader()
+        {
+            if (IsDisposed || _root.IsDisposed || _header.IsDisposed) return;
+            UiStyle.FitWizardHeader(_root, _header, _heading, _subheading, 120);
+        }
+
+        private void RenderPage(int selected = 0)
+        {
+            if (_editingPage || IsDisposed) return;
+            _editingPage = true;
+            try
+            {
+                _images = null;
+                _connectChoice = null;
+                _offlineChoice = null;
+                _deployChoice = null;
+                _host.SuspendLayout();
+                _host.Controls.Clear();
+                _subheading.Text = "Step " + (_step + 1) + " of 6  -  " + StepNames[_step][3..];
+                for (int i = 0; i < _rail.Length; i++)
+                {
+                    _rail[i].BackColor = i == _step ? UiStyle.Accent : UiStyle.SoftBlue;
+                    _rail[i].ForeColor = i == _step ? Color.White :
+                        i < _step ? UiStyle.Green : UiStyle.Navy;
+                }
+
+                var page = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    ColumnCount = 1, RowCount = 5,
+                    Padding = new Padding(10, 7, 10, 9),
+                    BackColor = UiStyle.Surface
+                };
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+                page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+                _host.Controls.Add(page);
+
+                string[] titles =
+                [
+                    "Connect to Active Directory",
+                    "Choose your campaign images",
+                    "Arrange the image order",
+                    "Choose days and times",
+                    "Review and save the campaign",
+                    "Deploy or finish offline"
+                ];
+                string[] descriptions =
+                [
+                    "Choose a Windows AD connection or prepare the campaign offline. No AD or GPO changes are made during sign-in.",
+                    "Select multiple image files or import a complete folder. You can add more images before continuing.",
+                    "Place images in the desired order. The first image is assigned to the first scheduled change.",
+                    "Set the start date, weekdays, exact dates and change time. Review the schedule before saving.",
+                    "Review the configuration and save a local campaign project. Saving never modifies Active Directory.",
+                    "Deploy using the AD/GPO Wizard, or finish offline and deploy later. No automatic GPO changes."
+                ];
+                page.Controls.Add(new Label
+                {
+                    Text = titles[_step], Dock = DockStyle.Fill,
+                    ForeColor = UiStyle.Navy,
+                    Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold),
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    AutoEllipsis = true
+                }, 0, 0);
+                page.Controls.Add(new Label
+                {
+                    Text = descriptions[_step], Dock = DockStyle.Fill,
+                    ForeColor = UiStyle.Foreground,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    AutoEllipsis = false
+                }, 0, 1);
+                var actions = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill, AutoScroll = true,
+                    WrapContents = false, FlowDirection = FlowDirection.LeftToRight,
+                    Padding = new Padding(0, 6, 0, 5)
+                };
+                page.Controls.Add(actions, 0, 2);
+                var body = new Panel
+                {
+                    Dock = DockStyle.Fill, BackColor = UiStyle.SoftBlue,
+                    Padding = new Padding(14)
+                };
+                page.Controls.Add(body, 0, 3);
+                var status = new Label
+                {
+                    Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                    ForeColor = UiStyle.Navy,
+                    AutoEllipsis = false,
+                    Font = new Font("Segoe UI", 9.5f)
+                };
+                page.Controls.Add(status, 0, 4);
+
+                switch (_step)
+                {
+                    case 0:
+                        RenderConnection(actions, body, status);
+                        break;
+                    case 1:
+                        RenderImages(actions, body, status, false, selected);
+                        break;
+                    case 2:
+                        RenderImages(actions, body, status, true, selected);
+                        break;
+                    case 3:
+                        RenderSchedule(actions, body, status);
+                        break;
+                    case 4:
+                        RenderSave(actions, body, status);
+                        break;
+                    case 5:
+                        RenderDeploy(actions, body, status);
+                        break;
+                }
+                _back.Enabled = _step > 0;
+                _next.Text = _step == 5 ? "Finish" : _step == 0 ? "Continue" : "Next";
+                _next.Enabled = _step is 0 or 5 || _owner._project.ImagePaths.Count > 0;
+                _footnote.Text = _step == 0 ? "AD sign-in is optional" :
+                    _owner._project.ImagePaths.Count + " image(s) selected";
+                FitHeader();
+                _host.ResumeLayout(true);
+            }
+            finally { _editingPage = false; }
+        }
+
+        private static Button Action(FlowLayoutPanel host, string caption,
+            Action click, int width = 205, bool primary = false)
+        {
+            var button = new Button
+            {
+                Text = caption, Width = width, Height = 43,
+                Margin = new Padding(0, 0, 10, 0),
+                Tag = primary ? "PrimaryAction" : "NoIcon",
+                Cursor = Cursors.Hand
+            };
+            button.Click += (_, _) => click();
+            host.Controls.Add(button);
+            UiStyle.DecorateForWizard(button, primary);
+            return button;
+        }
+
+        private static Label Information(string text, float fontSize = 11f) => new()
+        {
+            Text = text, Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", fontSize),
+            ForeColor = UiStyle.Navy,
+            Padding = new Padding(12, 9, 12, 9)
+        };
+
+        private void RenderConnection(FlowLayoutPanel actions, Panel body, Label status)
+        {
+            Action(actions, "AD Connection Wizard...", () =>
+            {
+                _connectChoice!.Checked = true;
+                _owner.ConnectAndReadAd();
+                if (_owner.AdReady) { _step = 1; RenderPage(); }
+                else RenderPage();
+            }, 250, true);
+            Action(actions, "Continue offline", () =>
+            {
+                _offlineChoice!.Checked = true;
+                _step = 1;
+                RenderPage();
+            }, 190);
+            var options = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top, Height = 160,
+                RowCount = 3, ColumnCount = 1,
+                Padding = new Padding(10)
+            };
+            options.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+            options.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+            options.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            _connectChoice = new RadioButton
+            {
+                Text = "Connect with current Windows account or another AD account",
+                AutoSize = false, Dock = DockStyle.Fill, Checked = true,
+                Font = new Font("Segoe UI Semibold", 10.5f)
+            };
+            _offlineChoice = new RadioButton
+            {
+                Text = "Work offline - connect only if you decide to deploy",
+                AutoSize = false, Dock = DockStyle.Fill
+            };
+            options.Controls.Add(_connectChoice, 0, 0);
+            options.Controls.Add(_offlineChoice, 0, 1);
+            body.Controls.Add(options);
+            status.Text = _owner.AdReady
+                ? "Connected to AD: " + _owner._adSnapshot!.Domain + ". You may continue."
+                : "No AD session yet. Choose the connection wizard or offline mode.";
+        }
+
+        private void RenderImages(FlowLayoutPanel actions, Panel body, Label status,
+            bool arrangement, int selected)
+        {
+            if (!arrangement)
+            {
+                Action(actions, "Add image files...", () =>
+                {
+                    _owner.AddImages(); _saved = false; RenderPage();
+                }, 185, true);
+                Action(actions, "Choose image folder...", () =>
+                {
+                    _owner.AddImagesFromFolder(); _saved = false; RenderPage();
+                }, 220);
+                Action(actions, "Remove selected", () => RemoveSelectedImage(), 170);
+            }
+            else
+            {
+                Action(actions, "Move up", () => MoveSelectedImage(-1), 130);
+                Action(actions, "Move down", () => MoveSelectedImage(1), 140);
+                Action(actions, "Sort by filename", SortImages, 190);
+                Action(actions, "Auto match names", AutoMatchImages, 190);
+            }
+            _images = new ListBox
+            {
+                Dock = DockStyle.Fill, BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 10f), IntegralHeight = false
+            };
+            for (int i = 0; i < _owner._project.ImagePaths.Count; i++)
+                _images.Items.Add($"{i + 1:00}   {Path.GetFileName(_owner._project.ImagePaths[i])}");
+            if (_images.Items.Count > 0)
+                _images.SelectedIndex = Math.Clamp(selected, 0, _images.Items.Count - 1);
+            body.Controls.Add(_images);
+            status.Text = _owner._project.ImagePaths.Count == 0
+                ? "No images yet. Choose files or a folder to continue."
+                : $"{_owner._project.ImagePaths.Count} image(s) ready. " +
+                  (arrangement ? "Reorder them, then continue to Schedule." :
+                   "Next: arrange the sequence.");
+        }
+
+        private int SelectedImage => _images?.SelectedIndex ?? -1;
+
+        private void RemoveSelectedImage()
+        {
+            int i = SelectedImage;
+            if (i < 0) return;
+            if (MessageBox.Show(this, "Remove the selected image from this campaign?",
+                    "Remove image", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            _owner._table.ClearSelection();
+            _owner._table.Rows[i].Selected = true;
+            _owner.RemoveImage();
+            _saved = false;
+            RenderPage(Math.Max(0, i - 1));
+        }
+
+        private void MoveSelectedImage(int offset)
+        {
+            int index = SelectedImage;
+            int target = index + offset;
+            if (index < 0 || target < 0 || target >= _owner._project.ImagePaths.Count)
+                return;
+            (_owner._project.ImagePaths[index], _owner._project.ImagePaths[target]) =
+                (_owner._project.ImagePaths[target], _owner._project.ImagePaths[index]);
+            _owner._projectDirty = true;
+            _owner.UpdateRows(target);
+            _saved = false;
+            RenderPage(target);
+        }
+
+        private void SortImages()
+        {
+            if (_owner._project.ImagePaths.Count < 2) return;
+            if (MessageBox.Show(this, "Sort the images alphabetically by filename?",
+                    "Confirm image order", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) !=
+                DialogResult.Yes) return;
+            _owner._project.ImagePaths = _owner._project.ImagePaths
+                .OrderBy(x => Path.GetFileName(x), StringComparer.OrdinalIgnoreCase).ToList();
+            _owner._projectDirty = true;
+            _owner.UpdateRows(0);
+            _saved = false;
+            RenderPage();
+        }
+
+        private void AutoMatchImages()
+        {
+            try
+            {
+                var proposal = ImageFilenameMatcher.Suggest(_owner._project,
+                    _owner._project.ImagePaths);
+                var sorted = proposal.Slots.Select(s => s.SuggestedPath).ToArray();
+                if (proposal.ConfidentCount != sorted.Length ||
+                    sorted.Any(x => x is null) ||
+                    sorted.Distinct(StringComparer.OrdinalIgnoreCase).Count() != sorted.Length)
+                {
+                    MessageBox.Show(this,
+                        "Some names cannot be matched confidently. Review and reorder those images manually.",
+                        "Image filename matching", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (MessageBox.Show(this, "Apply the suggested order based on filenames?",
+                        "Confirm image order", MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    return;
+                _owner._project.ImagePaths = sorted.Select(x => x!).ToList();
+                _owner._projectDirty = true;
+                _owner.UpdateRows(0);
+                _saved = false;
+                RenderPage();
+            }
+            catch (Exception ex) { UiErrorDialog.Show(this, "Auto match images", ex); }
+        }
+
+        private void RenderSchedule(FlowLayoutPanel actions, Panel body, Label status)
+        {
+            Action(actions, "Edit schedule...", () =>
+            {
+                _owner.OpenScheduleEditor();
+                _everConfiguredSchedule = _owner._wizardScheduleConfigured;
+                _saved = false;
+                RenderPage();
+            }, 207, true);
+            var list = new ListBox
+            {
+                Dock = DockStyle.Fill, IntegralHeight = false,
+                Font = new Font("Segoe UI", 10f), BorderStyle = BorderStyle.None
+            };
+            for (int i = 0; i < _owner._project.ImagePaths.Count; i++)
+            {
+                string date;
+                try { date = CampaignSchedule.At(_owner._project, i).ToString("ddd dd.MM.yyyy  HH:mm"); }
+                catch { date = "Schedule not configured"; }
+                list.Items.Add($"{i + 1:00}  {date}  |  {Path.GetFileName(_owner._project.ImagePaths[i])}");
+            }
+            body.Controls.Add(list);
+            status.Text = "Time zone: " + _owner._project.TimeZoneId +
+                (_everConfiguredSchedule || _owner._wizardScheduleConfigured
+                    ? "  -  Schedule edited. Continue to Save."
+                    : "  -  Review dates and press Edit schedule if needed.");
+        }
+
+        private void RenderSave(FlowLayoutPanel actions, Panel body, Label status)
+        {
+            Action(actions, "Validate campaign", () =>
+                _owner.ValidateCurrent(), 180);
+            Action(actions, "Save project...", () =>
+            {
+                try
+                {
+                    _owner.ReadControls();
+                    CampaignSchedule.Validate(_owner._project, requireImages: true);
+                    _saved = _owner.TrySaveProject();
+                    RenderPage();
+                }
+                catch (CampaignValidationException ex)
+                {
+                    MessageBox.Show(this, ex.Message, "Check campaign",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (Exception ex) { UiErrorDialog.Show(this, "Save campaign", ex); }
+            }, 190, true);
+            var group = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 3,
+                Height = 180, Padding = new Padding(10)
+            };
+            group.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+            group.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            group.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            group.Controls.Add(Information("Campaign name", 10f), 0, 0);
+            var name = new TextBox
+            {
+                Dock = DockStyle.Top, Text = _owner._name.Text,
+                Font = new Font("Segoe UI", 11f)
+            };
+            name.TextChanged += (_, _) =>
+            {
+                if (_editingPage) return;
+                _owner._name.Text = name.Text;
+                _owner._projectDirty = true;
+                _saved = false;
+            };
+            group.Controls.Add(name, 0, 1);
+            group.Controls.Add(Information(
+                $"{_owner._project.ImagePaths.Count} image(s). " +
+                $"Time zone: {_owner._project.TimeZoneId}. " +
+                "Save the project locally before proceeding to deployment."), 0, 2);
+            body.Controls.Add(group);
+            status.Text = _saved ? "Project saved. Continue to Deploy or Finish offline." :
+                "Unsaved project. Use Save project or Next to choose a file.";
+        }
+
+        private void RenderDeploy(FlowLayoutPanel actions, Panel body, Label status)
+        {
+            Action(actions, "Open GPO Deployment Wizard...", () =>
+            {
+                _deployChoice!.Checked = true;
+                Deploy();
+            }, 290, true);
+            Action(actions, "Finish offline", () =>
+            {
+                DialogResult = DialogResult.OK;
+                Close();
+            }, 175);
+            var options = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top, RowCount = 2, ColumnCount = 1,
+                Height = 130, Padding = new Padding(10)
+            };
+            options.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
+            options.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
+            _deployChoice = new RadioButton
+            {
+                Text = "Deploy GPO to selected OU and computer/group assignments",
+                Dock = DockStyle.Fill, Checked = _owner.AdReady
+            };
+            var offline = new RadioButton
+            {
+                Text = "Finish offline - only the local project is saved",
+                Dock = DockStyle.Fill, Checked = !_owner.AdReady
+            };
+            options.Controls.Add(_deployChoice, 0, 0);
+            options.Controls.Add(offline, 0, 1);
+            body.Controls.Add(options);
+            status.Text = _owner.AdReady
+                ? "AD connected: choose deployment or finish without making AD changes."
+                : "Offline: connect to AD in the deployment wizard only if needed.";
+        }
+
+        private void Deploy()
+        {
+            if (!_owner.AdReady)
+            {
+                _owner.ConnectAndReadAd();
+                if (!_owner.AdReady) { RenderPage(); return; }
+            }
+            _owner.OpenDomainDeployment();
+            RenderPage();
+        }
+
+        private void NextStep()
+        {
+            switch (_step)
+            {
+                case 0:
+                    if (_connectChoice?.Checked == true && !_owner.AdReady)
+                    {
+                        _owner.ConnectAndReadAd();
+                        if (!_owner.AdReady)
+                        {
+                            RenderPage();
+                            return;
+                        }
+                    }
+                    break;
+                case 1:
+                case 2:
+                    if (_owner._project.ImagePaths.Count == 0)
+                    {
+                        MessageBox.Show(this, "Add at least one image to continue.",
+                            "Campaign Wizard", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+                    break;
+                case 3:
+                    try
+                    {
+                        _owner.ReadControls();
+                        CampaignSchedule.Validate(_owner._project, requireImages: true);
+                    }
+                    catch (Exception ex) when (ex is CampaignValidationException or FileNotFoundException)
+                    {
+                        MessageBox.Show(this, ex.Message, "Check schedule",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    break;
+                case 4:
+                    if (!_saved)
+                    {
+                        try
+                        {
+                            _owner.ReadControls();
+                            CampaignSchedule.Validate(_owner._project, requireImages: true);
+                        }
+                        catch (Exception ex) when (ex is CampaignValidationException or FileNotFoundException)
+                        {
+                            MessageBox.Show(this, ex.Message, "Check campaign",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        if (!_owner.TrySaveProject()) return;
+                        _saved = true;
+                    }
+                    break;
+                case 5:
+                    if (_deployChoice?.Checked == true)
+                    {
+                        Deploy();
+                        return;
+                    }
+                    DialogResult = DialogResult.OK;
+                    Close();
+                    return;
+            }
+            _step = Math.Min(5, _step + 1);
+            RenderPage();
+        }
+    }
+}
