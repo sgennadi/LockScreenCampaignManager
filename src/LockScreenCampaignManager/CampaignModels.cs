@@ -145,6 +145,16 @@ public static class CampaignSchedule
 
     public static string Format(DateTime value) => value.ToString(DateFormat, CultureInfo.InvariantCulture);
 
+    // A human-readable GPO display name. Keep BuildId unchanged: it is the
+    // immutable campaign/file identity used for deployment and cleanup.
+    public static string DefaultGpoName(CampaignProject project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        string companySuffix = Guid.TryParse(project.CompanyProfileId, out Guid company)
+            ? "-c" + company.ToString("N")[..8] : "";
+        return $"LockScreen - {project.StartLocal:yyyyMMdd-HHmm}{companySuffix}";
+    }
+
     public static string BuildId(CampaignProject project)
     {
         string normalized = new string(project.Name.ToLowerInvariant()
