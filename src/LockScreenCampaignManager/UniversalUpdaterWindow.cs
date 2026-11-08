@@ -66,7 +66,7 @@ internal sealed class UniversalUpdaterWindow : Form
             ColumnCount = 1, RowCount = 5, BackColor = UiStyle.Canvas
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
@@ -76,15 +76,16 @@ internal sealed class UniversalUpdaterWindow : Form
             Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = UiStyle.Navy, Padding = new Padding(19, 12, 19, 10)
         };
-        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
         banner.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         banner.Controls.Add(new Label {
             Text = "Software updates",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(0, 5, 0, 6),
             Font = new Font("Segoe UI Semibold", 17f), ForeColor = Color.White
         }, 0, 0);
         banner.Controls.Add(new Label {
-            Text = "Check release  >  Download & verify  >  Install & restart",
+            Text = "1  Check for updates     2  Install update",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 10f),
             ForeColor = Color.FromArgb(224, 238, 255), AutoEllipsis = true
@@ -165,9 +166,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _output.Text = "Check for updates to compare your installed version with GitHub Releases." +
             Environment.NewLine + Environment.NewLine +
             "1. Check for updates (Stable or Preview)." + Environment.NewLine +
-            "2. Download & verify the matching architecture-specific package." +
-            Environment.NewLine +
-            "3. Install & restart after explicit confirmation. The old EXE is backed up." +
+            "2. Install: automatically download and verify, then request approval to restart." +
             Environment.NewLine + Environment.NewLine +
             "Updating the portable EXE never modifies GPO or gMSA installations.";
         resultArea.Controls.Add(_output, 0, 1);
@@ -194,22 +193,20 @@ internal sealed class UniversalUpdaterWindow : Form
         buttons.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
         var primary = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1
         };
-        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
-        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
-        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.4f));
-        Configure(_check, "1  Check for updates", 180);
-        Configure(_download, "2  Download & verify", 190);
-        Configure(_install, "3  Install & restart", 190);
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        primary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        Configure(_check, "1  Check", 180);
+        Configure(_download, "Download & verify (internal)", 190);
+        Configure(_install, "2  Install", 190);
         _check.Tag = _download.Tag = _install.Tag = "NoIcon";
         _check.BackColor = _install.BackColor = UiStyle.Accent;
         _check.ForeColor = _install.ForeColor = Color.White;
         _download.Enabled = false;
         _install.Enabled = false;
         primary.Controls.Add(_check, 0, 0);
-        primary.Controls.Add(_download, 1, 0);
-        primary.Controls.Add(_install, 2, 0);
+        primary.Controls.Add(_install, 1, 0);
         buttons.Controls.Add(primary, 0, 0);
 
         var secondary = new TableLayoutPanel {
@@ -232,7 +229,7 @@ internal sealed class UniversalUpdaterWindow : Form
 
         _check.Click += async (_, _) => await CheckAsync();
         _download.Click += async (_, _) => await DownloadAsync();
-        _install.Click += (_, _) => InstallAndRestart();
+        _install.Click += async (_, _) => await InstallSelectedAsync();
         _releases.Click += (_, _) => OpenReleases();
         _backupStatus.Click += async (_, _) => await InspectBackupAsync();
         _close.Click += (_, _) => {
@@ -333,7 +330,7 @@ internal sealed class UniversalUpdaterWindow : Form
                     Environment.NewLine + Environment.NewLine +
                     "Release notes:" + Environment.NewLine +
                     (found.ReleaseNotes.Length > 6000 ? found.ReleaseNotes[..6000] : found.ReleaseNotes);
-                _state.Text = "New release available. Download and verify before installing.";
+                _state.Text = "New release available. Choose Install to download, verify and apply.";
             }
         }
         catch (OperationCanceledException)
@@ -352,16 +349,16 @@ internal sealed class UniversalUpdaterWindow : Form
         finally { FinishWorking(); }
     }
 
+    private async Task InstallSelectedAsync()
+    {
+        if (_operation is not null || _available is null || _options is null) return;
+        if (_staged is null) await DownloadAsync();
+        if (_operation is null && _staged is not null) InstallAndRestart();
+    }
+
     private async Task DownloadAsync()
     {
         if (_operation is not null || _available is null || _options is null) return;
-        if (MessageBox.Show(this,
-                "Download and verify this release in a per-user staging folder?" +
-                Environment.NewLine + "The installed manager and gMSA worker are NOT changed.",
-                "Confirm update download", MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-
         var selected = _available;
         var options = _options;
         SetWorking("Downloading and verifying...");
@@ -392,16 +389,12 @@ internal sealed class UniversalUpdaterWindow : Form
                 Environment.NewLine + "EXE SHA-256: " + staged.ExtractedExecutableSha256 +
                 Environment.NewLine + Environment.NewLine +
                 "Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
-                "For a user-profile portable EXE, click Install & restart and approve the unsigned publisher warning. " +
+                "For a user-profile portable EXE, approve the unsigned publisher warning before installation. " +
                 "Administrator-owned and gMSA copies require a separate maintenance window.";
             _state.Text = signature.Trusted
-                ? "Verified package ready: choose Install & restart."
+                ? "Verified package ready for final installation approval."
                 : "Unsigned/untrusted publisher: installation requires explicit operator approval.";
-            MessageBox.Show(this, "Verified update package is ready. Choose Install & restart to apply it." +
-                Environment.NewLine + "Authenticode: " +
-                (signature.Trusted ? "trusted" : "not verified") +
-                ". No update is applied without your approval.",
-                "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // InstallSelectedAsync now continues to the explicit final approval.
         }
         catch (OperationCanceledException)
         {
@@ -526,7 +519,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _check.Enabled = true;
         _download.Enabled = _available is not null && _options is not null &&
             string.IsNullOrEmpty(_stagedPath);
-        _install.Enabled = _staged is not null && _options is not null;
+        _install.Enabled = _available is not null && _options is not null;
         _channel.Enabled = true;
         _sessionToken.Enabled = true;
         _backupStatus.Enabled = true;
