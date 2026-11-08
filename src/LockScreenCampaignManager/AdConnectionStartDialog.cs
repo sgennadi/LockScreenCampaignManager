@@ -622,8 +622,8 @@ internal sealed class AdConnectionStartDialog : Form
             try
             {
                 _domain.Text = snapshot.Domain;
-                _dc.Text = snapshot.Dc;
                 _advancedDc.Checked = false;
+                _dc.Text = snapshot.Dc;
                 _dc.Items.Clear();
                 foreach (var name in snapshot.DomainControllers.Distinct(
                     StringComparer.OrdinalIgnoreCase).Take(100))
