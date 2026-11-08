@@ -13,6 +13,7 @@ public sealed partial class MainForm : Form
     private bool _projectDirty;
     private readonly Label _companyLabel = new();
     private readonly Label _adConnectionStatus = new();
+    private readonly ToolTip _connectionTooltip = new() { AutoPopDelay = 14000, InitialDelay = 300, ReshowDelay = 100 };
     private readonly Button _adConnectButton = new();
     private AdDirectorySnapshot? _adSnapshot;
     private AdConnectionScope _adScope = AdConnectionScope.From(null);
@@ -109,7 +110,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
-            Text = "1 Images    2 Schedule    3 Review and save    4 Optional AD deployment",
+            Text = "1 Images    2 Arrange    3 Schedule    4 Save    5 Optional AD deployment",
             AutoSize = true, ForeColor = UiStyle.Muted
         }, 0, 1);
         _companyLabel.Dock = DockStyle.Fill;
@@ -141,6 +142,7 @@ public sealed partial class MainForm : Form
         _adConnectionStatus.MinimumSize = Size.Empty;
         _adConnectionStatus.TextAlign = ContentAlignment.MiddleLeft;
         _adConnectionStatus.Margin = new Padding(7, 2, 0, 0);
+        _adConnectionStatus.AutoEllipsis = true;
         adFirstStep.Controls.Add(_adConnectionStatus, 1, 0);
         _wizardMode.Text = "Wizard";
         _wizardMode.Width = 95;
@@ -158,6 +160,8 @@ public sealed partial class MainForm : Form
         adFirstStep.Controls.Add(_advancedModeButton, 3, 0);
         UiStyle.ApplyStatus(_adConnectionStatus,
             "Offline — AD not connected", UiStatusKind.Neutral);
+        _connectionTooltip.SetToolTip(_adConnectionStatus,
+            "Active Directory is optional while creating and saving a campaign.");
         header.Controls.Add(adFirstStep, 0, 3);
         root.Controls.Add(header, 0, 0);
 
@@ -808,17 +812,22 @@ public sealed partial class MainForm : Form
         if (snapshot is null)
         {
             UiStyle.ApplyStatus(_adConnectionStatus,
-                "AD not connected — local editing works. Connect only for GPO deployment.",
-                UiStatusKind.Warning);
+                "Offline — AD not connected", UiStatusKind.Neutral);
+            _connectionTooltip.SetToolTip(_adConnectionStatus,
+                "No AD session. You can arrange images, schedule and save locally.");
             UpdateWorkflow();
             return;
         }
         UiStyle.ApplyStatus(_adConnectionStatus,
-            "READ ONLY / CONNECTED: " + snapshot.Domain + " | " + snapshot.Dc +
-            $" | {snapshot.OrganizationalUnits.Count} OUs | " +
-            $"{snapshot.ComputerGroups.Count} groups | {snapshot.GroupPolicies.Count} GPOs" +
-            (snapshot.Capped ? " | PARTIAL INVENTORY" : ""),
+            (snapshot.Capped ? "AD partial: " : "AD connected: ") + snapshot.Domain,
             snapshot.Capped ? UiStatusKind.Warning : UiStatusKind.Success);
+        _connectionTooltip.SetToolTip(_adConnectionStatus,
+            "Read-only AD inventory" + Environment.NewLine +
+            "Domain: " + snapshot.Domain + Environment.NewLine +
+            "DC: " + snapshot.Dc + Environment.NewLine +
+            $"OUs: {snapshot.OrganizationalUnits.Count}; Groups: {snapshot.ComputerGroups.Count}; " +
+            $"GPOs: {snapshot.GroupPolicies.Count}" +
+            (snapshot.Capped ? Environment.NewLine + "Inventory is partial" : ""));
         _status.Text = "AD discovery complete (read-only). Continue with campaign configuration.";
         UpdateWorkflow();
     }
