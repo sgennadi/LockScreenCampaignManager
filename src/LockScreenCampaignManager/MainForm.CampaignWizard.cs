@@ -76,6 +76,8 @@ public sealed partial class MainForm
         private readonly ToolTip _updateHelp = new() { AutoPopDelay = 20000 };
         private readonly Label _footnote = new();
         private ListBox? _images;
+        private PictureBox? _wizardImagePreview;
+        private Label? _wizardImageName;
         private RadioButton? _connectChoice;
         private RadioButton? _offlineChoice;
         private RadioButton? _deployChoice;
@@ -365,6 +367,15 @@ public sealed partial class MainForm
             _editingPage = true;
             try
             {
+                // Release the previous page's preview bitmap before re-rendering.
+                if (_wizardImagePreview is { IsDisposed: false } oldPreview)
+                {
+                    var image = oldPreview.Image;
+                    oldPreview.Image = null;
+                    image?.Dispose();
+                }
+                _wizardImagePreview = null;
+                _wizardImageName = null;
                 _images = null;
                 _connectChoice = null;
                 _offlineChoice = null;
@@ -584,21 +595,116 @@ public sealed partial class MainForm
                 Action(actions, "Sort by filename", SortImages, 190);
                 Action(actions, "Auto match names", AutoMatchImages, 190);
             }
+            // A Wizard page is self-contained: list, selection and live
+            // image preview are on the SAME page, not in Advanced behind it.
+            var imageArea = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                BackColor = UiStyle.SoftBlue, Margin = Padding.Empty
+            };
+            imageArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43));
+            imageArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 57));
+            imageArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var listPanel = new Panel
+            {
+                Dock = DockStyle.Fill, Padding = new Padding(6),
+                BackColor = UiStyle.Surface, Margin = new Padding(0, 0, 7, 0)
+            };
             _images = new ListBox
             {
-                Dock = DockStyle.Fill, BorderStyle = BorderStyle.None,
-                Font = new Font("Segoe UI", 10f), IntegralHeight = false
+                Name = "CampaignWizardImageList", Dock = DockStyle.Fill,
+                BorderStyle = BorderStyle.None, IntegralHeight = false,
+                Font = new Font("Segoe UI", 10f)
             };
+            listPanel.Controls.Add(_images);
+            imageArea.Controls.Add(listPanel, 0, 0);
+
+            var previewPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+                BackColor = UiStyle.Surface, Padding = new Padding(7),
+                Margin = new Padding(7, 0, 0, 0)
+            };
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            previewPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+            previewPanel.Controls.Add(new Label
+            {
+                Text = "Selected image preview", Dock = DockStyle.Fill,
+                ForeColor = UiStyle.Navy, TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI Semibold", 10f, FontStyle.Bold)
+            }, 0, 0);
+            var preview = new PictureBox
+            {
+                Name = "CampaignWizardImagePreview",
+                Dock = DockStyle.Fill, BackColor = Color.FromArgb(27, 34, 45),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BorderStyle = BorderStyle.FixedSingle,
+                AccessibleName = "Preview of selected campaign image"
+            };
+            preview.Disposed += (_, _) =>
+            {
+                var image = preview.Image;
+                preview.Image = null;
+                image?.Dispose();
+            };
+            _wizardImagePreview = preview;
+            previewPanel.Controls.Add(preview, 0, 1);
+            _wizardImageName = new Label
+            {
+                Name = "CampaignWizardImagePath", Dock = DockStyle.Fill,
+                ForeColor = UiStyle.Muted, AutoEllipsis = true,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            previewPanel.Controls.Add(_wizardImageName, 0, 2);
+            imageArea.Controls.Add(previewPanel, 1, 0);
+            body.Controls.Add(imageArea);
+
+            _images.SelectedIndexChanged += (_, _) => UpdateWizardImagePreview();
             for (int i = 0; i < _owner._project.ImagePaths.Count; i++)
                 _images.Items.Add($"{i + 1:00}   {Path.GetFileName(_owner._project.ImagePaths[i])}");
             if (_images.Items.Count > 0)
                 _images.SelectedIndex = Math.Clamp(selected, 0, _images.Items.Count - 1);
-            body.Controls.Add(_images);
+            UpdateWizardImagePreview();
             status.Text = _owner._project.ImagePaths.Count == 0
                 ? "No images yet. Choose files or a folder to continue."
                 : $"{_owner._project.ImagePaths.Count} image(s) ready. " +
                   (arrangement ? "Reorder them, then continue to Schedule." :
                    "Next: arrange the sequence.");
+        }
+
+        private void UpdateWizardImagePreview()
+        {
+            var preview = _wizardImagePreview;
+            var name = _wizardImageName;
+            if (preview is null || preview.IsDisposed || name is null || name.IsDisposed)
+                return;
+            var previous = preview.Image;
+            preview.Image = null;
+            previous?.Dispose();
+            int index = _images?.SelectedIndex ?? -1;
+            if (index < 0 || index >= _owner._project.ImagePaths.Count)
+            {
+                name.Text = "Select an image to see its preview.";
+                return;
+            }
+            string path = _owner._project.ImagePaths[index];
+            name.Text = Path.GetFileName(path) + Environment.NewLine + path;
+            if (!File.Exists(path))
+            {
+                name.Text = "Image not found: " + Path.GetFileName(path);
+                return;
+            }
+            try
+            {
+                using var source = Image.FromFile(path);
+                preview.Image = new Bitmap(source);
+            }
+            catch (Exception ex)
+            {
+                name.Text = "Unable to preview image: " + Path.GetFileName(path);
+                AppLog.Write(ex, "Campaign Wizard image preview");
+            }
         }
 
         private int SelectedImage => _images?.SelectedIndex ?? -1;
