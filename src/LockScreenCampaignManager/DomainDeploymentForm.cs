@@ -15,6 +15,7 @@ internal sealed class DomainDeploymentForm : Form
     private readonly TextBox _userBox = new();
     private readonly TextBox _passwordBox = new();
     private readonly TextBox _gpoBox = new();
+    private readonly ComboBox _clientTypeBox = new();
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
@@ -101,6 +102,7 @@ internal sealed class DomainDeploymentForm : Form
             _dcBox.Text = readOnlyInventory.Dc;
         }
         _gpoBox.Text = CampaignSchedule.DefaultGpoName(_project);
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
         if (authenticatedSession is { IsAlternate: true })
         {
             _suppressConnectionChanged = true;
@@ -256,8 +258,42 @@ internal sealed class DomainDeploymentForm : Form
         _connectionStatus.Text = "Not connected. Native LDAP + Windows GPO COM; no RSAT or WinRM.";
         _connectionStatus.ForeColor = Color.DarkSlateGray;
         notification.Controls.Add(_connectionStatus, 0, 0);
-        notification.Controls.Add(new Label { Text = "Security Filtering targets COMPUTER accounts in the selected security group, within the linked OU. Preview is read-only.",
-            Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 1);
+        var engineChoice = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
+        };
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 440));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        engineChoice.Controls.Add(new Label
+        {
+            Text = "Client / GPO method", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy
+        }, 0, 0);
+        _clientTypeBox.Name = "DeploymentClientType";
+        _clientTypeBox.Dock = DockStyle.Fill;
+        _clientTypeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _clientTypeBox.Items.Add("PowerShell (.ps1) - PowerShell Startup Scripts");
+        _clientTypeBox.Items.Add("Native (.exe) - classic Startup Scripts");
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
+        _clientTypeBox.SelectedIndexChanged += (_, _) =>
+        {
+            CampaignClientType chosen = _clientTypeBox.SelectedIndex == 1
+                ? CampaignClientType.Executable : CampaignClientType.PowerShell;
+            if (_project.ClientType != chosen)
+            {
+                _project.ClientType = chosen;
+                InvalidatePlan();
+            }
+        };
+        engineChoice.Controls.Add(_clientTypeBox, 1, 0);
+        engineChoice.Controls.Add(new Label
+        {
+            Text = "Startup as SYSTEM. Select before Preview.",
+            Dock = DockStyle.Fill, AutoEllipsis = true, ForeColor = UiStyle.Muted,
+            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0)
+        }, 2, 0);
+        notification.Controls.Add(engineChoice, 0, 1);
         layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
@@ -445,6 +481,7 @@ internal sealed class DomainDeploymentForm : Form
         _usersButton.Enabled = credentialsStep && _alternateRadio.Checked && !_running;
         _connectButton.Enabled = credentialsStep && !_running;
         _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
+        _clientTypeBox.Enabled = targetStep && !_running;
         _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
@@ -698,7 +735,7 @@ internal sealed class DomainDeploymentForm : Form
     {
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
-            CampaignSchedule.BuildId(_project));
+            CampaignSchedule.BuildId(_project), _project.ClientType);
     }
 
     private (string parent,string package) MakeTemporaryPackage()
@@ -730,7 +767,8 @@ internal sealed class DomainDeploymentForm : Form
                 var result = await RunBusy("Checking permissions, domain, OU, GPO name and image hashes...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Plan", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 240000));
                 var d = result.GetProperty("data");
                 // Fail closed: deployment preview must also perform a read-only
@@ -777,9 +815,10 @@ internal sealed class DomainDeploymentForm : Form
                     $"Time source: selected AD DC (RootDSE currentTime), schedule interpreted in chosen campaign time zone.\r\n" +
                     $"OU: {x.ou.Dn}\r\nComputer group: {x.group.Dn}\r\n" +
                     $"Direct group members: {d.GetProperty("directGroupMembers").GetInt32()}\r\n" +
-                    $"GPO: {x.gpoName}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
+                    $"GPO: {x.gpoName}\r\nClient: {_project.ClientType}\r\n" +
+                    $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (EXE launcher)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
                     $"Files on DC: {d.GetProperty("sysvolOnDc").GetString()}\r\n" +
-                    $"Client startup script: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
+                    $"Client startup: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
                     $"Security filtering: selected group receives Apply; Authenticated Users retains Read only.\r\n" +
                     $"GPO is linked to the OU. No GPO domain-wide link.\r\n" +
                     $"Cleaning up: local agent restores registry; domain GPO and SYSVOL require administrator removal.\r\n" +
@@ -815,7 +854,7 @@ internal sealed class DomainDeploymentForm : Form
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (MessageBox.Show(this,
                     $"CREATE A NEW GPO AND COPY IMAGES INTO SYSVOL?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
-                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\n\n" +
+                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\nClient: {_project.ClientType}\n\n" +
                     "No changes are made to other GPOs. Confirm you have a tested campaign and delegated rights.",
                     "Confirm Active Directory deployment", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
@@ -826,7 +865,8 @@ internal sealed class DomainDeploymentForm : Form
                 var response = await RunBusy("Creating GPO, uploading files to DC and applying OU / security filters...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Deploy", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 300000));
                 var data = response.GetProperty("data");
                 string gpoId = data.GetProperty("gpoId").GetString()!;
