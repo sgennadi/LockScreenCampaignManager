@@ -86,6 +86,22 @@ $plan=Guard-Plan $scope $inventory @() 'alpha' $utc.ToString('o')
 if ($plan.campaignId -cne 'alpha' -or $plan.planHash.Length -ne 64) {
     throw 'Cleanup guard did not return a deterministic approval digest.'
 }
+# Cross-engine golden fixture: C# native read-only Preview MUST yield the
+# exact same digest as the legacy PowerShell Cleanup's Guard-Plan.
+$priorFingerprint=$inventory[0].fingerprint
+$inventory[0].fingerprint='abc123'
+$stamp='2026-11-08T18:00:00.0000000Z'
+$unrelatedGpos=@(
+    [pscustomobject]@{name='Unrelated A';campaignIds=@('other-a')},
+    [pscustomobject]@{name='Unrelated B';campaignIds=@('other-b')},
+    [pscustomobject]@{name='Unrelated C';campaignIds=@('other-c')}
+)
+$goldenPlan=Guard-Plan $scope $inventory $unrelatedGpos 'alpha' $stamp
+if ($goldenPlan.planHash -cne '4392f41f095de3796c1d74982b88afcda7eba2351993e9c2b08b98cfc6667c84') {
+    throw 'Native C# / legacy PowerShell SYSVOL approval hash contract diverged.'
+}
+$inventory[0].fingerprint=$priorFingerprint
+
 $blocked=$false
 try { $null=Guard-Plan $scope $inventory $gpos 'beta' $utc.ToString('o') }
 catch { $blocked=$true }
