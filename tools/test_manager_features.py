@@ -335,7 +335,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('Text = "Connect to AD..."', main)
         self.assertIn("BackColor = UiStyle.Navy, Padding", main)
         self.assertIn("Remember username", first)
-        self.assertIn("Save encrypted password (Windows Credential Manager)", first)
+        self.assertIn("Save password securely", first)
         self.assertIn("Forget saved login", first)
         vault = read("AdCredentialVault.cs")
         self.assertIn("CredWrite", vault)
