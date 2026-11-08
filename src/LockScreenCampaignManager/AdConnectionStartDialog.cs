@@ -124,6 +124,11 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly RadioButton _alternate = new();
     private readonly TextBox _user = new();
     private readonly TextBox _password = new();
+    private readonly CheckBox _rememberUsername = new();
+    private readonly CheckBox _saveEncryptedPassword = new();
+    private readonly Button _forgetCredential = new();
+    private readonly Label _credentialHint = new();
+    private string _loadedCredentialDomain = "";
     private readonly Button _connect = new();
     private readonly Button _continue = new();
     private readonly Button _offline = new();
@@ -166,15 +171,33 @@ internal sealed class AdConnectionStartDialog : Form
             _dc.Text = company?.PreferredDc ?? "";
             _current.Checked = true;
             _advancedDc.Checked = !string.IsNullOrWhiteSpace(company?.PreferredDc);
+            LoadSavedCredentials();
         }
         finally { _mutating = false; }
 
-        _domain.TextChanged += (_, _) => { InvalidateSnapshot(); ScheduleDcDiscovery(); };
+        _domain.TextChanged += (_, _) => {
+            if (!_mutating && !string.Equals(_loadedCredentialDomain, _domain.Text.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _loadedCredentialDomain = "";
+                _password.Clear();
+                _saveEncryptedPassword.Checked = false;
+            }
+            InvalidateSnapshot(); ScheduleDcDiscovery();
+        };
         _dc.TextChanged += (_, _) => { InvalidateSnapshot(); _tips.SetToolTip(_dc, _dc.Text); };
         _user.TextChanged += (_, _) => InvalidateSnapshot();
         _password.TextChanged += (_, _) => InvalidateSnapshot();
         _current.CheckedChanged += (_, _) => { SetCredentialMode(); InvalidateSnapshot(); };
         _alternate.CheckedChanged += (_, _) => { SetCredentialMode(); InvalidateSnapshot(); };
+        _rememberUsername.CheckedChanged += (_, _) => {
+            if (!_rememberUsername.Checked) _saveEncryptedPassword.Checked = false;
+            SetCredentialMode();
+        };
+        _saveEncryptedPassword.CheckedChanged += (_, _) => {
+            if (_saveEncryptedPassword.Checked) _rememberUsername.Checked = true;
+            SetCredentialMode();
+        };
         SetCredentialMode();
         UiStyle.Apply(this);
         UiStyle.ApplyStatus(_state, "NOT CONNECTED — no directory read has been performed.", UiStatusKind.Neutral);
@@ -322,8 +345,8 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
         };
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 250));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 153));
         connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
         connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         connection.Controls.Add(new Label {
@@ -360,6 +383,20 @@ internal sealed class AdConnectionStartDialog : Form
         _domain.PlaceholderText = "example.com";
         authentication.Controls.Add(ConnectionField("Active Directory DNS domain", _domain), 0, 2);
         authentication.SetColumnSpan(authentication.GetControlFromPosition(0, 2), 2);
+        var remember = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, WrapContents = true,
+            Padding = new Padding(0, 0, 0, 0), AutoScroll = true
+        };
+        _rememberUsername.Text = "Remember username";
+        _rememberUsername.AutoSize = true;
+        _rememberUsername.Margin = new Padding(2, 3, 18, 3);
+        _saveEncryptedPassword.Text = "Save encrypted password (Windows Credential Manager)";
+        _saveEncryptedPassword.AutoSize = true;
+        _saveEncryptedPassword.Margin = new Padding(2, 3, 10, 3);
+        remember.Controls.Add(_rememberUsername);
+        remember.Controls.Add(_saveEncryptedPassword);
+        authentication.Controls.Add(remember, 0, 3);
+        authentication.SetColumnSpan(remember, 2);
         connection.Controls.Add(authentication, 0, 1);
 
         // The operator is signing in, not selecting a server. DC override is
@@ -370,10 +407,11 @@ internal sealed class AdConnectionStartDialog : Form
         _dc.IntegralHeight = false;
         _serverOptions.Dock = DockStyle.Fill;
         _serverOptions.ColumnCount = 2;
-        _serverOptions.RowCount = 2;
+        _serverOptions.RowCount = 3;
         _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _serverOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138));
         _serverOptions.RowStyles.Add(new RowStyle(SizeType.Absolute, 67));
+        _serverOptions.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
         _serverOptions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _serverOptions.Padding = new Padding(12, 0, 12, 3);
         _serverOptions.Controls.Add(ConnectionField("Domain controller (optional)", _dc), 0, 0);
@@ -389,6 +427,15 @@ internal sealed class AdConnectionStartDialog : Form
         _dcDiscoveryStatus.Padding = new Padding(2, 4, 0, 0);
         _serverOptions.Controls.Add(_dcDiscoveryStatus, 0, 1);
         _serverOptions.SetColumnSpan(_dcDiscoveryStatus, 2);
+        _forgetCredential.Text = "Forget saved credentials";
+        _forgetCredential.AutoSize = true;
+        _forgetCredential.Margin = new Padding(3, 0, 8, 0);
+        _forgetCredential.Click += (_, _) => ForgetCredentials();
+        _serverOptions.Controls.Add(_forgetCredential, 0, 2);
+        _credentialHint.Text = "Password is stored for this Windows user only.";
+        _credentialHint.AutoSize = true;
+        _credentialHint.ForeColor = UiStyle.Muted;
+        _serverOptions.Controls.Add(_credentialHint, 1, 2);
 
         _advancedDc.Text = "Advanced connection options  •  Specify domain controller";
         _advancedDc.AutoSize = true;
@@ -599,7 +646,58 @@ internal sealed class AdConnectionStartDialog : Form
     private void SetCredentialMode()
     {
         _user.Enabled = _password.Enabled = _alternate.Checked;
+        _rememberUsername.Enabled = _saveEncryptedPassword.Enabled = _alternate.Checked;
         if (!_alternate.Checked) _password.Clear();
+    }
+
+    private void LoadSavedCredentials()
+    {
+        string domain = _domain.Text.Trim();
+        if (string.IsNullOrWhiteSpace(domain)) return;
+        try
+        {
+            var saved = AdCredentialVault.Read(domain);
+            if (saved is null) return;
+            _loadedCredentialDomain = domain;
+            _user.Text = saved.Username;
+            _rememberUsername.Checked = saved.Username.Length > 0;
+            _saveEncryptedPassword.Checked = saved.HasPassword;
+            // Never automatically switch the Windows identity to a stored one.
+            // The operator must explicitly choose "Use another AD account".
+            if (saved.HasPassword) _password.Text = saved.Password;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex, "Read saved AD credential metadata");
+        }
+    }
+
+    private void ForgetCredentials()
+    {
+        try
+        {
+            AdCredentialVault.Delete(_domain.Text.Trim());
+            _loadedCredentialDomain = "";
+            _mutating = true;
+            try
+            {
+                _password.Clear();
+                _user.Clear();
+                _saveEncryptedPassword.Checked = false;
+                _rememberUsername.Checked = false;
+            }
+            finally { _mutating = false; }
+            InvalidateSnapshot();
+            UiStyle.ApplyStatus(_state,
+                "Saved AD credentials removed from Windows Credential Manager.",
+                UiStatusKind.Success);
+        }
+        catch (Exception ex)
+        {
+            UiStyle.ApplyStatus(_state,
+                "Unable to remove saved credentials: " +
+                UniversalDiagnosticsEmbedded.Clean(ex.Message), UiStatusKind.Error);
+        }
     }
 
     private void InvalidateSnapshot()
@@ -685,6 +783,27 @@ internal sealed class AdConnectionStartDialog : Form
                 $"{snapshot.GroupPolicies.Count} GPOs." +
                 Environment.NewLine + Environment.NewLine +
                 "No changes have been made to AD or Group Policy.";
+            // Commit persistence only after successful signed+sealed LDAP authentication.
+            if (_alternate.Checked)
+            {
+                try
+                {
+                    AdCredentialVault.Save(snapshot.Domain, _user.Text,
+                        _password.Text, _rememberUsername.Checked,
+                        _saveEncryptedPassword.Checked);
+                    _loadedCredentialDomain = snapshot.Domain;
+                }
+                catch (Exception storageError)
+                {
+                    // An authenticated session remains valid if optional persistence fails.
+                    AppLog.Write(storageError, "Save AD credential preference");
+                    MessageBox.Show(this,
+                        "AD connected, but Windows could not save the requested credentials. " +
+                        "Check Windows Credential Manager permissions.",
+                        "Credential saving", MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+            }
             _password.Clear();
             ShowPage(1);
             UiStyle.ApplyStatus(_state,
