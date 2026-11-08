@@ -19,8 +19,8 @@ internal static class AppVersion
         {
             var value = typeof(AppVersion).Assembly
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                .InformationalVersion.Split('+', 2)[0] ?? "0.4.0-preview.29";
-            return SemanticVersion.TryParse(value, out _) ? value : "0.4.0-preview.29";
+                .InformationalVersion.Split('+', 2)[0] ?? "0.4.0-preview.30";
+            return SemanticVersion.TryParse(value, out _) ? value : "0.4.0-preview.30";
         }
     }
 }
@@ -104,13 +104,13 @@ internal sealed class UniversalUpdaterWindow : Form
             Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true
         };
         credentials.Controls.Add(new Label {
-            Text = "Private GitHub token (optional):", AutoSize = true,
+            Text = "GitHub read-only token (optional):", AutoSize = true,
             Margin = new Padding(2, 9, 10, 0)
         });
         _sessionToken.Width = 275;
         _sessionToken.MaxLength = 512;
         _sessionToken.Margin = new Padding(2, 5, 10, 0);
-        _sessionToken.AccessibleName = "Private GitHub session token";
+        _sessionToken.AccessibleName = "Optional GitHub read-only session token";
         _sessionToken.TextChanged += (_, _) => {
             if (_operation is not null) return;
             _available = null;
@@ -133,8 +133,8 @@ internal sealed class UniversalUpdaterWindow : Form
         _output.ScrollBars = ScrollBars.Vertical;
         _output.Text = "Select Check for updates to query published GitHub Releases." +
             Environment.NewLine + Environment.NewLine +
-            "Private GitHub repositories require a read-only session token. " +
-            "It is used only for pinned api.github.com requests, never stored or forwarded to CDN." +
+            "Public GitHub Releases work without a token. For private repositories only, " +
+            "an optional read-only token is scoped to api.github.com and never saved." +
             Environment.NewLine + Environment.NewLine +
             "Download & verify works with published assets whose name, SHA-256 digest, " +
             "ZIP structure and EXE architecture match the pinned release profile. " +
@@ -226,8 +226,8 @@ internal sealed class UniversalUpdaterWindow : Form
             {
                 _output.Text = "No newer compatible release is available in the visible GitHub Releases." +
                     Environment.NewLine + Environment.NewLine +
-                    "For private repositories, use a read-only token. " +
-                    "HTTP 404 is treated as an access error, never proof of being up to date." +
+                    "Public releases need no token. HTTP 404 is an access error, " +
+                    "not proof of being up to date." +
                     Environment.NewLine +
                     "A published release needs a matching architecture-specific Update ZIP and GitHub SHA-256 digest.";
                 _state.Text = "No newer compatible release returned by the selected access mode.";
@@ -323,7 +323,7 @@ internal sealed class UniversalUpdaterWindow : Form
             _output.Text = "Release download or verification failed: " +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "Private GitHub assets require an authorized read-only session token and a valid asset ID.";
+                "For public releases no token is needed; private assets require a scoped read-only token.";
         }
         finally { FinishWorking(); }
     }

@@ -87,6 +87,30 @@ internal sealed record AdDirectorySnapshot(
     }
 }
 
+
+internal sealed record AdConnectionScope(
+    string CompanyId, string Domain, string PreferredDc,
+    string DefaultOuDn, string DefaultGroupDn)
+{
+    // Keep the read-only directory snapshot tied to the precise company
+    // defaults that were visible when the connection was accepted.
+    private static string Normalize(string? value) => (value ?? "").Trim().ToUpperInvariant();
+
+    internal static AdConnectionScope From(CompanyProfile? company) => new(
+        Normalize(company?.Id), Normalize(company?.Domain),
+        Normalize(company?.PreferredDc), Normalize(company?.DefaultOuDn),
+        Normalize(company?.DefaultGroupDn));
+
+    internal bool Matches(AdDirectorySnapshot? snapshot, CompanyProfile? company,
+        DateTimeOffset utcNow) =>
+        snapshot is not null &&
+        this == From(company) &&
+        snapshot.ObservedUtc >= utcNow.AddMinutes(-20) &&
+        snapshot.ObservedUtc <= utcNow.AddMinutes(5) &&
+        (company is null || string.Equals(snapshot.Domain, company.Domain.Trim(),
+            StringComparison.OrdinalIgnoreCase));
+}
+
 internal sealed class AdConnectionStartDialog : Form
 {
     private readonly CompanyProfile? _company;

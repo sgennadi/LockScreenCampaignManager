@@ -23,6 +23,8 @@ internal static class SelfTests
         TestFilenameScheduleInference();
         TestExpectedCampaignValidation();
         TestAdDirectorySnapshot();
+        TestAdConnectionScope();
+        TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
         var simulated = new InvalidOperationException(@"Unable to access \\dc01.corp.example.com\SYSVOL from 198.51.100.42");
         var payload = UniversalDiagnosticsEmbedded.MakePayload("Conflict scan", simulated);
@@ -131,6 +133,78 @@ internal static class SelfTests
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
     }
 
+    internal static void RunDiagnosticsOnly()
+    {
+        TestDiagnosticsLogging();
+        Console.WriteLine("UniversalDiagnostics isolation and public Issue review passed.");
+    }
+
+    internal static void RunUpdaterOnly()
+    {
+        TestUniversalUpdaterAdapter();
+        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        Console.WriteLine("UniversalUpdater private and public release verification passed.");
+    }
+
+    private static void TestDiagnosticsLogging()
+    {
+        Check(ManualGitHubIssueHelp.Repository == "sgennadi/LockScreenCampaignManager" &&
+            ManualGitHubIssueHelp.Explanation.Contains("PUBLIC", StringComparison.Ordinal) &&
+            !ManualGitHubIssueHelp.Explanation.Contains("PRIVATE", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("pending", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("review", StringComparison.OrdinalIgnoreCase),
+            "Public GitHub diagnostics warns before sending and does not claim delivery");
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-diagnostics-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppLog.WriteToDirectory(root,
+                new InvalidOperationException(@"Failed to access \\dc01.corp.example.com\SYSVOL from 198.51.100.42"),
+                "Diagnostics synthetic check");
+            string log = File.ReadAllText(Path.Combine(root, "errors.log"));
+            Check(log.Contains("InvalidOperationException", StringComparison.Ordinal) &&
+                log.Contains("Diagnostics synthetic check", StringComparison.Ordinal) &&
+                !log.Contains("dc01", StringComparison.OrdinalIgnoreCase) &&
+                !log.Contains("198.51.100.42", StringComparison.Ordinal) &&
+                !log.Contains("corp.example.com", StringComparison.OrdinalIgnoreCase),
+                "Debug and application logs redact synthetic domain, DC and IP values");
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+            catch { }
+        }
+    }
+
+    private static void TestAdConnectionScope()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var profile = new CompanyProfile {
+            Id = Guid.NewGuid().ToString("D"),
+            Name = "Example", Domain = "example.com",
+            PreferredDc = "dc01.example.com",
+            DefaultOuDn = "OU=Workstations,DC=example,DC=com",
+            DefaultGroupDn = "CN=TargetPCs,DC=example,DC=com"
+        };
+        var otherDc = profile with { PreferredDc = "dc02.example.com" };
+        var otherOu = profile with { DefaultOuDn = "OU=Lab,DC=example,DC=com" };
+        var otherGroup = profile with { DefaultGroupDn = "CN=LabPCs,DC=example,DC=com" };
+        var scope = AdConnectionScope.From(profile);
+        var snapshot = new AdDirectorySnapshot("example.com", "dc01.example.com", true,
+            now, false, [], [], [], []);
+        Check(scope.Matches(snapshot, profile, now) &&
+            !scope.Matches(snapshot, otherDc, now) &&
+            !scope.Matches(snapshot, otherOu, now) &&
+            !scope.Matches(snapshot, otherGroup, now) &&
+            !scope.Matches(snapshot, null, now) &&
+            !scope.Matches(null, profile, now) &&
+            !scope.Matches(snapshot with { ObservedUtc = now.AddMinutes(-21) },
+                profile, now) &&
+            !scope.Matches(snapshot with { Domain = "other.example.com" },
+                profile, now),
+            "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
     private static void TestAdDirectorySnapshot()
     {
         const string domain = "example.com", dc = "dc01.example.com";
@@ -218,12 +292,9 @@ internal static class SelfTests
 
         Check(ManualGitHubIssueHelp.IssueUrl ==
             "https://github.com/sgennadi/LockScreenCampaignManager/issues/new" &&
-            ManualGitHubIssueHelp.SignInUrl.StartsWith(
-                "https://github.com/login?return_to=", StringComparison.Ordinal) &&
-            ManualGitHubIssueHelp.Explanation.Contains("PRIVATE", StringComparison.Ordinal) &&
-            ManualGitHubIssueHelp.Explanation.Contains("404", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("PUBLIC", StringComparison.Ordinal) &&
             ManualGitHubIssueHelp.Explanation.Contains("pending", StringComparison.Ordinal),
-            "manual GitHub diagnostics warns of authentication, private 404 and no delivery");
+            "manual diagnostics points to public Issues and still requires consent");
     }
 
     private static void TestFilenameScheduleInference()
@@ -2685,7 +2756,7 @@ internal static class SelfTests
             "UniversalUpdater never treats GitHub hash alone as publisher signature");
     }
 
-    private sealed class TestReleaseTransport(byte[] archive, string token,
+    private sealed class TestReleaseTransport(byte[] archive, string? token,
         string sha256) : System.Net.Http.HttpMessageHandler
     {
         internal int MetadataCount;
@@ -2701,15 +2772,17 @@ internal static class SelfTests
             if (address.Host == "api.github.com" &&
                 address.AbsolutePath.EndsWith("/releases/", StringComparison.Ordinal))
             {
-                Check(request.Headers.Authorization?.Parameter == token &&
-                    request.Headers.Authorization.Scheme == "Bearer",
-                    "Private metadata token sent only to pinned GitHub API");
+                Check(token is null
+                    ? request.Headers.Authorization is null
+                    : request.Headers.Authorization?.Parameter == token &&
+                      request.Headers.Authorization.Scheme == "Bearer",
+                    "Public metadata is anonymous; private token stays on pinned GitHub API");
                 MetadataCount++;
-                const string tag = "v0.4.0-preview.10";
+                const string tag = "v0.4.0-preview.31";
                 var body = new[] { new {
                     tag_name = tag, draft = false, prerelease = true,
                     html_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/tag/" + tag,
-                    body = "Offline private GitHub release fixture.",
+                    body = "Offline synthetic GitHub release fixture.",
                     assets = new[] { new {
                         id = 987654321L,
                         name = "LockScreenCampaignManager-Update-win-" +
@@ -2734,6 +2807,15 @@ internal static class SelfTests
                     request.Headers.Accept.Any(x => x.MediaType == "application/octet-stream"),
                     "Private release asset ID is requested from pinned API with bearer");
                 AssetRequests++;
+                response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Redirect);
+                response.Headers.Location = new Uri(
+                    "https://release-assets.githubusercontent.com/trusted-test-asset");
+            }
+            else if (address.Host == "github.com" &&
+                address.AbsolutePath.Contains("/releases/download/", StringComparison.Ordinal))
+            {
+                Check(token is null && request.Headers.Authorization is null,
+                    "Public release download must not require credentials");
                 response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Redirect);
                 response.Headers.Location = new Uri(
                     "https://release-assets.githubusercontent.com/trusted-test-asset");
@@ -2836,6 +2918,25 @@ internal static class SelfTests
                 staged.ExtractedExecutableSha256 ==
                     Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(fakeExe)),
                 "Private release is staged with exact SHA-256 and PE checks, bearer only on API calls");
+            var publicTransport = new TestReleaseTransport(archive, null, archiveDigest);
+            using (var publicHttp = new System.Net.Http.HttpClient(publicTransport, disposeHandler: true))
+            using (var publicReleaseClient = new UniversalUpdater.GitHubReleaseClient(publicHttp))
+            using (var publicDownloader = new UniversalUpdater.UpdateDownloader(publicHttp))
+            {
+                var publicRelease = await publicReleaseClient.CheckAsync(
+                    isolated, CancellationToken.None);
+                Check(publicRelease is not null &&
+                    publicRelease.Version > UniversalUpdater.SemanticVersion.Parse(AppVersion.Current),
+                    "Public preview release is detected without credentials");
+                var publicStaged = await publicDownloader.StageAsync(
+                    isolated, publicRelease!, cancellationToken: CancellationToken.None);
+                Check(publicTransport.MetadataCount == 1 && publicTransport.AssetRequests == 0 &&
+                    publicTransport.CdnRequests == 1 &&
+                    publicStaged.ExtractedExecutablePath is not null &&
+                    File.Exists(publicStaged.ExtractedExecutablePath) &&
+                    publicStaged.ArchiveSha256 == archiveDigest,
+                    "Public update uses signed GitHub URL to CDN, verifies SHA/PE and requires no token");
+            }
             var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!);
             Check(!signer.Trusted && signer.Code.StartsWith("0x", StringComparison.Ordinal),
                 "Unsigned mock EXE must not pass native WinVerifyTrust under either Windows architecture");

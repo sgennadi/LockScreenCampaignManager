@@ -82,7 +82,7 @@ Workflow **Review published diagnostic Issues** находится в
 
 Workflow использует **только встроенный краткоживущий GITHUB_TOKEN**
 с минимальными правами \`contents: read\`, \`issues: read\`.
-Просматриваются не более 1000 Issues в закреплённом приватном
+Просматриваются не более 1000 Issues в закреплённом публичном
 \`sgennadi/LockScreenCampaignManager\`. Скрипт принимает
 только ранее опубликованный администратором JSON с корректной
 схемой universal-diagnostics/v1, project, event ID, SHA-256

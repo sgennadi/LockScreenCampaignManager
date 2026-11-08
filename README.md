@@ -2,9 +2,9 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Development preview:** `0.4.0-preview.29` — vendor-neutral Active Directory Lock Screen campaign manager for Windows 11. The GUI uses a BitKeyBridge-inspired navy/blue/green palette and starts with **Connect to DC & Read AD**. This branch is not a verified release; Windows GUI/domain testing remains outstanding.
+**Current preview:** `0.4.0-preview.30` — universal Active Directory Lock Screen campaign manager for Windows 11. BitKeyBridge-inspired navy/blue/green GUI begins with **Connect to DC & Read AD**. Windows x86/x64 self-tests, diagnostics and updater tests are required to pass before publishing the GitHub prerelease; production DC/Windows 11 acceptance is still pending.
 
-> **Universal edition candidate — 0.4.0-preview.29.** AD-first connection and a blue/navy/green DPI-aware Windows GUI. No live domain validation has been performed. Keep the original repository private; for a public project publish only a clean reviewed source snapshot without copying historical commits or releases.
+> **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 
 > **0.4.0-preview.28 development — AD-first onboarding:** On startup, **1 Connect to DC & Read AD** reads signed LDAP RootDSE, DCs, OU, computer security groups and GPO metadata before proceeding to the campaign editor. New BitKeyBridge-style navy/blue/green GUI, explicit offline mode (no deployment), and a newly visible DC read-only status. [Details](docs/AD-FIRST-CONNECTION.md). The published preview.27 is unchanged; this change is not a production release.
 

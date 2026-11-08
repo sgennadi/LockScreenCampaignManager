@@ -4,23 +4,20 @@ using System.Windows.Forms;
 
 namespace LockScreenCampaignManager;
 
-/// <summary>Browser-only issue flow for a private repository. No tokens or automatic upload.</summary>
+/// <summary>Public GitHub Issue link with explicit privacy review; no automatic upload.</summary>
 internal static class ManualGitHubIssueHelp
 {
     internal const string Repository = "sgennadi/LockScreenCampaignManager";
     internal const string IssueUrl = "https://github.com/" + Repository + "/issues/new";
-    internal const string SignInUrl =
-        "https://github.com/login?return_to=%2Fsgennadi%2FLockScreenCampaignManager%2Fissues%2Fnew";
     internal const string Explanation =
-        "No diagnostics are sent by this button. The report is copied to the clipboard only.\n\n" +
-        "This GitHub repository is PRIVATE. Sign in to GitHub in the same browser profile " +
-        "with an account that has access to it. A 404 can mean you are signed out or " +
-        "your account lacks access.\n\n" +
-        "YES: Copy report and open the New Issue form.\n" +
-        "NO: Copy report and open GitHub Sign in first.\n" +
-        "CANCEL: Stay here.\n\n" +
-        "You must paste, review, and manually submit the Issue. The local report " +
-        "stays pending; this application cannot confirm delivery.";
+        "No diagnostics are sent automatically. This button copies the displayed report " +
+        "and opens a blank GitHub Issue form.\n\n" +
+        "This repository is PUBLIC. Anything posted in an Issue can be seen by anyone. " +
+        "Review the JSON and remove all private domains, names, paths, machine details " +
+        "and secrets before pasting or submitting it.\n\n" +
+        "YES: Copy the reviewed report and open GitHub Issues.\n" +
+        "NO: Stay here; nothing is sent.\n\n" +
+        "The local report stays pending: this application cannot confirm GitHub delivery.";
 }
 
 /// <summary>UniversalDiagnostics v1 review / opt-in capture. No background upload.</summary>
@@ -62,16 +59,16 @@ internal static class UiErrorDialog
         footer.Controls.Add(B("Copy", () => Clipboard.SetText(detail.Text), 115));
         footer.Controls.Add(B("GitHub Issue (manual)", () => {
             var choice = MessageBox.Show(form, ManualGitHubIssueHelp.Explanation,
-                "Manual GitHub Issue — private repository", MessageBoxButtons.YesNoCancel,
-                MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
-            if (choice is not (DialogResult.Yes or DialogResult.No)) return;
+                "Manual GitHub Issue — public repository", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (choice != DialogResult.Yes) return;
             try
             {
                 Clipboard.SetText(detail.Text);
                 // Browser session, not the app, owns GitHub authentication.
-                string url = choice == DialogResult.No
-                    ? ManualGitHubIssueHelp.SignInUrl : ManualGitHubIssueHelp.IssueUrl;
-                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+                Process.Start(new ProcessStartInfo {
+                    FileName = ManualGitHubIssueHelp.IssueUrl, UseShellExecute = true
+                });
             }
             catch (Exception ex)
             {
