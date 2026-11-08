@@ -104,7 +104,9 @@ public static class CampaignExporter
         {
             try
             {
-                int orientation = BitConverter.ToUInt16(input.GetPropertyItem(274)!.Value, 0);
+                byte[]? orientationBytes = input.GetPropertyItem(274)?.Value;
+                int orientation = orientationBytes is { Length: >= 2 }
+                    ? BitConverter.ToUInt16(orientationBytes, 0) : 1;
                 RotateFlipType flip = orientation switch
                 {
                     2 => RotateFlipType.RotateNoneFlipX,
@@ -133,7 +135,8 @@ public static class CampaignExporter
             g.DrawImage(input, 0, 0, width, height);
         }
         var jpg = ImageCodecInfo.GetImageEncoders()
-            .First(x => x.MimeType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(x => string.Equals(x?.MimeType, "image/jpeg", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("JPEG image encoder is unavailable.");
         using var args = new EncoderParameters(1);
         args.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 92L);
         result.Save(output, jpg, args);
