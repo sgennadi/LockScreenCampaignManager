@@ -97,7 +97,7 @@ internal sealed class DomainDeploymentForm : Form
             _domainBox.Text = readOnlyInventory.Domain;
             _dcBox.Text = readOnlyInventory.Dc;
         }
-        _gpoBox.Text = "LockScreen - " + CampaignSchedule.BuildId(_project);
+        _gpoBox.Text = CampaignSchedule.DefaultGpoName(_project);
         _currentRadio.Checked = true;
         SetCredentialFields();
         InvalidatePlan();
