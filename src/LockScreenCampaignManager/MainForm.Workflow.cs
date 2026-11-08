@@ -35,7 +35,8 @@ public sealed partial class MainForm
         panel.Controls.Add(new Label
         {
             Text = "How would you like to start?",
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
             ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 16f, FontStyle.Bold)
         }, 0, 0);

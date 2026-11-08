@@ -113,12 +113,14 @@ public sealed partial class MainForm
             _header.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
             _header.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
 
+            _heading.Name = "CampaignWizardHeaderTitle";
             _heading.Text = "Campaign Wizard";
             _heading.Dock = DockStyle.Fill;
             _heading.TextAlign = ContentAlignment.MiddleLeft;
             _heading.ForeColor = Color.White;
             _heading.Font = new Font("Segoe UI Semibold", 17f, FontStyle.Bold);
             _heading.AutoEllipsis = true;
+            _subheading.Name = "CampaignWizardHeaderSubtitle";
             _subheading.Dock = DockStyle.Fill;
             _subheading.Text = "Step 1 of 6  -  Choose how to connect to Active Directory";
             _subheading.TextAlign = ContentAlignment.MiddleLeft;
@@ -258,7 +260,7 @@ public sealed partial class MainForm
                     BackColor = UiStyle.Surface
                 };
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 77));
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
@@ -341,7 +343,9 @@ public sealed partial class MainForm
                         break;
                 }
                 _back.Enabled = _step > 0;
-                _next.Text = _step == 5 ? "Finish" : _step == 0 ? "Continue" : "Next";
+                _next.Text = _step == 5 && _deployChoice?.Checked == true
+                    ? "Deploy GPO..." : _step == 5 ? "Finish" :
+                    _step == 0 ? "Continue" : "Next";
                 _next.Enabled = _step is 0 or 5 || _owner._project.ImagePaths.Count > 0;
                 _footnote.Text = _step == 0 ? "AD sign-in is optional" :
                     _owner._project.ImagePaths.Count + " image(s) selected";
@@ -640,6 +644,11 @@ public sealed partial class MainForm
             {
                 Text = "Finish offline - only the local project is saved",
                 Dock = DockStyle.Fill, Checked = !_owner.AdReady
+            };
+            _deployChoice.CheckedChanged += (_, _) =>
+            {
+                if (_step == 5)
+                    _next.Text = _deployChoice.Checked ? "Deploy GPO..." : "Finish";
             };
             options.Controls.Add(_deployChoice, 0, 0);
             options.Controls.Add(offline, 0, 1);

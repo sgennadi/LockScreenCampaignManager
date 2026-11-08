@@ -309,7 +309,7 @@ internal sealed class AdConnectionStartDialog : Form
         title.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         var headerTitle = new Label {
             Name = "AdWizardHeaderTitle",
-            Text = "LockScreen Campaign Manager  |  AD Connection Wizard",
+            Text = "AD Connection Wizard",
             Dock = DockStyle.Fill, ForeColor = Color.White,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI Semibold", 17f, FontStyle.Bold),
