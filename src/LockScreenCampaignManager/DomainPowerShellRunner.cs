@@ -40,11 +40,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Assignment)
             return NativeComputerGroupAssignment.Execute(mode, request, credentials);
 
-        // Only the basic inherited GPO/registry candidate Scan is native.
-        // Effective/VerifyEndpoint/VerifyEvidence remain on the audited legacy
-        // read-only engine until their source and scope contracts are ported.
+        // Basic OU conflict Scan and exact per-computer Effective analysis
+        // use native signed LDAP, SYSVOL, security token and GPO DACL checks.
         if (operation == DomainOperation.ConflictScan && mode == "Scan")
             return NativeGpoConflictScan.Execute(mode, request, credentials);
+        if (operation == DomainOperation.ConflictScan && mode == "Effective")
+            return NativeGpoEffectiveAudit.Execute(mode, request, credentials);
 
         // SYSVOL Scan, Preview and explicitly approved Cleanup run in native
         // C#. Cleanup re-audits every policy and the exact source files.
@@ -98,7 +99,7 @@ internal static class DomainPowerShellRunner
         {
 
             DomainOperation.ConflictScan =>
-                mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
+                mode is "VerifyEndpoint" or "VerifyEvidence",
             _ => false
         };
         if (!legacyAllowed)
