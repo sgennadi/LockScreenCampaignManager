@@ -53,7 +53,7 @@ internal sealed class UniversalUpdaterWindow : Form
 
     internal UniversalUpdaterWindow()
     {
-        Text = "UniversalUpdater — LockScreen Campaign Manager";
+        Text = "Updates — LockScreen Campaign Manager";
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterParent;
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -79,7 +79,7 @@ internal sealed class UniversalUpdaterWindow : Form
         banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         banner.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         banner.Controls.Add(new Label {
-            Text = "UniversalUpdater",
+            Text = "Software updates",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI Semibold", 17f), ForeColor = Color.White
         }, 0, 0);
@@ -358,7 +358,7 @@ internal sealed class UniversalUpdaterWindow : Form
         if (MessageBox.Show(this,
                 "Download and verify this release in a per-user staging folder?" +
                 Environment.NewLine + "The installed manager and gMSA worker are NOT changed.",
-                "UniversalUpdater — Confirm download", MessageBoxButtons.YesNo,
+                "Confirm update download", MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
@@ -401,7 +401,7 @@ internal sealed class UniversalUpdaterWindow : Form
                 Environment.NewLine + "Authenticode: " +
                 (signature.Trusted ? "trusted" : "not verified") +
                 ". No update is applied without your approval.",
-                "UniversalUpdater", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
