@@ -21,7 +21,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
 
     internal DiagnosticsTrendsWindow()
     {
-        Text = "UniversalDiagnostics — Local Error Trends";
+        Text = "Error trends — LockScreen Campaign Manager";
         Font = new Font("Segoe UI", 9.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterParent;
