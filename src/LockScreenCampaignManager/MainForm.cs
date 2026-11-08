@@ -30,6 +30,8 @@ public sealed partial class MainForm : Form
     private readonly Label _workflowHint = new();
     private readonly FlowLayoutPanel _workflowButtons = new();
     private readonly FlowLayoutPanel _advancedButtons = new();
+    private readonly FlowLayoutPanel _quickButtons = new();
+    private readonly Button _imageScheduleButton = new();
     private readonly Button _wizardMode = new();
     private readonly Button _advancedModeButton = new();
     private readonly Button _workflowNext = new();
@@ -76,14 +78,7 @@ public sealed partial class MainForm : Form
         RestoreWindow();
         UiStyle.Apply(this);
         SetWorkflowMode(false);
-        // The first interactive action is DC connection/inventory, not image selection.
-        // CLI self-tests and headless UI smoke only construct forms, never Show().
-        Shown += (_, _) =>
-        {
-            if (_adFirstStepShown) return;
-            _adFirstStepShown = true;
-            BeginInvoke(new Action(ConnectAndReadAd));
-        };
+        // Offline campaign editing works without AD; connect only if needed.
     }
 
     private void ConfigureLayout()
@@ -111,7 +106,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI Semibold", 19f, FontStyle.Bold), ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
-            Text = "1 Connect & Read AD    2 Configure campaign    3 Preview & deploy GPO",
+            Text = "1 Images    2 Schedule    3 Review and save    4 Optional AD deployment",
             AutoSize = true, ForeColor = UiStyle.Muted
         }, 0, 1);
         _companyLabel.Dock = DockStyle.Fill;
@@ -125,7 +120,7 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(5, 5, 7, 4)
         };
-        _adConnectButton.Text = "Connect / Change AD account";
+        _adConnectButton.Text = "Connect AD (optional)";
         _adConnectButton.MinimumSize = new Size(218, 36);
         _adConnectButton.AutoSize = true;
         _adConnectButton.BackColor = UiStyle.Accent;
@@ -220,9 +215,13 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
             Padding = new Padding(0, 7, 0, 0)
         };
-        imageButtons.Controls.Add(MakeButton("Schedule...", OpenScheduleEditor, 156, primary: true));
-        imageButtons.Controls.Add(MakeButton("Add Files...", AddImages, 133));
-        imageButtons.Controls.Add(MakeButton("Add Folder...", AddImagesFromFolder, 147));
+        imageButtons.Controls.Add(MakeButton("1  Add files...", AddImages, 144, primary: true));
+        imageButtons.Controls.Add(MakeButton("Add folder...", AddImagesFromFolder, 144));
+        _imageScheduleButton.Text = "2  Schedule...";
+        _imageScheduleButton.Width = 145;
+        _imageScheduleButton.Height = 36;
+        _imageScheduleButton.Click += (_, _) => OpenScheduleEditor();
+        imageButtons.Controls.Add(_imageScheduleButton);
         _replaceImageButton.Text = "Replace";
         _replaceImageButton.Width = 105;
         _replaceImageButton.Height = 36;
@@ -283,7 +282,7 @@ public sealed partial class MainForm : Form
             Padding = new Padding(8, 5, 8, 4), BackColor = UiStyle.SoftBlue
         };
         flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 405));
+        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 365));
         _workflowHint.Dock = DockStyle.Fill;
         _workflowHint.TextAlign = ContentAlignment.MiddleLeft;
         _workflowHint.AutoEllipsis = true;
@@ -291,20 +290,21 @@ public sealed partial class MainForm : Form
         flowBar.Controls.Add(_workflowHint, 0, 0);
         _workflowButtons.Dock = DockStyle.Fill;
         _workflowButtons.WrapContents = false;
-        _workflowButtons.FlowDirection = FlowDirection.RightToLeft;
-        _workflowNext.Text = "Next >";
-        _workflowNext.Width = 95;
+        _workflowButtons.AutoScroll = false;
+        _workflowButtons.FlowDirection = FlowDirection.LeftToRight;
+        _workflowNext.Text = "Next";
+        _workflowNext.Width = 83;
         _workflowNext.Height = 36;
         _workflowNext.Click += (_, _) => AdvanceWorkflow();
-        _workflowBack.Text = "< Back";
-        _workflowBack.Width = 90;
+        _workflowBack.Text = "Back";
+        _workflowBack.Width = 75;
         _workflowBack.Height = 36;
         _workflowBack.Click += (_, _) => { _workflowStep = Math.Max(0, _workflowStep - 1); UpdateWorkflow(); };
-        _workflowAction.Width = 177;
+        _workflowAction.Width = 175;
         _workflowAction.Height = 36;
         _workflowAction.Click += (_, _) => RunWorkflowAction();
-        _workflowButtons.Controls.Add(_workflowNext);
         _workflowButtons.Controls.Add(_workflowBack);
+        _workflowButtons.Controls.Add(_workflowNext);
         _workflowButtons.Controls.Add(_workflowAction);
         flowBar.Controls.Add(_workflowButtons, 1, 0);
         footer.Controls.Add(flowBar, 0, 1);
@@ -342,7 +342,20 @@ public sealed partial class MainForm : Form
         _status.AutoSize = true;
         _status.Margin = new Padding(22, 9, 0, 0);
         actions.Controls.Add(_status);
-        footer.Controls.Add(actions, 0, 2);
+        _quickButtons.Dock = DockStyle.Fill;
+        _quickButtons.AutoScroll = true;
+        _quickButtons.WrapContents = true;
+        _quickButtons.Controls.Add(MakeButton("New campaign", StartNewCampaign, 155));
+        _quickButtons.Controls.Add(MakeButton("Open project", OpenProject, 140));
+        _quickButtons.Controls.Add(MakeButton("Save project", SaveProject, 142));
+        _quickButtons.Controls.Add(MakeButton("Companies", OpenCompanyProfiles, 126));
+        _quickButtons.Controls.Add(MakeButton("Settings", OpenUiSettings, 115));
+        _quickButtons.Controls.Add(MakeButton("Updates", OpenUniversalUpdater, 110));
+        _quickButtons.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
+        var toolsHost = new Panel { Dock = DockStyle.Fill };
+        toolsHost.Controls.Add(actions);
+        toolsHost.Controls.Add(_quickButtons);
+        footer.Controls.Add(toolsHost, 0, 2);
         root.Controls.Add(footer, 0, 3);
     }
 
@@ -521,7 +534,7 @@ public sealed partial class MainForm : Form
                 edited.ScheduleMode != CampaignScheduleMode.SpecificDates;
             _projectDirty = true;
             UpdateRows();
-            _status.Text = "Schedule updated locally. Export to apply through GPO.";
+            _status.Text = "Schedule updated locally. Next: review and save. AD deployment is optional.";
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Campaign Schedule", ex); }
     }
@@ -590,7 +603,7 @@ public sealed partial class MainForm : Form
         _projectDirty = true;
         UpdateRows(originalCount);
         _status.Text = $"{selected.Length} image(s) added. Next: review dates and time in Schedule.";
-        if (!_advancedMode && _workflowStep == 1) _workflowStep = 2;
+        if (!_advancedMode && _workflowStep == 0) _workflowStep = 1;
         UpdateWorkflow();
     }
 
