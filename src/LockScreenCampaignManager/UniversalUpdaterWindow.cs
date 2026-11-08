@@ -119,7 +119,10 @@ internal sealed class UniversalUpdaterWindow : Form
             if (_operation is not null) return;
             _available = null;
             _options = null;
+            _staged = null;
+            _stagedPath = null;
             _download.Enabled = false;
+            _install.Enabled = false;
             _state.Text = "Session credentials changed. Check for updates again.";
         };
         credentials.Controls.Add(_sessionToken);
