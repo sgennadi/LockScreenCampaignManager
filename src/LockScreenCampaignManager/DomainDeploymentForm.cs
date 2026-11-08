@@ -123,6 +123,21 @@ internal sealed class DomainDeploymentForm : Form
         return p;
     }
 
+    private static TableLayoutPanel ResponsiveField(string title, Control editor)
+    {
+        var holder = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
+            RowCount = 2, Margin = new Padding(2, 1, 10, 2) };
+        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
+        holder.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        holder.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
+            AutoEllipsis = true }, 0, 0);
+        editor.Dock = DockStyle.Fill;
+        editor.Margin = Padding.Empty;
+        holder.Controls.Add(editor, 0, 1);
+        return holder;
+    }
+
     private Button Button(string text, int width, Action action, bool primary = false)
     {
         var b = new Button { Text = text, Width = width, Height = 39, Margin = new Padding(0, 0, 9, 5),
@@ -166,52 +181,54 @@ internal sealed class DomainDeploymentForm : Form
 
         var connection = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
         var connLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        connLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
-        connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         connection.Controls.Add(connLayout);
-        var connFields = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
-        _domainBox.Width = 228;
+        var connFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+        connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
         _domainBox.TextChanged += (_, _) => ConnectionChanged();
-        _dcBox.Width = 210;
         _dcBox.DropDownStyle = ComboBoxStyle.DropDown;
+        _dcBox.DropDownWidth = 670;
         _dcBox.TextChanged += (_, _) => ConnectionChanged();
-        _gpoBox.Width = 370;
         _gpoBox.TextChanged += (_, _) => InvalidatePlan();
-        connFields.Controls.Add(Field("DNS domain (empty = auto detect)", _domainBox, 245));
-        connFields.Controls.Add(Field("Writable domain controller", _dcBox, 230));
-        connFields.Controls.Add(Field("New GPO name", _gpoBox, 390));
+        connFields.Controls.Add(ResponsiveField("AD DNS domain", _domainBox), 0, 0);
+        connFields.Controls.Add(ResponsiveField("Writable DC", _dcBox), 1, 0);
+        connFields.Controls.Add(ResponsiveField("New GPO name", _gpoBox), 2, 0);
         connLayout.Controls.Add(connFields, 0, 0);
-        var accounts = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
+        var accounts = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+        accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+        accounts.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        accounts.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _currentRadio.Text = "Current Windows account";
         _currentRadio.AutoSize = true;
-        _currentRadio.Padding = new Padding(0, 10, 0, 0);
-        _alternateRadio.Text = "Other domain account";
+        _alternateRadio.Text = "Other AD account";
         _alternateRadio.AutoSize = true;
-        _alternateRadio.Padding = new Padding(0, 10, 0, 0);
         _currentRadio.CheckedChanged += (_, _) => SetCredentialFields();
         _alternateRadio.CheckedChanged += (_, _) => SetCredentialFields();
-        accounts.Controls.Add(_currentRadio);
-        accounts.Controls.Add(_alternateRadio);
-        _userBox.Width = 190;
+        accounts.Controls.Add(_currentRadio, 0, 0);
+        accounts.Controls.Add(_alternateRadio, 1, 0);
         _userBox.PlaceholderText = @"DOMAIN\user or user@domain";
         _userBox.TextChanged += (_, _) => ConnectionChanged();
-        _passwordBox.Width = 145;
         _passwordBox.UseSystemPasswordChar = true;
         _passwordBox.TextChanged += (_, _) => ConnectionChanged();
-        accounts.Controls.Add(Field("AD user", _userBox, 200, 52));
-        accounts.Controls.Add(Field("Password (session only)", _passwordBox, 155, 52));
+        accounts.Controls.Add(ResponsiveField("AD user", _userBox), 0, 1);
+        accounts.Controls.Add(ResponsiveField("Password (session only)", _passwordBox), 1, 1);
+        var accountActions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         _usersButton.Text = "Find user";
-        _usersButton.Width = 90;
-        _usersButton.Height = 31;
-        _usersButton.Margin = new Padding(0, 17, 10, 0);
+        _usersButton.Width = 100;
+        _usersButton.Height = 34;
         _usersButton.Click += async (_, _) => await FindUserAsync();
-        accounts.Controls.Add(_usersButton);
-        _connectButton.Text = "Connect / Refresh";
-        _connectButton.Width = 155;
-        _connectButton.Height = 31;
-        _connectButton.Margin = new Padding(0, 17, 10, 0);
+        accountActions.Controls.Add(_usersButton);
+        _connectButton.Text = "Connect";
+        _connectButton.Width = 122;
+        _connectButton.Height = 34;
         _connectButton.Click += async (_, _) => await ConnectAsync();
-        accounts.Controls.Add(_connectButton);
+        accountActions.Controls.Add(_connectButton);
+        accounts.Controls.Add(accountActions, 2, 1);
         connLayout.Controls.Add(accounts, 0, 1);
         layout.Controls.Add(connection, 0, 2);
 
