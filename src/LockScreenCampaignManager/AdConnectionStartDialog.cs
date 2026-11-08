@@ -125,6 +125,18 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly Button _offline = new();
     private readonly Label _state = new();
     private readonly TextBox _inventory = new();
+    private readonly Button _back = new();
+    private readonly Button _next = new();
+    private readonly Label[] _railSteps = new Label[3];
+    private readonly Panel _stepHost = new();
+    private readonly Panel _connectionPage = new();
+    private readonly Panel _inventoryPage = new();
+    private readonly Panel _reviewPage = new();
+    private readonly TextBox _review = new();
+    private readonly ToolTip _tips = new() { AutoPopDelay = 22000, InitialDelay = 300, ReshowDelay = 200 };
+    private readonly System.Windows.Forms.Timer _dnsDebounce = new() { Interval = 650 };
+    private int _discoveryRevision;
+    private int _page;
     private bool _busy;
     private bool _mutating;
     internal AdDirectorySnapshot? Snapshot { get; private set; }
@@ -133,12 +145,12 @@ internal sealed class AdConnectionStartDialog : Form
     internal AdConnectionStartDialog(CompanyProfile? company = null)
     {
         _company = company;
-        Text = "Step 1 — Connect to DC & Read AD";
+        Text = "LockScreen Campaign Manager - AD Connection Wizard";
         Font = new Font("Segoe UI", 9.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(770, 565);
-        Size = new Size(920, 680);
+        MinimumSize = new Size(1050, 690);
+        Size = new Size(1190, 795);
         BackColor = UiStyle.Canvas;
         BuildLayout();
 
@@ -152,8 +164,8 @@ internal sealed class AdConnectionStartDialog : Form
         }
         finally { _mutating = false; }
 
-        _domain.TextChanged += (_, _) => InvalidateSnapshot();
-        _dc.TextChanged += (_, _) => InvalidateSnapshot();
+        _domain.TextChanged += (_, _) => { InvalidateSnapshot(); ScheduleDcDiscovery(); };
+        _dc.TextChanged += (_, _) => { InvalidateSnapshot(); _tips.SetToolTip(_dc, _dc.Text); };
         _user.TextChanged += (_, _) => InvalidateSnapshot();
         _password.TextChanged += (_, _) => InvalidateSnapshot();
         _current.CheckedChanged += (_, _) => { SetCredentialMode(); InvalidateSnapshot(); };
@@ -163,8 +175,18 @@ internal sealed class AdConnectionStartDialog : Form
         UiStyle.ApplyStatus(_state, "NOT CONNECTED — no directory read has been performed.", UiStatusKind.Neutral);
         AcceptButton = _connect;
         CancelButton = _offline;
+        _dnsDebounce.Tick += async (_, _) => {
+            _dnsDebounce.Stop();
+            await DiscoverDcListAsync();
+        };
+        Shown += (_, _) => ScheduleDcDiscovery();
         UiWindowPlacement.Attach(this, "ad-start-connection");
-        FormClosed += (_, _) => _password.Clear();
+        FormClosed += (_, _) => {
+            _dnsDebounce.Stop();
+            _dnsDebounce.Dispose();
+            _tips.Dispose();
+            _password.Clear();
+        };
     }
 
     private static TableLayoutPanel Field(string caption, Control child, int logicalWidth)
@@ -203,51 +225,106 @@ internal sealed class AdConnectionStartDialog : Form
 
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
-            Padding = new Padding(18), BackColor = UiStyle.Canvas
+        var root = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3,
+            Padding = new Padding(16), BackColor = UiStyle.Canvas
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 59));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 107));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 264));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
         Controls.Add(root);
 
-        var title = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
-        title.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
+        var title = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 2, BackColor = UiStyle.Navy,
+            Padding = new Padding(20, 12, 16, 8)
+        };
+        title.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         title.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        title.Controls.Add(new Label
-        {
-            Text = "1  Connect to DC & Read Active Directory",
-            Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
-            Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold)
+        title.Controls.Add(new Label {
+            Text = "LockScreen Campaign Manager  |  AD Connection Wizard",
+            Dock = DockStyle.Fill, ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 17f, FontStyle.Bold),
+            AutoEllipsis = false
         }, 0, 0);
-        title.Controls.Add(new Label
-        {
+        title.Controls.Add(new Label {
             Text = "Read-only LDAP inventory first. No GPO changes, RSAT or WinRM.",
-            Dock = DockStyle.Fill, ForeColor = UiStyle.Muted
+            Dock = DockStyle.Fill, ForeColor = Color.FromArgb(223,238,255),
+            Font = new Font("Segoe UI", 10f)
         }, 0, 1);
         root.Controls.Add(title, 0, 0);
+        root.SetColumnSpan(title, 2);
 
-        var servers = new FlowLayoutPanel
+        var rail = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1,
+            Padding = new Padding(7, 14, 12, 10), BackColor = UiStyle.SoftBlue
+        };
+        rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        string[] steps = [
+            "1  Connect to Domain Controller",
+            "2  Read Active Directory",
+            "3  Review and Confirm"
+        ];
+        for (int i = 0; i < steps.Length; i++)
         {
+            _railSteps[i] = new Label {
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Text = steps[i], AutoEllipsis = false,
+                Font = new Font("Segoe UI Semibold", 10f),
+                Margin = new Padding(4, 3, 2, 4),
+                Padding = new Padding(12, 4, 7, 4)
+            };
+            rail.Controls.Add(_railSteps[i], 0, i);
+        }
+        rail.Controls.Add(new Label {
+            Text = "Next: configure images, schedule and GPO deployment. " +
+                "Each deployment independently revalidates the selected AD scope.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Muted, Padding = new Padding(10, 12, 10, 6),
+            Font = new Font("Segoe UI", 9f)
+        }, 0, 3);
+        root.Controls.Add(rail, 0, 1);
+
+        _stepHost.Dock = DockStyle.Fill;
+        _stepHost.Padding = new Padding(20, 15, 18, 8);
+        _stepHost.BackColor = UiStyle.Surface;
+        root.Controls.Add(_stepHost, 1, 1);
+
+        _connectionPage.Dock = DockStyle.Fill;
+        var connection = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
+        };
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 165));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
+        connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        connection.Controls.Add(new Label {
+            Text = "Connect to Domain Controller" + Environment.NewLine +
+                "Detect the local AD DNS domain and select a DC discovered through DNS SRV.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 12f)
+        }, 0, 0);
+        var servers = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(9, 7, 8, 0)
+            BackColor = UiStyle.SoftBlue, Padding = new Padding(10, 12, 6, 5)
         };
         _domain.PlaceholderText = "ad.company.example";
         _dc.DropDownStyle = ComboBoxStyle.DropDown;
+        _dc.DropDownWidth = 750;
+        _dc.MaxDropDownItems = 18;
+        _dc.IntegralHeight = false;
         _dc.Text = "";
-        servers.Controls.Add(Field("AD DNS domain (blank = detect local)", _domain, 270));
-        servers.Controls.Add(Field("Domain controller (blank = discover)", _dc, 280));
-        root.Controls.Add(servers, 0, 1);
+        servers.Controls.Add(Field("AD DNS domain (detected automatically)", _domain, 380));
+        servers.Controls.Add(Field("Domain controller (DNS SRV auto-discovery)", _dc, 475));
+        connection.Controls.Add(servers, 0, 1);
 
-        var authentication = new FlowLayoutPanel
-        {
+        var authentication = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            BackColor = UiStyle.Surface, Padding = new Padding(7, 4, 8, 0)
+            BackColor = UiStyle.Surface, Padding = new Padding(6, 9, 8, 0)
         };
         _current.Text = "Current Windows account";
         _alternate.Text = "Other domain account (session only)";
@@ -257,13 +334,35 @@ internal sealed class AdConnectionStartDialog : Form
         authentication.Controls.Add(_alternate);
         _user.PlaceholderText = @"DOMAIN\user / user@domain";
         _password.UseSystemPasswordChar = true;
-        authentication.Controls.Add(Field("AD user", _user, 225));
-        authentication.Controls.Add(Field("Password — never saved", _password, 195));
-        root.Controls.Add(authentication, 0, 2);
-
+        authentication.Controls.Add(Field("AD user", _user, 315));
+        authentication.Controls.Add(Field("Password — never saved", _password, 285));
+        connection.Controls.Add(authentication, 0, 2);
         _state.Dock = DockStyle.Fill;
         _state.TextAlign = ContentAlignment.MiddleLeft;
-        root.Controls.Add(_state, 0, 3);
+        connection.Controls.Add(_state, 0, 3);
+        connection.Controls.Add(new Label {
+            Text = "Connection uses signed and sealed LDAP for read-only inventory. " +
+                "No GPO changes happen in this wizard. After connecting you can inspect " +
+                "discovered controllers, OUs, computer groups and GPOs before finishing.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Muted,
+            Padding = new Padding(9, 8, 9, 0)
+        }, 0, 4);
+        _connectionPage.Controls.Add(connection);
+        _stepHost.Controls.Add(_connectionPage);
+
+        _inventoryPage.Dock = DockStyle.Fill;
+        var inventoryLayout = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1
+        };
+        inventoryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 87));
+        inventoryLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        inventoryLayout.Controls.Add(new Label {
+            Text = "Read Active Directory Inventory" + Environment.NewLine +
+                "Review discovered domain controllers, OUs, groups and GPOs. " +
+                "No changes were written to AD.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 12f)
+        }, 0, 0);
         _inventory.Multiline = true;
         _inventory.ReadOnly = true;
         _inventory.ScrollBars = ScrollBars.Both;
@@ -271,53 +370,148 @@ internal sealed class AdConnectionStartDialog : Form
         _inventory.Dock = DockStyle.Fill;
         _inventory.BackColor = UiStyle.Surface;
         _inventory.ForeColor = UiStyle.Foreground;
-        _inventory.Font = new Font("Consolas", 9.5f);
-        _inventory.Text = "AD directory inventory is not available yet.\r\n\r\n" +
-            "First connect to a domain controller. A successful read will list:\r\n" +
-            " - DCs and writable/read-only status\r\n" +
-            " - Organizational Units\r\n" +
-            " - Computer security groups\r\n" +
-            " - Existing GPO names\r\n\r\n" +
-            "Work offline is optional. It does not enable deployment.";
-        root.Controls.Add(_inventory, 0, 4);
+        _inventory.Font = new Font("Consolas", 10f);
+        _inventory.Text = "Connect to AD first to read directory inventory.";
+        inventoryLayout.Controls.Add(_inventory, 0, 1);
+        _inventoryPage.Controls.Add(inventoryLayout);
+        _stepHost.Controls.Add(_inventoryPage);
 
-        var footer = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            Padding = new Padding(0, 9, 0, 0)
+        _reviewPage.Dock = DockStyle.Fill;
+        var reviewLayout = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1
         };
-        _connect.Text = "Connect & Read AD";
-        _connect.AutoSize = true;
-        _connect.MinimumSize = new Size(180, 37);
-        _connect.BackColor = UiStyle.Accent;
-        _connect.ForeColor = Color.White;
-        _connect.Tag = "PrimaryAction";
-        _connect.Click += async (_, _) => await ConnectAsync();
-        footer.Controls.Add(_connect);
-        _continue.Text = "2  Continue to Campaigns";
-        _continue.MinimumSize = new Size(225, 37);
-        _continue.AutoSize = true;
-        _continue.Enabled = false;
-        _continue.Click += (_, _) =>
-        {
-            if (Snapshot is null) return;
-            DialogResult = DialogResult.OK;
-            Close();
+        reviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        reviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        reviewLayout.Controls.Add(new Label {
+            Text = "Review and Confirm Scope" + Environment.NewLine +
+                "Finish makes this read-only inventory available to the campaign editor. " +
+                "GPO deployment will separately validate permissions and selected targets.",
+            Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
+            Font = new Font("Segoe UI Semibold", 12f)
+        }, 0, 0);
+        _review.Multiline = true;
+        _review.ReadOnly = true;
+        _review.WordWrap = true;
+        _review.ScrollBars = ScrollBars.Vertical;
+        _review.Dock = DockStyle.Fill;
+        _review.BackColor = UiStyle.SoftGreen;
+        _review.Font = new Font("Segoe UI", 11f);
+        reviewLayout.Controls.Add(_review, 0, 1);
+        _reviewPage.Controls.Add(reviewLayout);
+        _stepHost.Controls.Add(_reviewPage);
+
+        var footer = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, AutoScroll = true, Padding = new Padding(4, 11, 4, 3)
         };
-        footer.Controls.Add(_continue);
         _offline.Text = "Work offline (no AD)";
-        _offline.AutoSize = true;
-        _offline.MinimumSize = new Size(175, 37);
-        _offline.Click += (_, _) =>
-        {
+        _offline.Width = 190; _offline.Height = 38;
+        _offline.Click += (_, _) => {
             if (_busy) return;
             WorkOfflineChosen = true;
             DialogResult = DialogResult.Cancel;
             Close();
         };
         footer.Controls.Add(_offline);
-        root.Controls.Add(footer, 0, 5);
+        _continue.Text = "Finish";
+        _continue.Width = 125; _continue.Height = 38;
+        _continue.Enabled = false;
+        _continue.Click += (_, _) => {
+            if (Snapshot is null || _page != 2) return;
+            DialogResult = DialogResult.OK;
+            Close();
+        };
+        footer.Controls.Add(_continue);
+        _next.Text = "Next >";
+        _next.Width = 125; _next.Height = 38;
+        _next.Click += (_, _) => { if (Snapshot is not null) ShowPage(2); };
+        footer.Controls.Add(_next);
+        _connect.Text = "Connect & Read AD";
+        _connect.Width = 205; _connect.Height = 38;
+        _connect.BackColor = UiStyle.Accent;
+        _connect.ForeColor = Color.White;
+        _connect.Tag = "PrimaryAction";
+        _connect.Click += async (_, _) => await ConnectAsync();
+        footer.Controls.Add(_connect);
+        _back.Text = "< Back";
+        _back.Width = 125; _back.Height = 38;
+        _back.Click += (_, _) => ShowPage(Math.Max(0, _page - 1));
+        footer.Controls.Add(_back);
+        root.Controls.Add(footer, 0, 2);
+        root.SetColumnSpan(footer, 2);
+        ShowPage(0);
+    }
+
+    private void ShowPage(int page)
+    {
+        _page = Math.Clamp(page, 0, 2);
+        _connectionPage.Visible = _page == 0;
+        _inventoryPage.Visible = _page == 1;
+        _reviewPage.Visible = _page == 2;
+        (_page switch { 0 => _connectionPage, 1 => _inventoryPage, _ => _reviewPage }).BringToFront();
+        for (int i = 0; i < _railSteps.Length; i++)
+        {
+            _railSteps[i].ForeColor = i == _page ? Color.White : i < _page ? UiStyle.Green : UiStyle.Navy;
+            _railSteps[i].BackColor = i == _page ? UiStyle.Accent : UiStyle.SoftBlue;
+        }
+        _back.Enabled = _page > 0 && !_busy;
+        _connect.Visible = _page == 0;
+        _next.Visible = _page == 1;
+        _next.Enabled = Snapshot is not null && !_busy;
+        _continue.Visible = _page == 2;
+        _continue.Enabled = Snapshot is not null && !_busy;
+        AcceptButton = _page switch { 0 => _connect, 1 => _next, _ => _continue };
+    }
+
+    private void ScheduleDcDiscovery()
+    {
+        if (_busy || IsDisposed || Disposing) return;
+        _discoveryRevision++;
+        _dnsDebounce.Stop();
+        _dnsDebounce.Start();
+    }
+
+    private async Task DiscoverDcListAsync()
+    {
+        string domain = _domain.Text.Trim();
+        int revision = _discoveryRevision;
+        if (domain.Length == 0) domain = DcDnsDiscovery.LocalDnsDomain();
+        string expected = domain;
+        if (string.IsNullOrWhiteSpace(expected)) return;
+        try
+        {
+            var candidates = await Task.Run(() => DcDnsDiscovery.FindControllers(expected));
+            if (IsDisposed || Disposing || _busy || revision != _discoveryRevision ||
+                !string.Equals(_domain.Text.Trim(), expected, StringComparison.OrdinalIgnoreCase))
+                return;
+            string selected = _dc.Text.Trim();
+            _mutating = true;
+            try
+            {
+                _dc.BeginUpdate();
+                _dc.Items.Clear();
+                foreach (string value in candidates) _dc.Items.Add(value);
+                if (selected.Length > 0 && !_dc.Items.Contains(selected))
+                    _dc.Items.Insert(0, selected);
+                _dc.Text = selected.Length > 0 ? selected :
+                    candidates.Count > 0 ? candidates[0] : "";
+                int longest = candidates.Count == 0 ? 750 : candidates
+                    .Select(name => TextRenderer.MeasureText(name, _dc.Font).Width + 65).Max();
+                _dc.DropDownWidth = Math.Clamp(longest, 750, 1100);
+                _tips.SetToolTip(_dc, _dc.Text);
+            }
+            finally
+            {
+                _dc.EndUpdate();
+                _mutating = false;
+            }
+            if (candidates.Count == 0)
+                _tips.SetToolTip(_dc, "No DC DNS SRV answers. Check DNS or enter a DC manually.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex, "DNS domain controller discovery");
+        }
     }
 
     private void SetCredentialMode()
@@ -330,7 +524,8 @@ internal sealed class AdConnectionStartDialog : Form
     {
         if (_mutating) return;
         Snapshot = null;
-        _continue.Enabled = false;
+        _next.Enabled = _continue.Enabled = false;
+        if (_page > 0) ShowPage(0);
         UiStyle.ApplyStatus(_state,
             "CONNECTION CHANGED — read AD again to continue.", UiStatusKind.Warning);
     }
@@ -340,8 +535,10 @@ internal sealed class AdConnectionStartDialog : Form
         if (_busy) return;
         _busy = true;
         Snapshot = null;
-        _continue.Enabled = false;
-        _connect.Enabled = _offline.Enabled = false;
+        _next.Enabled = _continue.Enabled = false;
+        _dnsDebounce.Stop();
+        _discoveryRevision++;
+        _connect.Enabled = _offline.Enabled = _back.Enabled = false;
         _domain.Enabled = _dc.Enabled = _current.Enabled = _alternate.Enabled = false;
         _user.Enabled = _password.Enabled = false;
         UiStyle.ApplyStatus(_state,
@@ -373,11 +570,29 @@ internal sealed class AdConnectionStartDialog : Form
                 foreach (var name in snapshot.DomainControllers.Distinct(
                     StringComparer.OrdinalIgnoreCase).Take(100))
                     _dc.Items.Add(name);
+                _dc.DropDownWidth = Math.Max(750, snapshot.DomainControllers.Count == 0
+                    ? 750 : snapshot.DomainControllers.Max(name =>
+                        TextRenderer.MeasureText(name, _dc.Font).Width + 65));
+                _tips.SetToolTip(_dc, snapshot.Dc);
             }
             finally { _mutating = false; }
 
             _inventory.Text = BuildInventory(snapshot);
-            _continue.Enabled = true;
+            _review.Text = "DOMAIN: " + snapshot.Domain + Environment.NewLine +
+                "CONNECTED DC: " + snapshot.Dc + Environment.NewLine +
+                "DC WRITABLE: " + (snapshot.Writable ? "Yes" : "No (RODC)") +
+                Environment.NewLine + "COMPANY: " + (_company?.Name ?? "(unassigned)") +
+                Environment.NewLine + "DEFAULT OU: " + (_company?.DefaultOuDn ?? "(not selected)") +
+                Environment.NewLine + "COMPUTER GROUP: " + (_company?.DefaultGroupDn ?? "(not selected)") +
+                Environment.NewLine + "READ UTC: " + snapshot.ObservedUtc.ToString("O") +
+                Environment.NewLine + Environment.NewLine +
+                $"Inventory: {snapshot.DomainControllers.Count} DCs, " +
+                $"{snapshot.OrganizationalUnits.Count} OUs, " +
+                $"{snapshot.ComputerGroups.Count} security groups, " +
+                $"{snapshot.GroupPolicies.Count} GPOs." +
+                Environment.NewLine + Environment.NewLine +
+                "No changes have been made to AD or Group Policy.";
+            ShowPage(1);
             UiStyle.ApplyStatus(_state,
                 $"CONNECTED / READ ONLY — {snapshot.Domain} | {snapshot.Dc} | " +
                 (snapshot.Writable ? "Writable DC" : "Read-only DC") + " | " +
@@ -403,6 +618,7 @@ internal sealed class AdConnectionStartDialog : Form
                 _domain.Enabled = _dc.Enabled = _current.Enabled = _alternate.Enabled = true;
                 _busy = false;
                 SetCredentialMode();
+                ShowPage(_page);
             }
         }
     }
