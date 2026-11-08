@@ -130,7 +130,7 @@ public sealed partial class MainForm
             _workflowBar.Visible = !advanced;
             // Reclaim the wizard row in Advanced; keep it pinned above images in Wizard.
             if (_workflowBar.Parent is TableLayoutPanel owner)
-                owner.RowStyles[2].Height = advanced ? 0 : 106;
+                owner.RowStyles[2].Height = advanced ? 0 : 132;
         }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
