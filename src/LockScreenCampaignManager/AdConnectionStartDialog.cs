@@ -457,7 +457,20 @@ internal sealed class AdConnectionStartDialog : Form
         _advancedDc.Margin = new Padding(10, 9, 0, 4);
         _advancedDc.CheckedChanged += (_, _) => {
             _serverOptions.Visible = _advancedDc.Checked;
-            if (!_advancedDc.Checked && !_mutating) _dc.Text = "";
+            if (_advancedDc.Checked && !_mutating)
+            {
+                // Never discard the discovered controller list when Advanced
+                // is collapsed. Rechecking must reuse the existing list and
+                // refresh DNS if the domain has changed or no DCs are cached.
+                if (_dc.Items.Count == 0)
+                    ScheduleDcDiscovery();
+                else
+                    _dcDiscoveryStatus.Text = _dc.Items.Count +
+                        " controller(s) available. Select one or use Find DCs to refresh.";
+            }
+            // When Advanced is off the connection already ignores _dc.Text.
+            // Clearing it here caused a lost selection and an empty-looking
+            // dropdown when the operator enabled Advanced again.
         };
         var serverPanel = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
@@ -925,11 +938,14 @@ internal sealed class AdConnectionStartDialog : Form
             {
                 _domain.Text = snapshot.Domain;
                 _advancedDc.Checked = false;
-                _dc.Text = snapshot.Dc;
                 _dc.Items.Clear();
                 foreach (var name in snapshot.DomainControllers.Distinct(
                     StringComparer.OrdinalIgnoreCase).Take(100))
                     _dc.Items.Add(name);
+                if (!snapshot.DomainControllers.Contains(snapshot.Dc,
+                    StringComparer.OrdinalIgnoreCase))
+                    _dc.Items.Insert(0, snapshot.Dc);
+                _dc.Text = snapshot.Dc;
                 _dc.DropDownWidth = Math.Max(750, snapshot.DomainControllers.Count == 0
                     ? 750 : snapshot.DomainControllers.Max(name =>
                         TextRenderer.MeasureText(name, _dc.Font).Width + 65));
