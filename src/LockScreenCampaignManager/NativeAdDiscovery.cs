@@ -294,8 +294,11 @@ internal static class NativeAdDiscovery
         DomainCredentials credentials, string domain, string dc, string baseDn, bool writable)
     {
         string targetOu = Get(request, "ouDn").Trim();
-        if (!targetOu.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
-            !targetOu.EndsWith("," + baseDn, StringComparison.OrdinalIgnoreCase))
+        // An initial connection may have no OU yet. Assess the domain-wide
+        // GPO creation ACL now; check OU linking only once a scope is selected.
+        bool hasOu = targetOu.Length > 0;
+        if (hasOu && (!targetOu.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
+            !targetOu.EndsWith("," + baseDn, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Select an OU inside the connected AD domain.");
         string login = Get(request, "user").Trim();
         if (login.Length == 0)
@@ -321,11 +324,12 @@ internal static class NativeAdDiscovery
         }
 
         var policiesAcl = ReadAcl(ldap, "CN=Policies,CN=System," + baseDn);
-        var ouAcl = ReadAcl(ldap, targetOu);
         string create = EffectiveAclHint(policiesAcl, principals, 1,
             Guid.Parse("f30e3bc2-9ff0-11d1-b603-0000f80367c1"));
-        string link = EffectiveAclHint(ouAcl, principals, 32,
-            Guid.Parse("f30e3bc1-9ff0-11d1-b603-0000f80367c1"));
+        string link = hasOu
+            ? EffectiveAclHint(ReadAcl(ldap, targetOu), principals, 32,
+                Guid.Parse("f30e3bc1-9ff0-11d1-b603-0000f80367c1"))
+            : "REQUIRES_OU_SELECTION";
         return new
         {
             domain, dc, user = login, readOnly = true, dcWritable = writable,
