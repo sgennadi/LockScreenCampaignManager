@@ -16,6 +16,7 @@ public sealed partial class MainForm : Form
     private readonly ToolTip _connectionTooltip = new() { AutoPopDelay = 14000, InitialDelay = 300, ReshowDelay = 100 };
     private readonly Button _adConnectButton = new();
     private AdDirectorySnapshot? _adSnapshot;
+    private DomainCredentials? _sessionAdCredentials;
     private AdConnectionScope _adScope = AdConnectionScope.From(null);
     private bool _adFirstStepShown;
     private readonly TextBox _name = new();
@@ -846,6 +847,7 @@ public sealed partial class MainForm : Form
     private void SetAdSnapshot(AdDirectorySnapshot? snapshot)
     {
         _adSnapshot = snapshot;
+        if (snapshot is null) _sessionAdCredentials = null;
         _adScope = AdConnectionScope.From(_company);
         if (snapshot is null)
         {
@@ -881,6 +883,8 @@ public sealed partial class MainForm : Form
             if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Snapshot is { } incoming)
             {
                 SetAdSnapshot(incoming);
+                _sessionAdCredentials = dialog.ConnectedCredentials;
+                _status.Text = "AD read complete. GPO write permissions must be checked before deployment.";
             }
             else
             {
@@ -919,7 +923,8 @@ public sealed partial class MainForm : Form
                 RandomizePerDevice = _project.RandomizePerDevice,
                 IntervalMinutes = _project.IntervalMinutes
             };
-            using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot, advanced);
+            using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot,
+                advanced, _sessionAdCredentials);
             wizard.ShowDialog(this);
         }
         catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
