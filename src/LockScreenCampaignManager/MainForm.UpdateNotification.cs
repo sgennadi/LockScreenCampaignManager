@@ -9,9 +9,9 @@ public sealed partial class MainForm
     private readonly Button _updateNotice = new()
     {
         Name = "UpdateNoticeButton",
-        Text = "Update available",
+        Text = "Check updates",
         Tag = "NoIcon",
-        Visible = false,
+        Visible = true,
         Dock = DockStyle.Fill,
         AutoEllipsis = true,
         Margin = new Padding(4, 3, 5, 3),
@@ -30,6 +30,12 @@ public sealed partial class MainForm
     private TableLayoutPanel? _noticeRoot;
     private DateTimeOffset _noticeLastChecked = DateTimeOffset.MinValue;
     private bool _noticeChecking;
+    private bool _noticeCheckFailed;
+    private static readonly TimeSpan NoticeCheckInterval = TimeSpan.FromMinutes(10);
+    private readonly System.Windows.Forms.Timer _noticePoll = new()
+    {
+        Interval = 10 * 60 * 1000
+    };
 
     internal event Action? UpdateNoticeChanged;
     internal string? AvailableUpdateVersion => _noticedRelease?.Version.ToString();
@@ -63,19 +69,25 @@ public sealed partial class MainForm
     {
         // No startup dialog, token, downloads, auto-install, or blocking UI.
         // A failed read-only check is NOT a claim that the app is current.
-        Shown += async (_, _) => await CheckUpdateNoticeAsync();
-        Activated += async (_, _) =>
+        _noticePoll.Tick += async (_, _) => await CheckUpdateNoticeAsync();
+        Shown += async (_, _) =>
         {
-            if (DateTimeOffset.UtcNow - _noticeLastChecked > TimeSpan.FromHours(6))
-                await CheckUpdateNoticeAsync();
+            _noticePoll.Start();
+            await CheckUpdateNoticeAsync();
         };
-        FormClosed += (_, _) => _updateNoticeClosing.Cancel();
+        Activated += async (_, _) => await CheckUpdateNoticeAsync();
+        FormClosed += (_, _) =>
+        {
+            _noticePoll.Stop();
+            _noticePoll.Dispose();
+            _updateNoticeClosing.Cancel();
+        };
     }
 
     private async Task CheckUpdateNoticeAsync()
     {
         if (_noticeChecking || IsDisposed || Disposing ||
-            DateTimeOffset.UtcNow - _noticeLastChecked < TimeSpan.FromHours(6))
+            DateTimeOffset.UtcNow - _noticeLastChecked < NoticeCheckInterval)
             return;
         _noticeChecking = true;
         _noticeLastChecked = DateTimeOffset.UtcNow;
@@ -92,12 +104,14 @@ public sealed partial class MainForm
         }
         catch (OperationCanceledException)
         {
-            // Timeout/offline is unknown, not "up-to-date".
+            ShowUpdateCheckError("GitHub check timed out or was cancelled.");
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Keep the previous verified release notice on intermittent
-            // network/GitHub errors. The manual Check in Updater has details.
+            // Keep any previously verified update; expose a clear retry
+            // action rather than hiding the checker on network/API failures.
+            AppLog.Write(ex, "Background GitHub release check");
+            ShowUpdateCheckError("Unable to check GitHub Releases. Open Updater for details.");
         }
         finally { _noticeChecking = false; }
     }
@@ -105,11 +119,16 @@ public sealed partial class MainForm
     private void ShowUpdateNotice(UpdateRelease? release)
     {
         _noticedRelease = release;
-        _updateNotice.Visible = release is not null;
+        _noticeCheckFailed = false;
+        _updateNotice.Visible = true;
         if (release is null)
         {
-            _updateNoticeHelp.SetToolTip(_updateNotice, "");
-            if (_noticeColumn is not null) _noticeColumn.Width = 0;
+            _updateNotice.Text = "Check updates";
+            _updateNoticeHelp.SetToolTip(_updateNotice,
+                "No newer release was detected at the last successful check. " +
+                "Click to check GitHub Releases manually.");
+            StyleUpdateNotice();
+            FitUpdateNotice();
             UpdateNoticeChanged?.Invoke();
             return;
         }
@@ -130,16 +149,40 @@ public sealed partial class MainForm
         UpdateNoticeChanged?.Invoke();
     }
 
+    private void ShowUpdateCheckError(string explanation)
+    {
+        if (IsDisposed || Disposing || _updateNoticeClosing.IsCancellationRequested)
+            return;
+        _noticeCheckFailed = true;
+        if (_noticedRelease is null)
+        {
+            _updateNotice.Visible = true;
+            _updateNotice.Text = "Updates: check failed";
+            _updateNoticeHelp.SetToolTip(_updateNotice,
+                explanation + Environment.NewLine +
+                "Click to open Updater and retry. No update status was determined.");
+        }
+        StyleUpdateNotice();
+        FitUpdateNotice();
+        UpdateNoticeChanged?.Invoke();
+    }
+
     private void StyleUpdateNotice()
     {
         if (!_updateNotice.Visible) return;
+        bool available = _noticedRelease is not null;
         _updateNotice.FlatStyle = FlatStyle.Flat;
         _updateNotice.UseVisualStyleBackColor = false;
-        _updateNotice.BackColor = Color.FromArgb(255, 230, 173);
-        _updateNotice.ForeColor = Color.FromArgb(89, 55, 9);
-        _updateNotice.FlatAppearance.BorderColor = Color.FromArgb(206, 145, 43);
-        _updateNotice.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 211, 124);
-        _updateNotice.Tag = "UpdateNotice";
+        _updateNotice.BackColor = available || _noticeCheckFailed
+            ? Color.FromArgb(255, 230, 173) : UiStyle.Surface;
+        _updateNotice.ForeColor = available || _noticeCheckFailed
+            ? Color.FromArgb(89, 55, 9) : UiStyle.Navy;
+        _updateNotice.FlatAppearance.BorderColor = available || _noticeCheckFailed
+            ? Color.FromArgb(206, 145, 43) : UiStyle.Border;
+        _updateNotice.FlatAppearance.MouseOverBackColor = available || _noticeCheckFailed
+            ? Color.FromArgb(255, 211, 124) : UiStyle.SoftBlue;
+        _updateNotice.Tag = available || _noticeCheckFailed
+            ? "UpdateNotice" : "NoIcon";
     }
 
     private void FitUpdateNotice()
@@ -182,6 +225,8 @@ public sealed partial class MainForm
     internal void ShowSimulatedUpdateNoticeForLayoutTest()
     {
         // UI-only: a fake release notice with no network/API/AD interaction.
+        _noticedRelease = null;
+        _noticeCheckFailed = true;
         _updateNotice.Visible = true;
         _updateNotice.Text = "Update available: 0.4.0-preview.53";
         _updateNotice.Tag = "UpdateNotice";
