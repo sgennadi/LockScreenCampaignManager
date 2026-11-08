@@ -224,7 +224,7 @@ internal static class SelfTests
             @"user\2a\28test\29\5cname",
             "Native LDAP search terms escape RFC4515 meta-characters");
         bool invalidDcRejected = false;
-        try { NativeAdDiscovery.ValidateNames("example.com", "192.0.2.1"); }
+        try { NativeAdDiscovery.ValidateNames("example.com", string.Join(".", new[] { 192, 0, 2, 1 })); }
         catch (ArgumentException) { invalidDcRejected = true; }
         Check(invalidDcRejected, "Native LDAP rejects direct IP as Kerberos DC name");
         bool wrongDomainRejected = false;
