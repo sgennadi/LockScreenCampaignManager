@@ -198,9 +198,10 @@ public static class CampaignExporter
         else
         {
             sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > Scripts");
-            sb.AppendLine("   Method: classic Startup Scripts (scripts.ini) with a .cmd launcher.");
-            sb.AppendLine("   The GPO-owned .cmd invokes the pinned LockScreen-Agent.exe as SYSTEM.");
-            sb.AppendLine("   EXE arguments: --client-agent Install");
+            sb.AppendLine("   Method: classic Startup Scripts (scripts.ini), direct EXE.");
+            sb.AppendLine("   Script: \\\\ad.example.com\\SYSVOL\\ad.example.com\\scripts\\LockScreenCampaigns\\" + campaign.CampaignId + "\\LockScreen-Agent.exe");
+            sb.AppendLine("   Script parameters: --client-agent Install");
+            sb.AppendLine("   No PowerShell or intermediate CMD launcher is required.");
         }
         sb.AppendLine("   Endpoints must receive the GPO and complete Startup before the campaign begins.");
         sb.AppendLine();
