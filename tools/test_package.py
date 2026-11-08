@@ -66,7 +66,7 @@ multi_dc = (project / 'NativeDcConsistency.cs').read_text(encoding='utf-8')
 assert 'NativeDcConsistency.Execute(mode, request, credentials)' in runner
 assert 'LockScreenCampaignManager.DcConsistency.ps1' not in csproj
 assert 'RunImpersonated' in multi_dc and 'LOGON_NETCREDENTIALS_ONLY' in multi_dc
-assert 'SHA256.HashData' in multi_dc and 'RootDSE' in multi_dc
+assert 'SHA256.HashData' in multi_dc and 'ReadRootDse' in multi_dc
 
 
 assert 'psscripts.ini' in gpo and 'gPCMachineExtensionNames' in gpo
