@@ -722,7 +722,7 @@ public sealed partial class MainForm : Form
         _projectDirty = true;
         UpdateRows(originalCount);
         _status.Text = $"{selected.Length} image(s) imported. Next: Arrange / edit, then Schedule.";
-        if (!_advancedMode && _workflowStep == 0) _workflowStep = 1;
+        if (!_advancedMode && _workflowStep == 1) _workflowStep = 2;
         UpdateWorkflow();
     }
 
