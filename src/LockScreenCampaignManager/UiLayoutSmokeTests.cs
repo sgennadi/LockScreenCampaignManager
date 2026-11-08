@@ -36,7 +36,8 @@ internal static class UiLayoutSmokeTests
         ("Campaign Wizard - schedule", () => CreateWizardPage(3),
             new[] { "Edit schedule...", "Next", "Back" }),
         ("Campaign Wizard - save", () => CreateWizardPage(4),
-            new[] { "Validate campaign", "Save project...", "Next", "Back" }),
+            new[] { "Validate campaign", "Save project...",
+                "Skip saving & continue", "Save & Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(5),
             new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
@@ -260,6 +261,54 @@ internal static class UiLayoutSmokeTests
         }
     }
 
+    private static void CheckWizardFooter(Form form, string profile)
+    {
+        var footer = Descendants(form).OfType<TableLayoutPanel>()
+            .FirstOrDefault(x => x.Name == "CampaignWizardFooter");
+        if (footer is null) return;
+        if (footer.Parent != form || footer.Dock != DockStyle.Bottom)
+            throw new InvalidOperationException(
+                $"Campaign Wizard footer is not pinned outside scrolling pages at {profile}.");
+        footer.PerformLayout();
+        foreach (string caption in new[] { "Back", "Close Wizard" })
+        {
+            var button = footer.Controls.OfType<Button>()
+                .FirstOrDefault(x => x.Text == caption);
+            if (button is null || button.Dock != DockStyle.Fill ||
+                button.Height < 30 || button.Width < 45)
+                throw new InvalidOperationException(
+                    $"Wizard bottom navigation missing or cropped: {caption} at {profile}.");
+        }
+        var next = footer.Controls.OfType<Button>()
+            .FirstOrDefault(x => x.Text is "Next" or "Continue" or
+                "Save & Next" or "Continue (no save)" or "Finish" or "Deploy GPO...");
+        if (next is null || next.Dock != DockStyle.Fill ||
+            next.Height < 30 || next.Width < 75)
+            throw new InvalidOperationException(
+                $"Wizard Next/Finish action is cropped at {profile}.");
+    }
+
+    private static void CheckTimeZoneSelectors(Form form, string profile)
+    {
+        var picker = Descendants(form).OfType<ComboBox>()
+            .FirstOrDefault(x => x.Name is "WizardTimeZoneSelect" or
+                "ScheduleTimeZoneSelect");
+        if (picker is null) return;
+        if (picker.Dock != DockStyle.Fill ||
+            picker.DropDownStyle != ComboBoxStyle.DropDownList ||
+            picker.Items.Count < 5 ||
+            string.IsNullOrWhiteSpace(TimeZoneChoices.SelectedId(picker)))
+            throw new InvalidOperationException(
+                $"Time-zone picker is empty or not usable at {profile}.");
+        if (picker.Name == "ScheduleTimeZoneSelect" &&
+            TimeZoneChoices.SelectedId(picker) != "UTC")
+            throw new InvalidOperationException(
+                "Schedule editor failed to preserve the selected UTC time zone.");
+        if (picker.DropDownWidth < 420)
+            throw new InvalidOperationException(
+                $"Time-zone selection drop-down is too narrow at {profile}.");
+    }
+
     private static void CheckWizardHeader(Form form, string profile)
     {
         Label[] labels = Descendants(form).OfType<Label>().ToArray();
@@ -318,6 +367,8 @@ internal static class UiLayoutSmokeTests
                 form.PerformLayout();
                 CheckMainEditorHeader(form, profile.Name);
                 CheckWizardHeader(form, profile.Name);
+                CheckWizardFooter(form, profile.Name);
+                CheckTimeZoneSelectors(form, profile.Name);
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
                     CheckCampaignNameLayout(form, profile.Name);
