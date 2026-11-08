@@ -135,8 +135,8 @@ class GpoLifecycleSafetyTests(unittest.TestCase):
         csproj = (SRC/'LockScreenCampaignManager.csproj').read_text(encoding='utf-8')
         runner = (SRC/'DomainPowerShellRunner.cs').read_text(encoding='utf-8')
         form = (SRC/'GpoOperationsForm.cs').read_text(encoding='utf-8')
-        for name in ('Gpo-ConflictScan.ps1',):
-            self.assertIn(name, csproj)
+        self.assertNotIn('Include="Assets\\Gpo-ConflictScan.ps1"', csproj)
+        self.assertIn('NativeGpoEndpointAudit.Execute(mode, request, credentials)', runner)
         self.assertNotIn('Include="Assets\\Gpo-Lifecycle.ps1"', csproj)
         self.assertIn('NativeGpoLifecyclePreview.Execute(mode, request, credentials)', runner)
         for action in ('Lifecycle','ConflictScan','Immediate'):
