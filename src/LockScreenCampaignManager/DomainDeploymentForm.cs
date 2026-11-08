@@ -34,6 +34,7 @@ internal sealed class DomainDeploymentForm : Form
     private string _connectedDc = string.Empty;
     private string? _lastPlanKey;
     private bool _running;
+    private bool _connectedWritable;
     private int _lastConflictHigh;
     private int _lastConflictWarnings;
     private bool _suppressConnectionChanged;
@@ -318,6 +319,66 @@ internal sealed class DomainDeploymentForm : Form
         layout.Controls.Add(footer, 0, 5);
     }
 
+    private bool HasSelectedTargets =>
+        !string.IsNullOrWhiteSpace(_connectedDomain) && _connectedWritable &&
+        _ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow &&
+        !string.IsNullOrWhiteSpace(_gpoBox.Text);
+
+    private void SetDeploymentMode(bool advanced)
+    {
+        _advancedMode = advanced;
+        _wizardModeButton.Enabled = advanced;
+        _advancedModeButton.Enabled = !advanced;
+        _wizardModeButton.BackColor = advanced ? UiStyle.Surface : UiStyle.Accent;
+        _wizardModeButton.ForeColor = advanced ? UiStyle.Foreground : Color.White;
+        _advancedModeButton.BackColor = advanced ? UiStyle.Accent : UiStyle.Surface;
+        _advancedModeButton.ForeColor = advanced ? Color.White : UiStyle.Foreground;
+        UpdateDeploymentSteps();
+    }
+
+    private void NextDeploymentStep()
+    {
+        if (_running) return;
+        if (_wizardStep == 0 && (string.IsNullOrEmpty(_connectedDomain) || !_connectedWritable))
+        {
+            _progress.Text = "Connect to a writable domain controller first.";
+            return;
+        }
+        if (_wizardStep == 1 && !HasSelectedTargets)
+        {
+            _progress.Text = "Select an OU, a computer group and a new GPO name.";
+            return;
+        }
+        _wizardStep = Math.Min(2, _wizardStep + 1);
+        UpdateDeploymentSteps();
+    }
+
+    private void UpdateDeploymentSteps()
+    {
+        if (_deploymentActionRow is null) return;
+        _wizardHint.Text = _advancedMode
+            ? "Advanced mode  •  Choose targets, Preview, then Deploy."
+            : _wizardStep switch
+            {
+                0 => "Step 1 / 3  Connect to a writable DC (credentials are session-only).",
+                1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
+                _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
+            };
+        _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
+        _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
+        _wizardBack.Enabled = !_running;
+        _wizardNext.Enabled = !_running && (_wizardStep == 0
+            ? !string.IsNullOrEmpty(_connectedDomain) && _connectedWritable
+            : HasSelectedTargets);
+        _planButton.Visible = _advancedMode || _wizardStep == 2;
+        _planButton.Enabled = !_running && HasSelectedTargets;
+        _deployButton.Visible = _advancedMode || _wizardStep == 2;
+        _deployButton.Enabled = !_running && HasSelectedTargets &&
+            _lastPlanKey is not null && _lastPlanKey == PlanKey();
+        if (_gpoOperationsButton is not null)
+            _gpoOperationsButton.Visible = _advancedMode;
+    }
+
     private void OpenGpoOperations()
     {
         if (_running) return;
@@ -360,6 +421,7 @@ internal sealed class DomainDeploymentForm : Form
         if (_suppressConnectionChanged) return;
         _connectedDomain = string.Empty;
         _connectedDc = string.Empty;
+        _connectedWritable = false;
         UiStyle.ApplyStatus(_connectionStatus,
             "CHANGED — click Connect / Refresh to verify this domain/DC and list OU/groups.",
             UiStatusKind.Warning);
@@ -368,6 +430,7 @@ internal sealed class DomainDeploymentForm : Form
         FilterOus();
         FilterGroups();
         InvalidatePlan();
+        UpdateDeploymentSteps();
     }
 
     private void InvalidatePlan()
@@ -376,6 +439,7 @@ internal sealed class DomainDeploymentForm : Form
         _lastConflictHigh = 0;
         _lastConflictWarnings = 0;
         _deployButton.Enabled = false;
+        UpdateDeploymentSteps();
     }
 
     private DomainCredentials Credentials() => _alternateRadio.Checked
@@ -400,6 +464,7 @@ internal sealed class DomainDeploymentForm : Form
             _connectButton.Enabled = _planButton.Enabled = _usersButton.Enabled = true;
             _deployButton.Enabled = _lastPlanKey is not null;
             UseWaitCursor = false;
+            UpdateDeploymentSteps();
         }
     }
 
@@ -431,6 +496,7 @@ internal sealed class DomainDeploymentForm : Form
             _connectedDomain = actualDomain;
             _connectedDc = actualDc;
             bool writable = connected.GetProperty("dcWritable").GetBoolean();
+            _connectedWritable = writable;
             var dcRows = await RunBusy("Enumerating writable DCs...", () =>
                 DomainPowerShellRunner.Execute(DomainOperation.Discovery, "DomainControllers",
                     new { domain=actualDomain, dc=actualDc }, creds));
@@ -497,6 +563,7 @@ internal sealed class DomainDeploymentForm : Form
                     : "LDAP verified. No RSAT/WinRM. A new GPO still requires Preview and confirmation.";
             SaveConnection();
             InvalidatePlan();
+            UpdateDeploymentSteps();
         }
         catch (Exception ex) { DisplayError(ex); }
     }
@@ -627,6 +694,7 @@ internal sealed class DomainDeploymentForm : Form
                     $"Audit is not full RSoP: check local/site GPO, security, WMI filters and gpresult.\r\n";
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
+                UpdateDeploymentSteps();
                 _progress.Text = "Preview passed. Click Deploy to create the GPO.";
                 return d;
             }
@@ -680,6 +748,7 @@ internal sealed class DomainDeploymentForm : Form
                     "New GPO created on the selected DC. Verify the GPO and its application on endpoints.");
                 _lastPlanKey = null;
                 _deployButton.Enabled = false;
+                UpdateDeploymentSteps();
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
         }
