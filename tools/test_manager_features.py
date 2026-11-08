@@ -302,7 +302,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('mode == "Cleanup"', native)
         self.assertIn('CleanupPreviewHash', native)
         self.assertIn('ValidatePreviewConditions', native)
-        self.assertIn('mode is ("Scan" or "Preview")', runner)
+        self.assertIn('mode is ("Scan" or "Preview" or "Cleanup")', runner)
         self.assertNotIn('Include="Assets\\Sysvol-Storage.ps1"', project)
         self.assertIn('NativeSysvolStorage.Execute(mode, request, credentials)', runner)
         self.assertIn('new SysvolStoragePanel(', ops)
