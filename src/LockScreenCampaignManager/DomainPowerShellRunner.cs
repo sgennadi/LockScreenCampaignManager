@@ -80,11 +80,13 @@ internal static class DomainPowerShellRunner
             mode is ("List" or "Preview" or "VerifyCleanup"))
             return NativeImmediateActions.Execute(mode, request, credentials);
 
-        // Deployment preflight reads only: OU/group, GPO name availability,
-        // SYSVOL, campaign schedules and image hashes. PS1 Deploy retains all
-        // existing write safeguards and re-runs its own complete preflight.
+        // Deployment Plan is read-only. Deploy independently reruns the
+        // entire native Plan, stages hashes, creates only a new GPO through
+        // Windows COM, removes broad Apply rights and links the chosen OU last.
         if (operation == DomainOperation.Deployment && mode == "Plan")
             return NativeGpoDeploymentPlan.Execute(mode, request, credentials);
+        if (operation == DomainOperation.Deployment && mode == "Deploy")
+            return NativeGpoDeploymentApply.Execute(mode, request, credentials);
 
         // Explicit migration boundary: only these audited legacy operations
         // may execute an embedded PS1. All other modes must fail closed.
@@ -92,7 +94,7 @@ internal static class DomainPowerShellRunner
         // scripts' ValidateSet declarations as each operation moves to C#.
         bool legacyAllowed = operation switch
         {
-            DomainOperation.Deployment => mode == "Deploy",
+
             DomainOperation.ConflictScan =>
                 mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
             DomainOperation.Immediate =>
@@ -109,14 +111,12 @@ internal static class DomainPowerShellRunner
         {
             string asset = operation switch
             {
-                DomainOperation.Deployment => "LockScreenCampaignManager.GPODeploy.ps1",
                     DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
                 DomainOperation.Immediate => "LockScreenCampaignManager.CampaignPushNow.ps1",
                     _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
             string script = Path.Combine(root, operation switch
             {
-                DomainOperation.Deployment => "GPO-Deploy.ps1",
                 DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
                 DomainOperation.Immediate => "Campaign-PushNow.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
