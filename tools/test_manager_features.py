@@ -339,6 +339,12 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("Color.FromArgb(10,134,76)", theme)
         self.assertIn("TestAdDirectorySnapshot()", tests)
         self.assertIn("AD first-step connect/read", smoke)
+        self.assertIn("DcDnsDiscovery.FindControllers", first)
+        self.assertIn("ShowPage(1)", first)
+        self.assertIn("ShowPage(2)", first)
+        self.assertIn("AddImagesFromFolder", main)
+        self.assertIn("Add Files...", main)
+        self.assertIn("Add Folder...", main)
 
     def test_windows_builder_exports_updated_version(self):
         workflow = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')

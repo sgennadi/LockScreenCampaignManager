@@ -23,7 +23,7 @@ internal static class UiLayoutSmokeTests
     private static readonly (string Name, Func<Form> Factory, string[] ExpectedButtons)[] Windows =
     {
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
-            new[] { "Connect & Read AD", "2  Continue to Campaigns",
+            new[] { "Connect & Read AD", "Next >", "Finish", "< Back",
                 "Work offline (no AD)" }),
         ("Updater", () => new UniversalUpdaterWindow(),
             new[] { "Check for updates", "Download & verify", "Backup status" }),
