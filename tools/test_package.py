@@ -66,6 +66,15 @@ multi_dc = (project / 'NativeDcConsistency.cs').read_text(encoding='utf-8')
 assert 'NativeDcConsistency.Execute(mode, request, credentials)' in runner
 assert 'LockScreenCampaignManager.DcConsistency.ps1' not in csproj
 assert 'RunImpersonated' in multi_dc and 'LOGON_NETCREDENTIALS_ONLY' in multi_dc
+assignment = (project / 'NativeComputerGroupAssignment.cs').read_text(encoding='utf-8')
+assert 'NativeComputerGroupAssignment.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.ComputerGroupAssignment.ps1' not in csproj
+for guard in ('GroupRid', 'primaryGroupID', 'uSNChanged', 'PlanDigest',
+              'PreviewFresh', 'approveSam', 'approveGroupDn', 'objectGUID',
+              'DirectoryAttributeOperation.Add', 'DirectoryAttributeOperation.Delete',
+              'SearchScope.Base', 'SessionOptions.ReferralChasing'):
+    assert guard in assignment, guard
+
 assert 'SHA256.HashData' in multi_dc and 'ReadRootDse' in multi_dc
 
 

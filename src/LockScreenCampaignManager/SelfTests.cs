@@ -32,6 +32,7 @@ internal static class SelfTests
         TestAdDirectorySnapshot();
         TestNativeAdDiscoveryContracts();
         TestNativeDcConsistencyContracts();
+        TestNativeComputerGroupAssignmentContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -213,6 +214,50 @@ internal static class SelfTests
             !scope.Matches(snapshot with { Domain = "other.example.com" },
                 profile, now),
             "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
+    private static void TestNativeComputerGroupAssignmentContracts()
+    {
+        const string domain = "DC=example,DC=com";
+        const string ou = "OU=Clients,DC=example,DC=com";
+        Check(NativeComputerGroupAssignment.Inside(
+            "CN=PC01,OU=Clients,DC=example,DC=com", ou) &&
+            !NativeComputerGroupAssignment.Inside(
+                "CN=PC02,OU=Other,DC=example,DC=com", ou) &&
+            !NativeComputerGroupAssignment.Inside(
+                "CN=PC03,OU=Clients,DC=another,DC=com", ou) &&
+            NativeComputerGroupAssignment.Inside(ou, domain),
+            "Native AD group scope rejects sibling OU and cross-domain objects");
+        Check(NativeComputerGroupAssignment.GroupRid(
+            "S-1-5-21-111111111-222222222-333333333-1200") == 1200,
+            "Native group membership supports nonprivileged custom security groups");
+        bool builtInRejected = false;
+        try
+        {
+            NativeComputerGroupAssignment.GroupRid(
+                "S-1-5-21-111111111-222222222-333333333-512");
+        }
+        catch (InvalidOperationException) { builtInRejected = true; }
+        Check(builtInRejected, "Native group engine rejects default domain group RID");
+        string a = NativeComputerGroupAssignment.PlanDigest(
+            new[] { "Domain", "Group", "PC01" });
+        string b = NativeComputerGroupAssignment.PlanDigest(
+            new[] { "domain", "group", "pc01" });
+        string changed = NativeComputerGroupAssignment.PlanDigest(
+            new[] { "domain", "group", "pc02" });
+        Check(a.Length == 64 && a == b && a != changed,
+            "Native membership preview hash is stable, scoped and case insensitive");
+        var now = DateTimeOffset.UtcNow;
+        Check(NativeComputerGroupAssignment.PreviewFresh(
+            now.UtcDateTime.ToString("o", System.Globalization.CultureInfo.InvariantCulture), now) &&
+            !NativeComputerGroupAssignment.PreviewFresh(
+                now.AddMinutes(-6).UtcDateTime.ToString("o",
+                    System.Globalization.CultureInfo.InvariantCulture), now) &&
+            !NativeComputerGroupAssignment.PreviewFresh(
+                now.AddMinutes(1).UtcDateTime.ToString("o",
+                    System.Globalization.CultureInfo.InvariantCulture), now) &&
+            !NativeComputerGroupAssignment.PreviewFresh("invalid", now),
+            "Native AD assignment rejects expired, future or malformed approval timestamps");
     }
 
     private static void TestNativeDcConsistencyContracts()

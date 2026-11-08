@@ -8,7 +8,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>LockScreenCampaignManager</AssemblyName>
     <RootNamespace>LockScreenCampaignManager</RootNamespace>
-    <Version>0.4.0-preview.46</Version>
+    <Version>0.4.0-preview.47</Version>
     <ApplicationIcon>Assets\LockScreen.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
@@ -29,7 +29,6 @@
     <EmbeddedResource Include="Assets\Gpo-Lifecycle.ps1" LogicalName="LockScreenCampaignManager.GpoLifecycle.ps1" />
     <EmbeddedResource Include="Assets\Gpo-ConflictScan.ps1" LogicalName="LockScreenCampaignManager.GpoConflictScan.ps1" />
     <EmbeddedResource Include="Assets\Campaign-PushNow.ps1" LogicalName="LockScreenCampaignManager.CampaignPushNow.ps1" />
-    <EmbeddedResource Include="Assets\Computer-GroupAssignment.ps1" LogicalName="LockScreenCampaignManager.ComputerGroupAssignment.ps1" />
     <EmbeddedResource Include="Assets\Sysvol-Storage.ps1" LogicalName="LockScreenCampaignManager.SysvolStorage.ps1" />
   </ItemGroup>
 </Project>

@@ -35,6 +35,11 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.DcConsistency)
             return NativeDcConsistency.Execute(mode, request, credentials);
 
+        // Computer and Group Assignment is now native LDAP for Search,
+        // Preview and Apply. Guarded writes never spawn powershell.exe.
+        if (operation == DomainOperation.Assignment)
+            return NativeComputerGroupAssignment.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -45,7 +50,6 @@ internal static class DomainPowerShellRunner
                 DomainOperation.Lifecycle => "LockScreenCampaignManager.GpoLifecycle.ps1",
                 DomainOperation.ConflictScan => "LockScreenCampaignManager.GpoConflictScan.ps1",
                 DomainOperation.Immediate => "LockScreenCampaignManager.CampaignPushNow.ps1",
-                DomainOperation.Assignment => "LockScreenCampaignManager.ComputerGroupAssignment.ps1",
                 DomainOperation.Storage => "LockScreenCampaignManager.SysvolStorage.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
@@ -55,7 +59,6 @@ internal static class DomainPowerShellRunner
                 DomainOperation.Lifecycle => "Gpo-Lifecycle.ps1",
                 DomainOperation.ConflictScan => "Gpo-ConflictScan.ps1",
                 DomainOperation.Immediate => "Campaign-PushNow.ps1",
-                DomainOperation.Assignment => "Computer-GroupAssignment.ps1",
                 DomainOperation.Storage => "Sysvol-Storage.ps1",
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             });
