@@ -162,10 +162,37 @@ internal static class UiLayoutSmokeTests
 
     private static Form CreateWizardPage(int page)
     {
-        // The editor stays invisible; no AD or disk writes are made.
+        // The editor stays invisible: no domain, GPO or SYSVOL access.
+        // For image pages create one temporary PNG so the test exercises
+        // actual decoding and the selection/preview binding, not just a
+        // PictureBox that exists but renders nothing.
+        string? fixture = null;
+        if (page is 1 or 2)
+        {
+            fixture = Path.Combine(Path.GetTempPath(),
+                "lscm-preview-smoke-" + Guid.NewGuid().ToString("N") + ".png");
+            using var sample = new Bitmap(120, 68);
+            sample.Save(fixture, System.Drawing.Imaging.ImageFormat.Png);
+        }
         var editor = new MainForm();
-        var wizard = editor.CreateCampaignWizardForSmokeTest(page);
-        wizard.Disposed += (_, _) => editor.Dispose();
+        Form wizard;
+        try { wizard = editor.CreateCampaignWizardForSmokeTest(page, fixture); }
+        catch
+        {
+            editor.Dispose();
+            if (fixture is not null) File.Delete(fixture);
+            throw;
+        }
+        wizard.Disposed += (_, _) =>
+        {
+            editor.Dispose();
+            if (fixture is not null)
+            {
+                try { File.Delete(fixture); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        };
         if (page == 3)
         {
             var picker = Descendants(wizard).OfType<ComboBox>()
@@ -397,12 +424,35 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "CampaignWizardImagePreview");
                     var imagePath = Descendants(form).OfType<Label>()
                         .SingleOrDefault(x => x.Name == "CampaignWizardImagePath");
+                    var frame = Descendants(form).OfType<Panel>()
+                        .SingleOrDefault(x => x.Name == "CampaignWizardPreviewFrame");
+                    var placeholder = Descendants(form).OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "CampaignWizardPreviewPlaceholder");
                     if (imageList is null || imagePreview is null || imagePath is null ||
+                        frame is null || placeholder is null ||
                         imagePreview.FindForm() != form ||
+                        imagePreview.Parent != frame ||
                         imagePreview.SizeMode != PictureBoxSizeMode.Zoom ||
-                        imagePreview.Dock != DockStyle.Fill)
+                        imagePreview.Dock != DockStyle.Fill ||
+                        imageList.Items.Count != 1 || imageList.SelectedIndex != 0 ||
+                        imagePreview.Image is null ||
+                        !imagePath.Text.Contains("120 x 68", StringComparison.Ordinal) ||
+                        placeholder.Visible)
                         throw new InvalidOperationException(
-                            $"Wizard image list and live preview must share the same page at {profile.Name}.");
+                            $"Wizard must show the selected PNG inside its own image/arrange page at {profile.Name}.");
+                    // The old regression only verified control existence.
+                    // Force a minimum-sized window and verify that DPI layout
+                    // has not collapsed the actual preview to a zero-height box.
+                    form.Size = new Size(950, 690);
+                    form.PerformLayout();
+                    foreach (Control pane in Descendants(form).Where(x =>
+                        x is TableLayoutPanel or Panel))
+                        pane.PerformLayout();
+                    if (imagePreview.Width < 130 || imagePreview.Height < 90 ||
+                        frame.Width < 130 || frame.Height < 90)
+                        throw new InvalidOperationException(
+                            $"Wizard preview is visually collapsed at {profile.Name}: " +
+                            $"{imagePreview.Width} x {imagePreview.Height}.");
                 }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
