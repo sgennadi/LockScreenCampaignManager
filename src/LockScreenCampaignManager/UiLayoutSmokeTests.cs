@@ -37,7 +37,7 @@ internal static class UiLayoutSmokeTests
         ("Diagnostic trends", () => new DiagnosticsTrendsWindow(),
             new[] { "Analyze local reports", "Export aggregate JSON", "Close" }),
         ("Diagnostics", () => new DiagnosticsWindow(),
-            new[] { "Refresh", "Error trends", "Close" }),
+            new[] { "Refresh", "Error trends", "Report an error...", "Close" }),
         ("Repair history", () => new RepairHistoryDialog(Array.Empty<RepairHistoryEvent>()),
             new[] { "Export visible CSV", "Close" }),
         ("Campaign closure audit", () => new CampaignClosureAuditDialog(
