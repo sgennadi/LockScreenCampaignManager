@@ -100,12 +100,16 @@ public sealed partial class MainForm
             FitHeader();
             DpiChanged += (_, _) => BeginInvoke(new Action(() =>
             {
+                ConstrainToWorkingArea();
                 FitHeader();
                 FitFooter();
             }));
             UiWindowPlacement.Attach(this, "campaign-setup-wizard");
             Shown += (_, _) =>
             {
+                // Runs after window-position restoration; do not allow a
+                // remembered large window to hide the bottom action bar.
+                ConstrainToWorkingArea();
                 FitHeader();
                 RenderPage();
                 FitFooter();
@@ -156,7 +160,8 @@ public sealed partial class MainForm
 
             var rail = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
+                Dock = DockStyle.Fill, AutoScroll = true,
+                ColumnCount = 1, RowCount = 7,
                 BackColor = UiStyle.SoftBlue,
                 Padding = new Padding(9, 16, 9, 10),
                 Margin = new Padding(0, 0, 7, 0)
@@ -192,6 +197,7 @@ public sealed partial class MainForm
             _host.Padding = new Padding(18, 16, 18, 10);
             _host.BackColor = UiStyle.Surface;
             _root.Controls.Add(_host, 1, 1);
+            _host.ClientSizeChanged += (_, _) => ResizePageToViewport();
 
             // Footer is a direct, bottom-docked FORM child, not a row inside
             // the scrollable main layout. This keeps Back/Next/Close visible
@@ -287,6 +293,30 @@ public sealed partial class MainForm
             UiStyle.FitWizardHeader(_root, _header, _heading, _subheading, 120);
         }
 
+        private void ConstrainToWorkingArea()
+        {
+            if (IsDisposed || WindowState == FormWindowState.Minimized) return;
+            Rectangle area = Screen.FromControl(this).WorkingArea;
+            if (area.Width < 300 || area.Height < 240) return;
+            // Even on a laptop with 150-200% scaling, the window MUST fit
+            // the usable desktop, including the fixed navigation footer.
+            MinimumSize = new Size(Math.Min(950, area.Width),
+                Math.Min(690, area.Height));
+            if (WindowState != FormWindowState.Normal) return;
+            Rectangle fitted = UiWindowPlacement.ClampToScreens(
+                Bounds, MinimumSize, new[] { area });
+            if (Bounds != fitted) Bounds = fitted;
+        }
+
+        private void ResizePageToViewport()
+        {
+            if (_host.IsDisposed) return;
+            if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
+                && !page.IsDisposed)
+                page.Height = Math.Max(390,
+                    _host.ClientSize.Height - _host.Padding.Vertical);
+        }
+
         private void FitFooter()
         {
             if (IsDisposed || _footer.IsDisposed || _footer.ColumnStyles.Count != 5)
@@ -364,11 +394,6 @@ public sealed partial class MainForm
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
                 page.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
                 _host.Controls.Add(page);
-                _host.ClientSizeChanged += (_, _) =>
-                {
-                    if (page.IsDisposed || _host.IsDisposed || !page.IsHandleCreated) return;
-                    page.Height = Math.Max(390, _host.ClientSize.Height - _host.Padding.Vertical);
-                };
 
                 string[] titles =
                 [
