@@ -135,15 +135,34 @@ internal sealed class DomainDeploymentForm : Form
 
     private void BuildControls()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(18) };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(18) };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 89));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 111));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
         Controls.Add(layout);
         layout.Controls.Add(new Label { Text = "Active Directory / GPO Deployment", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold), ForeColor = Color.FromArgb(30, 44, 65) }, 0, 0);
+        var navigation = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        _wizardHint.Dock = DockStyle.Fill;
+        _wizardHint.TextAlign = ContentAlignment.MiddleLeft;
+        _wizardHint.AutoEllipsis = true;
+        _wizardHint.ForeColor = UiStyle.Navy;
+        navigation.Controls.Add(_wizardHint, 0, 0);
+        _wizardModeButton.Text = "Wizard";
+        _wizardModeButton.Dock = DockStyle.Fill;
+        _wizardModeButton.Click += (_, _) => SetDeploymentMode(false);
+        navigation.Controls.Add(_wizardModeButton, 1, 0);
+        _advancedModeButton.Text = "Advanced";
+        _advancedModeButton.Dock = DockStyle.Fill;
+        _advancedModeButton.Click += (_, _) => SetDeploymentMode(true);
+        navigation.Controls.Add(_advancedModeButton, 2, 0);
+        layout.Controls.Add(navigation, 0, 1);
 
         var connection = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
         var connLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
@@ -194,7 +213,7 @@ internal sealed class DomainDeploymentForm : Form
         _connectButton.Click += async (_, _) => await ConnectAsync();
         accounts.Controls.Add(_connectButton);
         connLayout.Controls.Add(accounts, 0, 1);
-        layout.Controls.Add(connection, 0, 1);
+        layout.Controls.Add(connection, 0, 2);
 
         var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(6) };
         notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
@@ -205,7 +224,7 @@ internal sealed class DomainDeploymentForm : Form
         notification.Controls.Add(_connectionStatus, 0, 0);
         notification.Controls.Add(new Label { Text = "Security Filtering targets COMPUTER accounts in the selected security group, within the linked OU. Preview is read-only.",
             Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 1);
-        layout.Controls.Add(notification, 0, 2);
+        layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
             BackColor = UiStyle.Canvas };
@@ -218,7 +237,7 @@ internal sealed class DomainDeploymentForm : Form
                     split.Width - split.Panel2MinSize - split.SplitterWidth);
             }
         };
-        layout.Controls.Add(split, 0, 3);
+        layout.Controls.Add(split, 0, 4);
         var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
@@ -255,19 +274,31 @@ internal sealed class DomainDeploymentForm : Form
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 14, 0, 0) };
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
-        _planButton = Button("Preview (no changes)", 212, () => _ = PlanAsync(), true);
-        _deployButton = Button("Create GPO + copy to DC", 224, () => _ = DeployAsync());
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
+        _deploymentActionRow = buttons;
+        _planButton = Button("Preview / check conflicts", 213, () => _ = PlanAsync(), true);
+        _deployButton = Button("Deploy GPO + files", 190, () => _ = DeployAsync());
+        _wizardBack.Text = "< Back";
+        _wizardBack.Width = 105;
+        _wizardBack.Height = 39;
+        _wizardBack.Click += (_, _) => { _wizardStep = Math.Max(0, _wizardStep - 1); UpdateDeploymentSteps(); };
+        _wizardNext.Text = "Next >";
+        _wizardNext.Width = 110;
+        _wizardNext.Height = 39;
+        _wizardNext.Click += (_, _) => NextDeploymentStep();
+        buttons.Controls.Add(_wizardBack);
+        buttons.Controls.Add(_wizardNext);
         buttons.Controls.Add(_planButton);
         buttons.Controls.Add(_deployButton);
-        buttons.Controls.Add(Button("GPO Management / Conflicts / Push Now", 285, OpenGpoOperations));
+        _gpoOperationsButton = Button("GPO operations...", 182, OpenGpoOperations);
+        buttons.Controls.Add(_gpoOperationsButton);
         buttons.Controls.Add(Button("Close", 96, Close));
         footer.Controls.Add(buttons, 0, 0);
         _progress.Dock = DockStyle.Fill;
         _progress.ForeColor = Color.DimGray;
         _progress.Text = "No action taken in Active Directory.";
         footer.Controls.Add(_progress, 0, 1);
-        layout.Controls.Add(footer, 0, 4);
+        layout.Controls.Add(footer, 0, 5);
     }
 
     private void OpenGpoOperations()
