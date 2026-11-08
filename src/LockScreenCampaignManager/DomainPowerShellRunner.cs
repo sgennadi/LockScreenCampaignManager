@@ -61,6 +61,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Lifecycle && mode == "Preview")
             return NativeGpoLifecyclePreview.Execute(mode, request, credentials);
 
+        // Read-only eligible-host lookup and action Preview are native C#.
+        // RPC task registration and VerifyCleanup still run through the
+        // guarded PowerShell module, which independently recomputes the hash.
+        if (operation == DomainOperation.Immediate && mode is ("List" or "Preview"))
+            return NativeImmediateActions.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

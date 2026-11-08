@@ -37,6 +37,7 @@ internal static class SelfTests
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
         TestNativeGpoLifecyclePreviewContracts();
+        TestNativeImmediateActionsContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -341,6 +342,44 @@ StartExecutePSFirst=true
               !NativeGpoLifecycleList.IsManagedStartup(
                 ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
             "Native lifecycle excludes foreign or multi-script GPOs");
+    }
+
+    private static void TestNativeImmediateActionsContracts()
+    {
+        const string domain = "example.com";
+        const string ou = "OU=Clients,DC=example,DC=com";
+        const string group = "CN=CampaignGroup,OU=Groups,DC=example,DC=com";
+        var gpo = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+        Check(NativeImmediateActions.ValidHost("pc01.example.com", domain) &&
+            !NativeImmediateActions.ValidHost("pc01.other.test", domain) &&
+            !NativeImmediateActions.ValidHost("evil-host.invalid", domain) &&
+            !NativeImmediateActions.ValidHost("-pc.example.com", domain),
+            "Native remote actions reject cross-domain or malformed DNS target names");
+        string hash = NativeImmediateActions.LegacyPlanHash(
+            domain, "dc01.example.com", ou, group, gpo, "campaign-a",
+            "Repair", new string('A', 64),
+            new[] { "pc02.example.com", "pc01.example.com" });
+        Check(hash == "c33eacacdffb9233024c9edeb49a952c1b9c3c57fedb4067c6b7cf88f0c8781e",
+            "Native Immediate Actions SHA-256 matches original PowerShell preimage");
+        string second = NativeImmediateActions.LegacyPlanHash(
+            domain, "dc01.example.com", ou, group, gpo, "campaign-a",
+            "Repair", new string('A', 64),
+            new[] { "pc01.example.com", "pc02.example.com" });
+        string changed = NativeImmediateActions.LegacyPlanHash(
+            domain, "dc02.example.com", ou, group, gpo, "campaign-a",
+            "Repair", new string('A', 64),
+            new[] { "pc01.example.com", "pc02.example.com" });
+        Check(second == hash && changed != hash,
+            "Immediate action approval hashes ignore host order but bind the selected DC");
+        bool invalidPurposeRejected = false;
+        try
+        {
+            _ = NativeImmediateActions.LegacyPlanHash(
+                domain, "dc01.example.com", ou, group, gpo,
+                "campaign-a", "Unexpected", new string('A', 64), ["pc01.example.com"]);
+        }
+        catch (InvalidDataException) { invalidPurposeRejected = true; }
+        Check(invalidPurposeRejected, "Immediate actions reject unknown preview purposes");
     }
 
     private static void TestNativeGpoLifecyclePreviewContracts()
