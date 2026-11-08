@@ -25,6 +25,18 @@ internal static class UiLayoutSmokeTests
         ("Campaign editor - offline Wizard", () => new MainForm(),
             new[] { "Wizard", "Advanced", "Skip AD", "Back", "1  Add files...",
                 "Add folder...", "2  Arrange / edit  ▾", "3  Schedule...", "Project  ▾", "Help / tools  ▾" }),
+        ("Campaign Wizard - AD connection", () => CreateWizardPage(0),
+            new[] { "AD Connection Wizard...", "Continue offline", "Continue", "Back", "Close Wizard" }),
+        ("Campaign Wizard - images", () => CreateWizardPage(1),
+            new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
+        ("Campaign Wizard - arrange", () => CreateWizardPage(2),
+            new[] { "Move up", "Move down", "Sort by filename", "Auto match names", "Next", "Back" }),
+        ("Campaign Wizard - schedule", () => CreateWizardPage(3),
+            new[] { "Edit schedule...", "Next", "Back" }),
+        ("Campaign Wizard - save", () => CreateWizardPage(4),
+            new[] { "Validate campaign", "Save project...", "Next", "Back" }),
+        ("Campaign Wizard - deploy", () => CreateWizardPage(5),
+            new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
@@ -138,6 +150,50 @@ internal static class UiLayoutSmokeTests
         }, new[] { "Find computers", "Preview membership change", "Apply group change" })
     };
 
+    private static Form CreateWizardPage(int page)
+    {
+        // The ordinary editor stays invisible and is disposed when its
+        // corresponding standalone Wizard page is disposed.
+        var editor = new MainForm();
+        var wizard = editor.CreateCampaignWizardForSmokeTest(page);
+        wizard.Disposed += (_, _) => editor.Dispose();
+        return wizard;
+    }
+
+    private static void CheckWizardHeader(Form form, string profile)
+    {
+        Label[] labels = Descendants(form).OfType<Label>().ToArray();
+        Label? title = labels.FirstOrDefault(x =>
+            x.Name is "AdWizardHeaderTitle" or "CampaignWizardHeaderTitle");
+        if (title is null) return;
+        string subtitleName = title.Name == "AdWizardHeaderTitle"
+            ? "AdWizardHeaderSubtitle" : "CampaignWizardHeaderSubtitle";
+        Label subtitle = labels.FirstOrDefault(x => x.Name == subtitleName) ??
+            throw new InvalidOperationException(
+                $"Missing wizard subtitle: {form.Text} at {profile}");
+        if (title.Parent is not TableLayoutPanel header ||
+            header.Parent is not TableLayoutPanel outer ||
+            header.RowStyles.Count < 2 || outer.RowStyles.Count < 1)
+            throw new InvalidOperationException(
+                $"Invalid wizard header layout: {form.Text} at {profile}");
+
+        // Simulate the real DPI-driven FontChanged adjustment without showing
+        // modal windows or querying AD; verify both inner AND outer row fit.
+        UiStyle.FitWizardHeader(outer, header, title, subtitle, 110);
+        int requiredTitle = TextRenderer.MeasureText("Agpqy", title.Font).Height +
+            title.Padding.Vertical + title.Margin.Vertical + 8;
+        int requiredSubtitle = TextRenderer.MeasureText("Agpqy", subtitle.Font).Height +
+            subtitle.Padding.Vertical + subtitle.Margin.Vertical + 8;
+        float outerHeight = outer.RowStyles[0].Height;
+        float titleHeight = header.RowStyles[0].Height;
+        float subtitleHeight = header.RowStyles[1].Height;
+        if (titleHeight < requiredTitle || subtitleHeight < requiredSubtitle ||
+            outerHeight < titleHeight + subtitleHeight + header.Padding.Vertical +
+                header.Margin.Vertical)
+            throw new InvalidOperationException(
+                $"Wizard header descenders or subtitle clipped: {form.Text} at {profile}");
+    }
+
     internal static void Run()
     {
         if (!OperatingSystem.IsWindows())
@@ -160,6 +216,7 @@ internal static class UiLayoutSmokeTests
                     FontScalePercent = profile.Settings.FontScalePercent
                 });
                 form.PerformLayout();
+                CheckWizardHeader(form, profile.Name);
                 var controls = Descendants(form).ToArray();
                 var actual = controls.OfType<Button>().ToArray();
                 foreach (string label in window.ExpectedButtons)
