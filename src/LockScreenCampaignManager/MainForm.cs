@@ -90,40 +90,52 @@ public sealed partial class MainForm : Form
 
     private void ConfigureLayout()
     {
-        // An outer scrolling viewport is essential for laptop displays,
-        // Remote Desktop and high-DPI sessions: a section must never disappear
-        // when minimum sensible content height exceeds the monitor viewport.
-        var viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        // The footer MUST remain visible even when main content grows
+        // beyond the laptop/RDP viewport at 125-200% DPI.
+        // Only the editor viewport scrolls; the actions/footer live outside it.
+        var shell = new TableLayoutPanel
+        {
+            Name = "MainEditorShell", Dock = DockStyle.Fill,
+            ColumnCount = 1, RowCount = 2,
+            Padding = Padding.Empty, Margin = Padding.Empty,
+            BackColor = Bg
+        };
+        shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 155));
+        var viewport = new Panel
+        {
+            Name = "MainEditorScrollableViewport",
+            Dock = DockStyle.Fill, AutoScroll = true,
+            Margin = Padding.Empty
+        };
         var root = new TableLayoutPanel
         {
-            Dock = DockStyle.None, ColumnCount = 1, RowCount = 5,
+            Name = "MainEditorScrollableContent",
+            Dock = DockStyle.None, ColumnCount = 1, RowCount = 4,
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
-            Location = Point.Empty
+            Location = Point.Empty, Margin = Padding.Empty
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         viewport.Controls.Add(root);
-        Controls.Add(viewport);
+        shell.Controls.Add(viewport, 0, 0);
+        Controls.Add(shell);
         void FitContentToViewport()
         {
             if (viewport.IsDisposed || root.IsDisposed) return;
             var visible = viewport.ClientSize;
-            // Avoid forcing a tall virtual canvas on normal laptop windows:
-            // this used to push the entire wizard footer below the viewport.
-            // The main header grows with DPI. Preserve the rest of the
-            // editor below it rather than squeezing or obscuring the steps.
+            // The fixed footer is NOT part of this virtual height.
+            // Allow the header, settings and edit grid to scroll on a small
+            // monitor while Back/Next, Project and Tools remain on-screen.
             int addedHeaderHeight = Math.Max(0,
                 (int)Math.Ceiling(root.RowStyles[0].Height) - 190);
             int addedSettingsHeight = Math.Max(0,
                 (int)Math.Ceiling(root.RowStyles[1].Height) - 98);
-            int addedFooterHeight = Math.Max(0,
-                (int)Math.Ceiling(root.RowStyles[4].Height) - 112);
             var required = new Size(Math.Max(990, visible.Width),
-                Math.Max(855 + addedHeaderHeight + addedSettingsHeight +
-                    addedFooterHeight, visible.Height));
+                Math.Max(743 + addedHeaderHeight + addedSettingsHeight,
+                    visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -388,7 +400,13 @@ public sealed partial class MainForm : Form
         _previewName.AutoEllipsis = true;
         rightLayout.Controls.Add(_previewName, 0, 2);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        var footer = new TableLayoutPanel
+        {
+            Name = "MainEditorPinnedFooter",
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            Padding = new Padding(12, 1, 12, 5),
+            Margin = Padding.Empty, BackColor = UiStyle.Canvas
+        };
         _footerLayout = footer;
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
@@ -504,9 +522,39 @@ public sealed partial class MainForm : Form
         var toolsHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         toolsHost.Controls.Add(actions);
         toolsHost.Controls.Add(_quickButtons);
-        ConfigureUpdateNotice(footer, root);
+        ConfigureUpdateNotice(footer, shell);
         footer.Controls.Add(toolsHost, 0, 2);
-        root.Controls.Add(footer, 0, 4);
+        shell.Controls.Add(footer, 0, 1);
+
+        // Readable fixed footer at high DPI without using the scrolled editor.
+        // Never shrink the footer below its readable minimum; if it expands,
+        // the editor viewport becomes smaller and remains scrollable.
+        void FitPinnedFooter()
+        {
+            if (shell.IsDisposed || footer.IsDisposed) return;
+            int summary = TextRenderer.MeasureText("Agpqy", _summary.Font).Height + 15;
+            int notice = TextRenderer.MeasureText("Agpqy", _status.Font).Height + 21;
+            int tools = new[] { _quickButtons, _advancedButtons }
+                .SelectMany(panel => panel.Controls.OfType<Button>())
+                .Select(button => Math.Max(button.Height,
+                    TextRenderer.MeasureText("Agpqy", button.Font).Height + 17))
+                .DefaultIfEmpty(39).Max() + 25;
+            footer.RowStyles[0].Height = Math.Max(33, summary);
+            footer.RowStyles[1].Height = Math.Max(47, notice);
+            int height = Math.Max(155,
+                (int)Math.Ceiling(footer.RowStyles[0].Height +
+                    footer.RowStyles[1].Height) + tools +
+                    footer.Padding.Vertical + 9);
+            if (shell.RowStyles[1].Height < height)
+                shell.RowStyles[1].Height = height;
+        }
+        _summary.FontChanged += (_, _) => FitPinnedFooter();
+        _status.FontChanged += (_, _) => FitPinnedFooter();
+        _quickButtons.FontChanged += (_, _) => FitPinnedFooter();
+        _advancedButtons.FontChanged += (_, _) => FitPinnedFooter();
+        Shown += (_, _) => FitPinnedFooter();
+        DpiChanged += (_, _) => BeginInvoke(new Action(FitPinnedFooter));
+        FitPinnedFooter();
     }
 
     private static Panel PanelBox() => new() {
