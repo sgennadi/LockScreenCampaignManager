@@ -42,6 +42,8 @@ public sealed partial class MainForm : Form
     private readonly Button _workflowNext = new();
     private readonly Button _workflowBack = new();
     private readonly Button _workflowAction = new();
+    private TableLayoutPanel? _footerLayout;
+    private TableLayoutPanel? _workflowBar;
     private int _workflowStep;
     private bool _advancedMode;
 
@@ -97,18 +99,20 @@ public sealed partial class MainForm : Form
             Padding = new Padding(18, 12, 18, 12), BackColor = Bg,
             Location = Point.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 201));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 171));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
         viewport.Controls.Add(root);
         Controls.Add(viewport);
         void FitContentToViewport()
         {
             if (viewport.IsDisposed || root.IsDisposed) return;
             var visible = viewport.ClientSize;
-            var required = new Size(Math.Max(1070, visible.Width),
-                Math.Max(870, visible.Height));
+            // Avoid forcing a tall virtual canvas on normal laptop windows:
+            // this used to push the entire wizard footer below the viewport.
+            var required = new Size(Math.Max(990, visible.Width),
+                Math.Max(650, visible.Height));
             if (root.Size != required) root.Size = required;
         }
         viewport.ClientSizeChanged += (_, _) => FitContentToViewport();
@@ -116,9 +120,9 @@ public sealed partial class MainForm : Form
         FitContentToViewport();
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         header.Controls.Add(new Label {
             Text = "LockScreen Campaign Manager", AutoSize = false,
@@ -145,14 +149,14 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1,
             BackColor = UiStyle.SoftBlue, Padding = new Padding(4, 2, 4, 2)
         };
-        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 121));
         adFirstStep.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 147));
         _adConnectButton.Text = "Connect AD...";
         _adConnectButton.MinimumSize = Size.Empty;
         _adConnectButton.Dock = DockStyle.Fill;
-        _adConnectButton.Margin = new Padding(2, 1, 6, 1);
+        _adConnectButton.Margin = new Padding(10, 4, 13, 4);
         _adConnectButton.BackColor = UiStyle.Surface;
         _adConnectButton.ForeColor = UiStyle.Navy;
         _adConnectButton.Tag = "NoIcon";
@@ -162,7 +166,7 @@ public sealed partial class MainForm : Form
         _adConnectionStatus.Dock = DockStyle.Fill;
         _adConnectionStatus.MinimumSize = Size.Empty;
         _adConnectionStatus.TextAlign = ContentAlignment.MiddleLeft;
-        _adConnectionStatus.Margin = new Padding(7, 2, 0, 0);
+        _adConnectionStatus.Margin = new Padding(13, 4, 8, 4);
         _adConnectionStatus.AutoEllipsis = true;
         adFirstStep.Controls.Add(_adConnectionStatus, 1, 0);
         _wizardMode.Text = "Wizard";
@@ -323,9 +327,10 @@ public sealed partial class MainForm : Form
         rightLayout.Controls.Add(_previewName, 0, 2);
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        _footerLayout = footer;
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
@@ -336,8 +341,9 @@ public sealed partial class MainForm : Form
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
             Padding = new Padding(8, 5, 8, 4), BackColor = UiStyle.SoftBlue
         };
+        _workflowBar = flowBar;
         flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 382));
+        flowBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400));
         _workflowHint.Dock = DockStyle.Fill;
         _workflowHint.TextAlign = ContentAlignment.MiddleLeft;
         _workflowHint.AutoEllipsis = true;
