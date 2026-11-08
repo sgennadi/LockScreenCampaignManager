@@ -629,7 +629,7 @@ public sealed partial class MainForm : Form
         ReadControls();
         try
         {
-            // Schedule first: configure days or interval, then import folder.
+            // Edit the schedule after choosing images; preserve the selected order.
             using var editor = new CampaignScheduleDialog(_project);
             if (editor.ShowDialog(this) != DialogResult.OK ||
                 editor.ResultProject is not { } edited) return;
@@ -646,7 +646,9 @@ public sealed partial class MainForm : Form
                 edited.ScheduleMode != CampaignScheduleMode.SpecificDates;
             _projectDirty = true;
             UpdateRows();
-            _status.Text = "Schedule updated locally. Next: review and save. AD deployment is optional.";
+            if (!_advancedMode && _workflowStep == 3) _workflowStep = 4;
+            UpdateWorkflow();
+            _status.Text = "Schedule saved. Next step: validate and save the campaign, then optional GPO deployment.";
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Campaign Schedule", ex); }
     }
