@@ -29,9 +29,9 @@ public sealed partial class MainForm
             return;
         }
         _workflowStep = 0;
-        // The editor remains in Advanced so the old six-step inline strip
-        // cannot compete with the modal Wizard navigation.
-        SetWorkflowMode(true);
+        // Wizard mode shows a dedicated landing behind the modal dialog.
+        // The Advanced editor and its preview remain hidden.
+        SetWorkflowMode(false);
         using var wizard = new CampaignWizardDialog(this);
         _activeCampaignWizard = wizard;
         try
