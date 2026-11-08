@@ -543,9 +543,9 @@ internal sealed class AdConnectionStartDialog : Form
         reviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
         reviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         reviewLayout.Controls.Add(new Label {
-            Text = "Review Read-Only AD Inventory" + Environment.NewLine +
-                "No administrator rights are required to edit or save a campaign. " +
-                "OU, computer group and GPO are chosen later during deployment.",
+            Text = "Review AD Connection & Permissions" + Environment.NewLine +
+                "The initial ACL assessment is read-only, not proof of write access. " +
+                "OU/GPO and SYSVOL rights are rechecked before deployment.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
@@ -554,7 +554,7 @@ internal sealed class AdConnectionStartDialog : Form
         _review.WordWrap = true;
         _review.ScrollBars = ScrollBars.Vertical;
         _review.Dock = DockStyle.Fill;
-        _review.BackColor = UiStyle.SoftGreen;
+        _review.BackColor = UiStyle.Surface; // Neutral: connection does not prove write rights.
         _review.Font = new Font("Segoe UI", 11f);
         reviewLayout.Controls.Add(_review, 0, 1);
         _reviewPage.Controls.Add(reviewLayout);
@@ -990,14 +990,21 @@ internal sealed class AdConnectionStartDialog : Form
                     string linkHint = permissionData.GetProperty("ouGpoLinkAce").GetString()
                         ?? "UNKNOWN";
                     string selectedOu = _company?.DefaultOuDn ?? "";
-                    permissionSummary = "GPO CREATION ACL: " + creationHint +
-                        " (advisory only)" + Environment.NewLine +
+                    bool groupsComplete = permissionData.TryGetProperty("groupTokenComplete",
+                        out var tokenValue) && tokenValue.ValueKind == JsonValueKind.True;
+                    permissionSummary =
+                        "WRITE ACCESS: NOT CONFIRMED (no write operations performed)" +
+                        Environment.NewLine +
+                        "ACCOUNT GROUP SIDs: " + (groupsComplete ? "Loaded" : "Incomplete / unknown") +
+                        Environment.NewLine +
+                        "GPO CREATE: " + DescribeAclHint(creationHint) +
+                        Environment.NewLine +
                         (selectedOu.Length > 0
-                            ? "DEFAULT OU LINK ACL: " + linkHint + " (advisory only)"
-                            : "OU LINKING: Requires OU selection") + Environment.NewLine +
+                            ? "DEFAULT OU LINK: " + DescribeAclHint(linkHint)
+                            : "OU LINK: Requires OU selection") + Environment.NewLine +
                         "GPO EDIT / DELETE: Requires target GPO selection" +
                         Environment.NewLine +
-                        "SYSVOL WRITE: Not verified (no test files created)";
+                        "SYSVOL WRITE: Unknown (no files created)";
                 }
                 catch (Exception permissionError)
                 {
@@ -1012,7 +1019,7 @@ internal sealed class AdConnectionStartDialog : Form
             if (IsDisposed || Disposing) return;
             _review.Text = "DOMAIN: " + snapshot.Domain + Environment.NewLine +
                 "CONNECTED DC: " + snapshot.Dc + Environment.NewLine +
-                "DC WRITABLE: " + (snapshot.Writable ? "Yes" : "No (RODC)") +
+                "DC WRITABLE: " + (snapshot.Writable ? "Yes (controller capability)" : "No / not verified") +
                 Environment.NewLine + "READ UTC: " + snapshot.ObservedUtc.ToString("O") +
                 Environment.NewLine + Environment.NewLine +
                 $"Read-only inventory: {snapshot.DomainControllers.Count} DCs, " +
@@ -1093,6 +1100,16 @@ internal sealed class AdConnectionStartDialog : Form
             }
         }
     }
+
+    private static string DescribeAclHint(string hint) => hint switch
+    {
+        "POTENTIAL_ALLOW" => "Potential Allow (ACL only; not verified)",
+        "POSSIBLE_DENY" => "Possible Deny (review delegated rights)",
+        "NO_MATCHING_ALLOW" => "No matching Allow ACE (not a proven denial)",
+        "REQUIRES_OU_SELECTION" => "Requires OU selection",
+        "UNKNOWN_INCOMPLETE_TOKEN" => "Unknown (AD security token incomplete)",
+        _ => "Unknown (permission assessment unavailable)"
+    };
 
     private static string BuildInventory(AdDirectorySnapshot snapshot)
     {
