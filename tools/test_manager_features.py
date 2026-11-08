@@ -353,6 +353,20 @@ class ClientManagementContracts(unittest.TestCase):
         workflow = read("MainForm.Workflow.cs")
         self.assertIn("SetWorkflowMode", workflow)
         self.assertIn("AdvanceWorkflow", workflow)
+        # Regression: importing files or completing Schedule using main toolbar
+        # must advance Wizard even if AD sign-in was skipped (step zero).
+        self.assertIn("private void WizardImagesImported()", workflow)
+        self.assertIn("private void WizardScheduleSaved()", workflow)
+        self.assertIn("WizardImagesImported();", main)
+        self.assertIn("WizardScheduleSaved();", main)
+        self.assertIn("_workflowStep = 2;", workflow)
+        self.assertIn("_workflowStep = 4;", workflow)
+        self.assertIn('4 => "Save & continue"', workflow)
+        self.assertIn("if (_workflowStep == 4)", workflow)
+        self.assertIn("SaveWizardCampaign();", workflow)
+        self.assertIn("if (!TrySaveProject()) return;", workflow)
+        self.assertIn("_wizardScheduleConfigured ? 4 : 2", workflow)
+
         self.assertIn("Work offline (no AD)", first)
         self.assertIn("Read-only LDAP inventory first", first)
         self.assertIn('Snapshot = null;', first)
