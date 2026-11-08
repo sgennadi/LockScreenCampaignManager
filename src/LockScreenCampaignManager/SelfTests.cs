@@ -34,6 +34,7 @@ internal static class SelfTests
         TestNativeDcConsistencyContracts();
         TestNativeComputerGroupAssignmentContracts();
         TestNativeGpoConflictScanContracts();
+        TestNativeSysvolStorageContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -215,6 +216,46 @@ internal static class SelfTests
             !scope.Matches(snapshot with { Domain = "other.example.com" },
                 profile, now),
             "AD inventory is discarded on DC/OU/group/company changes and expiry");
+    }
+
+    private static void TestNativeSysvolStorageContracts()
+    {
+        Check(NativeSysvolStorage.ValidCampaignId("alpha_202611") &&
+            !NativeSysvolStorage.ValidCampaignId(".staging-temp") &&
+            !NativeSysvolStorage.ValidCampaignId("../test") &&
+            !NativeSysvolStorage.ValidCampaignId("ALPHA") &&
+            !NativeSysvolStorage.ValidCampaignId(""),
+            "Native SYSVOL campaign IDs accept only safe canonical folder names");
+        var now = new DateTime(2026, 11, 8, 18, 0, 0, DateTimeKind.Utc);
+        Check(NativeSysvolStorage.Eligible(true, true, now.AddDays(-32), now, 0) &&
+            !NativeSysvolStorage.Eligible(true, false, now.AddDays(-32), now, 0) &&
+            !NativeSysvolStorage.Eligible(true, true, now.AddDays(-15), now, 0) &&
+            !NativeSysvolStorage.Eligible(true, true, now.AddDays(-32), now, 1) &&
+            !NativeSysvolStorage.Eligible(false, true, now.AddDays(-32), now, 0),
+            "Native SYSVOL cleanup hints require fully audited, expired unreferenced data");
+        var slides = new NativeSysvolStorage.Slide[]
+        {
+            new("abc", 128, "01.jpg"),
+            new("def", 256, "02.jpg"),
+            new("abc", 128, "03.jpg")
+        };
+        var duplicates = NativeSysvolStorage.DuplicateSlides(
+            slides, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ABC" });
+        Check(duplicates.Count == 2 && duplicates.Bytes == 256,
+            "Native SYSVOL compares duplicate hashes and byte totals case insensitively");
+        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(
+            @"C:\Windows\SYSVOL\example.com\scripts\LockScreenCampaigns\alpha\LockScreen-Agent.ps1");
+        byte[] utf16 = System.Text.Encoding.Unicode.GetBytes(
+            @"\\dc01\SYSVOL\example.com\scripts\LockScreenCampaigns\beta\campaign.json");
+        Check(NativeSysvolStorage.ExtractReferences(utf8).Contains("alpha") &&
+            NativeSysvolStorage.ExtractReferences(utf16).Contains("beta") &&
+            NativeSysvolStorage.ExtractReferences(
+                System.Text.Encoding.UTF8.GetBytes("no campaign reference")).Count == 0,
+            "Native SYSVOL GPO audit recognizes campaign references in UTF8/UTF16");
+        bool capped = false;
+        try { NativeSysvolStorage.ExtractReferences(new byte[2_097_153]); }
+        catch (InvalidDataException) { capped = true; }
+        Check(capped, "Native SYSVOL refuses oversized GPO evidence");
     }
 
     private static void TestNativeGpoConflictScanContracts()

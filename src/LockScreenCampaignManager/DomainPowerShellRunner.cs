@@ -46,6 +46,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.ConflictScan && mode == "Scan")
             return NativeGpoConflictScan.Execute(mode, request, credentials);
 
+        // Read-only SYSVOL Scan uses native C# with the same DC/identity for
+        // signed LDAP inventory and SMB hashes. Legacy Preview/Cleanup stay
+        // behind their original guard and explicit admin confirmation.
+        if (operation == DomainOperation.Storage && mode == "Scan")
+            return NativeSysvolStorage.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

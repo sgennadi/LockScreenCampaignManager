@@ -75,6 +75,17 @@ native_conflicts = (project / 'NativeGpoConflictScan.cs').read_text(encoding='ut
 assert 'NativeGpoConflictScan.Execute(mode, request, credentials)' in runner
 assert 'operation == DomainOperation.ConflictScan && mode == "Scan"' in runner
 assert 'LockScreenCampaignManager.GpoConflictScan.ps1' in csproj
+# SYSVOL Scan is native; Preview/Cleanup must still use guarded PS1.
+native_storage = (project / 'NativeSysvolStorage.cs').read_text(encoding='utf-8')
+assert 'operation == DomainOperation.Storage && mode == "Scan"' in runner
+assert 'NativeSysvolStorage.Execute(mode, request, credentials)' in runner
+assert 'LockScreenCampaignManager.SysvolStorage.ps1' in csproj
+for guard in ('ReadVerifiedFolder', 'ReadGpoReferences', 'ExtractReferences',
+              'SHA256.HashData', 'TimeZoneInfo.ConvertTimeToUtc',
+              'RunImpersonated', 'gpoAuditComplete', 'cleanupEligible',
+              'LOGON_NETCREDENTIALS_ONLY'):
+    assert guard in native_storage, guard
+
 for guard in ('ReadLevels', 'TryLinkedGuid', 'ParseRegistryPol',
               'ParseGppRegistry', 'XmlReaderSettings', 'DtdProcessing.Prohibit',
               'EnsureDirectory', 'File.GetAttributes', 'ReadRemoteRegistry',
