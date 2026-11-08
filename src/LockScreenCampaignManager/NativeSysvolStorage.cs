@@ -95,7 +95,8 @@ internal static class NativeSysvolStorage
             }
             catch (Exception ex) when (ex is DirectoryException or IOException
                 or InvalidDataException or UnauthorizedAccessException
-                or System.Security.SecurityException or System.ComponentModel.Win32Exception)
+                or System.Security.SecurityException or System.ComponentModel.Win32Exception
+                or TimeoutException)
             {
                 // A partial GPO scan is not evidence that a campaign is unused.
                 policies = [];
@@ -425,17 +426,28 @@ internal static class NativeSysvolStorage
                     throw new InvalidDataException("GPO content volume exceeds scan limit.");
                 if (info.Length == 0) continue;
                 byte[] raw = File.ReadAllBytes(path);
-                foreach (Encoding codec in new[]
-                {
-                    Encoding.Unicode, Encoding.BigEndianUnicode, Encoding.UTF8
-                })
-                {
-                    string body = codec.GetString(raw);
-                    foreach (System.Text.RegularExpressions.Match match
-                        in CampaignReferencePattern.Matches(body))
-                        references.Add(match.Groups[1].Value);
-                }
+                foreach (string campaignId in ExtractReferences(raw))
+                    references.Add(campaignId);
             }
+        }
+        return references;
+    }
+
+    internal static IReadOnlySet<string> ExtractReferences(byte[] raw)
+    {
+        if (raw.Length > 2_097_152)
+            throw new InvalidDataException("GPO policy file exceeds scan limit.");
+        var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Encoding codec in new[]
+        {
+            Encoding.Unicode, Encoding.BigEndianUnicode, Encoding.UTF8
+        })
+        {
+            string body = codec.GetString(raw);
+            foreach (System.Text.RegularExpressions.Match match
+                in CampaignReferencePattern.Matches(body))
+                if (ValidCampaignId(match.Groups[1].Value))
+                    references.Add(match.Groups[1].Value);
         }
         return references;
     }
