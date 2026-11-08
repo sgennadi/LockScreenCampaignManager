@@ -1,13 +1,15 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    Universal Lock Screen Campaign Agent (schema 1, agent 0.4.0-preview.31).
+    Universal Lock Screen Campaign Agent (schema 1, agent 0.4.0-preview.35).
 .DESCRIPTION
     -Mode Install from GPO Computer Startup stages and verifies the campaign.
     -Mode Apply runs from the local SYSTEM task at each image change, daily and at startup.
     -Mode Repair can restore missing/corrupt local files using the original trusted source.
     -Mode Status is read-only and reports local integrity and ownership.
     -Mode Cleanup restores the original lock screen before deleting local campaign files.
+    Supports Windows 10 1607+ and Windows 11 Enterprise/Education/IoT Enterprise
+    with applicable forced-lock-screen GPO policy (including LTSC/LTSB).
     Installation never captures the original registry while the campaign is pending.
 .NOTES
     No RSAT, third-party modules, WinRM or installed .NET runtime are required.
@@ -46,7 +48,7 @@ if (Test-Path -LiteralPath $EarlySourceRecord -PathType Leaf) {
         # Diagnostic modes must never modify a damaged local manifest.
         if ($Mode -eq 'Status') {
             [pscustomobject]@{
-                AgentVersion='0.4.0-preview.31';CampaignId=[string]$early.CampaignId
+                AgentVersion='0.4.0-preview.35';CampaignId=[string]$early.CampaignId
                 Health='CorruptManifest';ConfigHashOK=$false;Installed=$true
                 RepairAction='Run -Mode Repair from verified SYSVOL source.'
             }
@@ -207,7 +209,7 @@ function Get-FeedbackRecord {
     return [ordered]@{
         schemaVersion=1;campaignId=$CampaignId;computerName=$env:COMPUTERNAME.ToUpperInvariant()
         timestampUtc=[DateTime]::UtcNow.ToString('o')
-        agentVersion='0.4.0-preview.31';stage=$stage;health=$health
+        agentVersion='0.4.0-preview.35';stage=$stage;health=$health
         expectedImage=$expected;imageMatches=$imageOk;registryMatches=$registryOk
         taskPresent=$taskPresent;missingFiles=$missing;corruptFiles=$corrupt
     }
@@ -824,7 +826,7 @@ function Show-Status {
         elseif (@($missing.ToArray()).Count -gt 0 -or @($corrupt.ToArray()).Count -gt 0 -or -not $cfgOk -or -not $agentOk) { 'RepairNeeded' }
         else { 'Healthy' }
     [pscustomobject]@{
-        AgentVersion='0.4.0-preview.31'; CampaignId=$CampaignId; Health=$health
+        AgentVersion='0.4.0-preview.35'; CampaignId=$CampaignId; Health=$health
         TimeZone=[string]$Config.timeZoneId
         NowInCampaignTimeZone=(Get-NowInCampaignZone)
         Start=[string]$Slides[0].atLocal; End=[string]$Config.endLocal
@@ -1439,7 +1441,7 @@ function Show-Status {
         elseif (@($missing.ToArray()).Count -gt 0 -or @($corrupt.ToArray()).Count -gt 0 -or -not $cfgOk -or -not $agentOk) { 'RepairNeeded' }
         else { 'Healthy' }
     [pscustomobject]@{
-        AgentVersion='0.4.0-preview.31'; CampaignId=$CampaignId; Health=$health
+        AgentVersion='0.4.0-preview.35'; CampaignId=$CampaignId; Health=$health
         TimeZone=[string]$Config.timeZoneId
         NowInCampaignTimeZone=(Get-NowInCampaignZone)
         Start=[string]$Slides[0].atLocal; End=[string]$Config.endLocal
