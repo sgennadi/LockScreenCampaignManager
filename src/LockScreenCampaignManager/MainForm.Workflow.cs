@@ -98,6 +98,13 @@ public sealed partial class MainForm
         _advancedButtons.Visible = advanced;
         _quickButtons.Visible = !advanced;
         _workflowButtons.Visible = !advanced;
+        if (_footerLayout is not null && _workflowBar is not null)
+        {
+            // Advanced mode doesn't show a blank, reserved Wizard navigation strip.
+            // Give its full height back to the grouped manual menus.
+            _footerLayout.RowStyles[1].Height = advanced ? 0 : 58;
+            _workflowBar.Visible = !advanced;
+        }
         _wizardMode.Enabled = advanced;
         _advancedModeButton.Enabled = !advanced;
         _wizardMode.BackColor = advanced ? UiStyle.Surface : UiStyle.Accent;
