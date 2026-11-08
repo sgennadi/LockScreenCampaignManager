@@ -76,7 +76,8 @@ public sealed partial class MainForm
             // Enter the full six-page Campaign Wizard rather than exposing
             // in-editor controls as an incomplete second navigation route.
             StartGuidedCampaignWizard();
-            _status.Text = "Campaign Wizard closed. Reopen it using Wizard.";
+            // StartGuidedCampaignWizard returns in Advanced after closing.
+            // Do not overwrite its final status with a Wizard-mode hint.
         }
         else if (result == DialogResult.No)
         {
