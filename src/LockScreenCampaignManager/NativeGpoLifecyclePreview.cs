@@ -44,8 +44,8 @@ internal static class NativeGpoLifecyclePreview
 
     internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
     {
-        if (mode != "Preview")
-            throw new ArgumentException("The native lifecycle preview is read-only.");
+        if (mode is not ("Preview" or "Apply"))
+            throw new ArgumentException("Unsupported native lifecycle mode.");
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("LDAP and SYSVOL require Windows.");
 
@@ -172,6 +172,90 @@ internal static class NativeGpoLifecyclePreview
                 selectedLink is not null,
                 selectedLink is not null && (selectedLink.Flags & 1) == 0,
                 allLinks, planHash, gptVersion, Note(action));
+            if (mode == "Apply")
+            {
+                // Only link operations are native. Destructive GPO Delete and
+                // multi-file Reuse still require the independently audited path.
+                if (action is not ("Disable" or "Enable" or "Unlink" or "Relink"))
+                    throw new NotSupportedException("This action is not a native link-only Apply.");
+                string approval = Get(args, "approveGuid").Trim();
+                string approvedHash = Get(args, "planHash");
+                if (!Guid.TryParse(approval, out Guid approvedId) ||
+                    approvedId != gpoId ||
+                    !string.Equals(approvedHash, planHash, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Confirmation/preview mismatch. Refresh and confirm the exact GPO GUID.");
+
+                // LDAP atomic modify: delete the exact original single-value
+                // gPLink and add the replacement, or add/delete when empty.
+                // If an administrator changes gPLink after our read, the
+                // original-value delete fails instead of overwriting their edit.
+                string oldSegment = selectedLink is null ? "" :
+                    "[LDAP://" + selectedLink.Dn + ";" +
+                    selectedLink.Flags.ToString(CultureInfo.InvariantCulture) + "]";
+                string newSegment = action switch
+                {
+                    "Disable" => "[LDAP://" + selectedLink!.Dn + ";" +
+                        (selectedLink.Flags | 1).ToString(CultureInfo.InvariantCulture) + "]",
+                    "Enable" => "[LDAP://" + selectedLink!.Dn + ";" +
+                        (selectedLink.Flags & ~1).ToString(CultureInfo.InvariantCulture) + "]",
+                    "Relink" => "[LDAP://" + gpo.Dn + ";0]",
+                    _ => ""
+                };
+                string updatedLinks;
+                if (action == "Relink")
+                    updatedLinks = newSegment + rawLinks;
+                else
+                {
+                    var exact = Regex.Matches(rawLinks, Regex.Escape(oldSegment),
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                        TimeSpan.FromSeconds(1));
+                    if (exact.Count != 1)
+                        throw new InvalidOperationException("Selected link is ambiguous. Refresh the preview.");
+                    updatedLinks = rawLinks.Remove(exact[0].Index, exact[0].Length)
+                        .Insert(exact[0].Index, newSegment);
+                }
+                if (string.Equals(updatedLinks, rawLinks, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Link already has the requested state.");
+
+                var change = new ModifyRequest(ouDn);
+                if (rawLinks.Length > 0)
+                {
+                    var deleteOriginal = new DirectoryAttributeModification
+                    {
+                        Name = "gPLink", Operation = DirectoryAttributeOperation.Delete
+                    };
+                    deleteOriginal.Add(rawLinks);
+                    change.Modifications.Add(deleteOriginal);
+                }
+                if (updatedLinks.Length > 0)
+                {
+                    var addUpdated = new DirectoryAttributeModification
+                    {
+                        Name = "gPLink", Operation = DirectoryAttributeOperation.Add
+                    };
+                    addUpdated.Add(updatedLinks);
+                    change.Modifications.Add(addUpdated);
+                }
+                ldap.SendRequest(change);
+                string actualLinks = NativeAdDiscovery.Attr(
+                    ReadOne(ldap, ouDn, "(objectClass=organizationalUnit)", "gPLink"),
+                    "gPLink");
+                if (!string.Equals(actualLinks, updatedLinks, StringComparison.Ordinal))
+                    throw new IOException("OU link update could not be verified. Inspect AD before retrying.");
+                return JsonSerializer.SerializeToElement(new
+                {
+                    success = true,
+                    message = "Selected OU GPO link updated and verified on the selected DC.",
+                    data = new
+                    {
+                        action, gpoId = gpoId.ToString("D"),
+                        campaignId = managed.campaignId, ou = ouDn,
+                        successful = true, note = Note(action),
+                        oldSourcePreserved = true
+                    }
+                }, Json);
+            }
             return JsonSerializer.SerializeToElement(new
             {
                 success = true,
