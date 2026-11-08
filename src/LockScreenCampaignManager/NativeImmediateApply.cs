@@ -166,7 +166,7 @@ internal static class NativeImmediateApply
                 Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell",
                 "v1.0", "powershell.exe");
             exec.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass " +
-                "-WindowStyle Hidden -File \\"" + agent + "\\" -Mode " + agentMode;
+                "-WindowStyle Hidden -File \"" + agent + "\" -Mode " + agentMode;
             Release(exec);
 
             // This is the irreversible boundary: a lost RPC response after
