@@ -301,9 +301,11 @@ internal static class NativeAdDiscovery
         if (hasOu && (!targetOu.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
             !targetOu.EndsWith("," + baseDn, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Select an OU inside the connected AD domain.");
-        string login = Get(request, "user").Trim();
-        if (login.Length == 0)
-            login = credentials.IsAlternate ? credentials.UserName : Environment.UserName;
+        // Assess the account used for this LDAP connection, never an
+        // arbitrary user name supplied in an untrusted request payload.
+        string login = credentials.IsAlternate
+            ? credentials.UserName.Trim()
+            : WindowsIdentity.GetCurrent().Name;
         string effectiveLogin = login.Contains('\\') ? login[(login.LastIndexOf('\\') + 1)..] : login;
         string key = effectiveLogin.Contains('@') ? "userPrincipalName" : "sAMAccountName";
         string filter = "(&(objectCategory=person)(objectClass=user)(" +
