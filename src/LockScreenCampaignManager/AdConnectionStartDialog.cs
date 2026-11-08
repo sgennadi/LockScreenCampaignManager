@@ -279,7 +279,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3,
             Padding = new Padding(16), BackColor = UiStyle.Canvas
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 264));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 206));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -315,9 +315,9 @@ internal sealed class AdConnectionStartDialog : Form
         rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         string[] steps = [
-            "1  Sign in to Active Directory",
-            "2  Read Active Directory",
-            "3  Review and Confirm"
+            "1  Sign in",
+            "2  Read AD",
+            "3  Review"
         ];
         for (int i = 0; i < steps.Length; i++)
         {
@@ -331,8 +331,8 @@ internal sealed class AdConnectionStartDialog : Form
             rail.Controls.Add(_railSteps[i], 0, i);
         }
         rail.Controls.Add(new Label {
-            Text = "Next: configure images, schedule and GPO deployment. " +
-                "Each deployment independently revalidates the selected AD scope.",
+            Text = "Reading AD does not require GPO deployment rights. " +
+                "You can prepare and save a campaign without changing AD.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Muted, Padding = new Padding(10, 12, 10, 6),
             Font = new Font("Segoe UI", 9f)
         }, 0, 3);
@@ -504,9 +504,9 @@ internal sealed class AdConnectionStartDialog : Form
         reviewLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
         reviewLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         reviewLayout.Controls.Add(new Label {
-            Text = "Review and Confirm Scope" + Environment.NewLine +
-                "Finish makes this read-only inventory available to the campaign editor. " +
-                "GPO deployment will separately validate permissions and selected targets.",
+            Text = "Review Read-Only AD Inventory" + Environment.NewLine +
+                "No administrator rights are required to edit or save a campaign. " +
+                "OU, computer group and GPO are chosen later during deployment.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
@@ -534,8 +534,8 @@ internal sealed class AdConnectionStartDialog : Form
             Close();
         };
         footer.Controls.Add(_offline);
-        _continue.Text = "Finish";
-        _continue.Width = 125; _continue.Height = 38;
+        _continue.Text = "Open campaign editor";
+        _continue.Width = 201; _continue.Height = 38;
         _continue.Enabled = false;
         _continue.Click += (_, _) => {
             if (Snapshot is null || _page != 2) return;
@@ -774,17 +774,18 @@ internal sealed class AdConnectionStartDialog : Form
             _review.Text = "DOMAIN: " + snapshot.Domain + Environment.NewLine +
                 "CONNECTED DC: " + snapshot.Dc + Environment.NewLine +
                 "DC WRITABLE: " + (snapshot.Writable ? "Yes" : "No (RODC)") +
-                Environment.NewLine + "COMPANY: " + (_company?.Name ?? "(unassigned)") +
-                Environment.NewLine + "DEFAULT OU: " + (_company?.DefaultOuDn ?? "(not selected)") +
-                Environment.NewLine + "COMPUTER GROUP: " + (_company?.DefaultGroupDn ?? "(not selected)") +
                 Environment.NewLine + "READ UTC: " + snapshot.ObservedUtc.ToString("O") +
                 Environment.NewLine + Environment.NewLine +
-                $"Inventory: {snapshot.DomainControllers.Count} DCs, " +
+                $"Read-only inventory: {snapshot.DomainControllers.Count} DCs, " +
                 $"{snapshot.OrganizationalUnits.Count} OUs, " +
                 $"{snapshot.ComputerGroups.Count} security groups, " +
                 $"{snapshot.GroupPolicies.Count} GPOs." +
                 Environment.NewLine + Environment.NewLine +
-                "No changes have been made to AD or Group Policy.";
+                "No changes have been made to AD or Group Policy." +
+                Environment.NewLine + Environment.NewLine +
+                "You can edit and save campaigns locally without administrator rights." +
+                Environment.NewLine +
+                "Deployment settings and permissions are checked separately.";
             // Commit persistence only after successful signed+sealed LDAP authentication.
             if (_alternate.Checked)
             {
@@ -822,9 +823,16 @@ internal sealed class AdConnectionStartDialog : Form
         catch (Exception ex)
         {
             if (IsDisposed || Disposing) return;
+            string details = UniversalDiagnosticsEmbedded.Clean(ex.Message);
+            bool invalidCredentials = details.Contains("credential is invalid",
+                    StringComparison.OrdinalIgnoreCase) ||
+                details.Contains("invalid credentials", StringComparison.OrdinalIgnoreCase) ||
+                details.Contains("logon failure", StringComparison.OrdinalIgnoreCase);
             UiStyle.ApplyStatus(_state,
-                "NOT CONNECTED — read failed: " +
-                UniversalDiagnosticsEmbedded.Clean(ex.Message), UiStatusKind.Error);
+                invalidCredentials
+                    ? "Sign-in failed. Check the AD username, password and selected domain."
+                    : "AD connection failed. Check the domain, DC and network. Details in Diagnostics.",
+                UiStatusKind.Error);
             _inventory.Text = "No AD data accepted. Check domain, DNS, DC availability, " +
                 "permissions and your Windows/alternate account.\r\n" +
                 "No AD/GPO settings were changed.\r\n\r\n" +
