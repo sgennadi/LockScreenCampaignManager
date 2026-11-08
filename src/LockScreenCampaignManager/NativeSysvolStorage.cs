@@ -302,8 +302,7 @@ internal static class NativeSysvolStorage
             throw new InvalidOperationException("Selected DC identity or clock cannot be verified.");
         DateTime now = NativeDcConsistency.ParseDcTime(timeText);
         int skew = (int)Math.Round((DateTime.UtcNow - now).TotalSeconds);
-        bool writable = NativeAdDiscovery.Attr(root, "isRODC")
-            .Equals("FALSE", StringComparison.OrdinalIgnoreCase);
+        bool writable = NativeAdDiscovery.ReadDcWritable(ldap, root) == true;
         string sysvol = @"\\" + actualDc + @"\SYSVOL\" + domain;
         return new Scope(domain, actualDc, baseDn, writable, now, skew,
             Path.Combine(sysvol, "scripts", "LockScreenCampaigns"),
