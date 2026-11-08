@@ -18,6 +18,8 @@ internal sealed record AdDirectorySnapshot(
     IReadOnlyList<string> OrganizationalUnits, IReadOnlyList<string> ComputerGroups,
     IReadOnlyList<string> GroupPolicies)
 {
+    internal bool WritableKnown { get; init; } = true;
+
     private static string StringField(JsonElement obj, string key, int max = 260)
     {
         if (!obj.TryGetProperty(key, out var x) || x.ValueKind != JsonValueKind.String)
@@ -75,6 +77,8 @@ internal sealed record AdDirectorySnapshot(
             throw new InvalidDataException("AD RootDSE naming context is not the requested domain.");
 
         bool writable = data.GetProperty("dcWritable").GetBoolean();
+        bool writableKnown = data.TryGetProperty("dcWritableKnown", out var knownField)
+            ? knownField.GetBoolean() : true; // Backward compatibility for older fixtures.
         bool capped = data.GetProperty("capped").GetBoolean();
         DateTimeOffset when = data.GetProperty("observedUtc").GetDateTimeOffset().ToUniversalTime();
         var now = DateTimeOffset.UtcNow;
@@ -83,7 +87,8 @@ internal sealed record AdDirectorySnapshot(
 
         return new AdDirectorySnapshot(domain, dc, writable, when, capped,
             Names(data, "controllers"), Names(data, "ous"),
-            Names(data, "groups"), Names(data, "gpos"));
+            Names(data, "groups"), Names(data, "gpos"))
+        { WritableKnown = writableKnown };
     }
 }
 
@@ -142,7 +147,7 @@ internal sealed class AdConnectionStartDialog : Form
     private readonly Panel _connectionPage = new();
     private readonly Panel _inventoryPage = new();
     private readonly Panel _reviewPage = new();
-    private readonly TextBox _review = new();
+    private readonly RichTextBox _review = new();
     private readonly ToolTip _tips = new() { AutoPopDelay = 22000, InitialDelay = 300, ReshowDelay = 200 };
     private readonly System.Windows.Forms.Timer _dnsDebounce = new() { Interval = 650 };
     private int _discoveryRevision;
@@ -552,7 +557,9 @@ internal sealed class AdConnectionStartDialog : Form
         _review.Multiline = true;
         _review.ReadOnly = true;
         _review.WordWrap = true;
-        _review.ScrollBars = ScrollBars.Vertical;
+        _review.ScrollBars = RichTextBoxScrollBars.Vertical;
+        _review.HideSelection = false;
+        _review.BorderStyle = BorderStyle.None;
         _review.Dock = DockStyle.Fill;
         _review.BackColor = UiStyle.Surface; // Neutral: connection does not prove write rights.
         _review.Font = new Font("Segoe UI", 11f);
@@ -972,9 +979,20 @@ internal sealed class AdConnectionStartDialog : Form
             // for an authorization to deploy: COM/SYSVOL and scoped rights
             // still require fresh deployment preflight.
             string permissionSummary;
-            if (!snapshot.Writable)
-                permissionSummary = "GPO CREATION: Unavailable on a read-only DC." +
-                    Environment.NewLine + "OU LINKING: Requires a selected writable DC and OU.";
+            if (!snapshot.WritableKnown)
+                permissionSummary = "WRITE ACCESS: NOT CONFIRMED" +
+                    Environment.NewLine +
+                    "GPO CREATE: Unknown - cannot verify DC write capability." +
+                    Environment.NewLine +
+                    "OU LINK: Requires writable DC verification and selected OU." +
+                    Environment.NewLine +
+                    "SYSVOL WRITE: Not verified (no files created).";
+            else if (!snapshot.Writable)
+                permissionSummary = "WRITE ACCESS: NOT CONFIRMED" +
+                    Environment.NewLine +
+                    "GPO CREATE: Unavailable on confirmed read-only DC." +
+                    Environment.NewLine +
+                    "OU LINK: Select a writable DC and an OU.";
             else
             {
                 try
@@ -1017,9 +1035,11 @@ internal sealed class AdConnectionStartDialog : Form
                 }
             }
             if (IsDisposed || Disposing) return;
-            _review.Text = "DOMAIN: " + snapshot.Domain + Environment.NewLine +
+            SetReviewText("DOMAIN: " + snapshot.Domain + Environment.NewLine +
                 "CONNECTED DC: " + snapshot.Dc + Environment.NewLine +
-                "DC WRITABLE: " + (snapshot.Writable ? "Yes (controller capability)" : "No / not verified") +
+                "DC WRITABLE: " + (!snapshot.WritableKnown
+                    ? "Unknown (NTDS Settings status unavailable)"
+                    : snapshot.Writable ? "Yes (controller capability)" : "No (RODC verified)") +
                 Environment.NewLine + "READ UTC: " + snapshot.ObservedUtc.ToString("O") +
                 Environment.NewLine + Environment.NewLine +
                 $"Read-only inventory: {snapshot.DomainControllers.Count} DCs, " +
@@ -1035,7 +1055,7 @@ internal sealed class AdConnectionStartDialog : Form
                 Environment.NewLine + permissionSummary +
                 Environment.NewLine + Environment.NewLine +
                 "ACL hints are not proof of effective write rights. " +
-                "Deployment independently verifies the exact OU/GPO and SYSVOL scope.";
+                "Deployment independently verifies the exact OU/GPO and SYSVOL scope.");
             // Commit persistence only after successful signed+sealed LDAP authentication.
             if (_alternate.Checked)
             {
@@ -1101,6 +1121,73 @@ internal sealed class AdConnectionStartDialog : Form
         }
     }
 
+    private void SetReviewText(string text)
+    {
+        // Use RichTextBox for readable per-status emphasis without changing
+        // report wording or implying that an ACL hint is a write test.
+        _review.SuspendLayout();
+        try
+        {
+            _review.Text = text;
+            string contents = _review.Text;
+            var navy = UiStyle.Navy;
+            var green = Color.FromArgb(20, 120, 78);
+            var amber = Color.FromArgb(161, 95, 19);
+            var red = Color.FromArgb(175, 47, 47);
+            var muted = UiStyle.Muted;
+
+            void Paint(int index, int length, Color color)
+            {
+                if (index < 0 || length <= 0 || index + length > contents.Length) return;
+                _review.Select(index, length);
+                _review.SelectionColor = color;
+            }
+
+            int start = 0;
+            foreach (string line in _review.Lines)
+            {
+                int index = contents.IndexOf(line, start, StringComparison.Ordinal);
+                if (index < 0) continue;
+                start = index + line.Length;
+                int colon = line.IndexOf(':');
+                if (colon is > 0 and < 38)
+                    Paint(index, colon + 1, navy);
+                if (line.StartsWith("PERMISSION ASSESSMENT", StringComparison.Ordinal) ||
+                    line.StartsWith("Read-only inventory:", StringComparison.Ordinal))
+                    Paint(index, line.Length, navy);
+
+                Color? statusColor = null;
+                if (line.StartsWith("No changes have been made", StringComparison.Ordinal) ||
+                    line.Contains("Loaded", StringComparison.Ordinal) ||
+                    line.Contains("Yes (controller capability)", StringComparison.Ordinal))
+                    statusColor = green;
+                if (line.Contains("NOT CONFIRMED", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Unknown", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Not verified", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Requires", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("not a proof", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("not proof", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("Potential Allow", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("No matching Allow", StringComparison.OrdinalIgnoreCase))
+                    statusColor = amber;
+                if (line.Contains("Deny", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("No (RODC verified)", StringComparison.Ordinal) ||
+                    line.Contains("Unavailable on confirmed read-only DC", StringComparison.Ordinal))
+                    statusColor = red;
+                if (statusColor is not null)
+                {
+                    int valueOffset = colon is >= 0 and < 38 ? colon + 1 : 0;
+                    Paint(index + valueOffset, line.Length - valueOffset, statusColor.Value);
+                }
+                else if (line.StartsWith("ACL hints", StringComparison.Ordinal))
+                    Paint(index, line.Length, muted);
+            }
+            _review.Select(0, 0);
+            _review.ScrollToCaret();
+        }
+        finally { _review.ResumeLayout(); }
+    }
+
     private static string DescribeAclHint(string hint) => hint switch
     {
         "POTENTIAL_ALLOW" => "Potential Allow (ACL only; not verified)",
@@ -1116,7 +1203,8 @@ internal sealed class AdConnectionStartDialog : Form
         var text = new System.Text.StringBuilder();
         text.AppendLine("READ-ONLY ACTIVE DIRECTORY INVENTORY");
         text.AppendLine($"Domain: {snapshot.Domain}  |  DC: {snapshot.Dc}" +
-            (snapshot.Writable ? " (Writable)" : " (Read-only)"));
+            (!snapshot.WritableKnown ? " (Unknown DC write capability)" :
+                snapshot.Writable ? " (Writable)" : " (Read-only DC)"));
         text.AppendLine($"Observed (UTC): {snapshot.ObservedUtc:yyyy-MM-dd HH:mm:ss}");
         text.AppendLine($"Domain Controllers: {snapshot.DomainControllers.Count}  |  " +
             $"OUs: {snapshot.OrganizationalUnits.Count}  |  " +
