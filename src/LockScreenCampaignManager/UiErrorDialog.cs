@@ -26,7 +26,7 @@ internal static class UiErrorDialog
     public static void Show(IWin32Window? owner, string operation, Exception error)
     {
         AppLog.Write(error, operation);
-        using var form = new Form { Text = "Diagnostics — LockScreen Campaign Manager",
+        using var form = new Form { Text = "Report an error — LockScreen Campaign Manager",
             StartPosition = FormStartPosition.CenterParent, AutoScaleMode = AutoScaleMode.Dpi,
             Size = new Size(830, 590), MinimumSize = new Size(600, 440),
             Font = new Font("Segoe UI", 9.5f) };
@@ -57,7 +57,7 @@ internal static class UiErrorDialog
             } catch (Exception e) { MessageBox.Show(form, "Save error: " + UniversalDiagnosticsEmbedded.Clean(e.Message)); }
         }, 180));
         footer.Controls.Add(B("Copy", () => Clipboard.SetText(detail.Text), 115));
-        footer.Controls.Add(B("GitHub Issue (manual)", () => {
+        footer.Controls.Add(B("Report an error...", () => {
             var choice = MessageBox.Show(form, ManualGitHubIssueHelp.Explanation,
                 "Manual GitHub Issue — public repository", MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -92,7 +92,7 @@ internal sealed class DiagnosticsWindow : Form
     private readonly TextBox _detail = new();
     public DiagnosticsWindow()
     {
-        Text = "UniversalDiagnostics — local reports";
+        Text = "Diagnostics — saved error reports";
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterParent;
