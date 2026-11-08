@@ -18,7 +18,6 @@ public sealed partial class MainForm : Form
     private AdDirectorySnapshot? _adSnapshot;
     private DomainCredentials? _sessionAdCredentials;
     private AdConnectionScope _adScope = AdConnectionScope.From(null);
-    private bool _adFirstStepShown;
     private readonly TextBox _name = new();
     private readonly DateTimePicker _startDate = new();
     private readonly DateTimePicker _startTime = new();
