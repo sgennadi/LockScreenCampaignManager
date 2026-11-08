@@ -35,6 +35,13 @@ public sealed partial class MainForm : Form
     private readonly Button _workflowNext = new();
     private readonly Button _workflowBack = new();
     private readonly Button _workflowAction = new();
+    private readonly Button _manualDeploy = new();
+    private readonly Button _manualValidate = new();
+    private readonly Button _manualExport = new();
+    private readonly Button _replaceImageButton = new();
+    private readonly Button _removeImageButton = new();
+    private readonly Button _moveUpButton = new();
+    private readonly Button _moveDownButton = new();
     private int _workflowStep;
     private bool _advancedMode;
 
@@ -200,7 +207,7 @@ public sealed partial class MainForm : Form
         var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12) };
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
+        leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
         left.Controls.Add(leftLayout);
         middle.Panel1.Controls.Add(left);
         leftLayout.Controls.Add(new Label {
@@ -216,10 +223,28 @@ public sealed partial class MainForm : Form
         imageButtons.Controls.Add(MakeButton("Schedule...", OpenScheduleEditor, 156, primary: true));
         imageButtons.Controls.Add(MakeButton("Add Files...", AddImages, 133));
         imageButtons.Controls.Add(MakeButton("Add Folder...", AddImagesFromFolder, 147));
-        imageButtons.Controls.Add(MakeButton("Replace", ReplaceImage, 105));
-        imageButtons.Controls.Add(MakeButton("Remove", RemoveImage, 90));
-        imageButtons.Controls.Add(MakeButton("↑", () => MoveImage(-1), 40));
-        imageButtons.Controls.Add(MakeButton("↓", () => MoveImage(+1), 40));
+        _replaceImageButton.Text = "Replace";
+        _replaceImageButton.Width = 105;
+        _replaceImageButton.Height = 36;
+        _replaceImageButton.Click += (_, _) => ReplaceImage();
+        imageButtons.Controls.Add(_replaceImageButton);
+        _removeImageButton.Text = "Remove";
+        _removeImageButton.Width = 98;
+        _removeImageButton.Height = 36;
+        _removeImageButton.Click += (_, _) => RemoveImage();
+        imageButtons.Controls.Add(_removeImageButton);
+        _moveUpButton.Text = "Move up";
+        _moveUpButton.Width = 96;
+        _moveUpButton.Height = 36;
+        _moveUpButton.Click += (_, _) => MoveImage(-1);
+        imageButtons.Controls.Add(_moveUpButton);
+        _moveDownButton.Text = "Move down";
+        _moveDownButton.Width = 110;
+        _moveDownButton.Height = 36;
+        _moveDownButton.Click += (_, _) => MoveImage(+1);
+        imageButtons.Controls.Add(_moveDownButton);
+        imageButtons.Controls.Add(MakeButton("Sort A-Z", SortImagesByFilename, 106));
+        imageButtons.Controls.Add(MakeButton("Auto match", AutoMatchImageNames, 122));
         leftLayout.Controls.Add(imageButtons, 0, 2);
 
         var right = PanelBox();
@@ -292,9 +317,21 @@ public sealed partial class MainForm : Form
         actions.Controls.Add(MakeButton("Save project", SaveProject, 158));
         actions.Controls.Add(MakeButton("Open project", OpenProject, 148));
         actions.Controls.Add(MakeButton("Schedule", OpenScheduleEditor, 128));
-        actions.Controls.Add(MakeButton("Validate", ValidateCurrent, 110));
-        actions.Controls.Add(MakeButton("Export for GPO", ExportPackage, 165));
-        actions.Controls.Add(MakeButton("Deploy GPO (advanced)...", () => OpenDomainDeployment(true), 216));
+        _manualValidate.Text = "Validate";
+        _manualValidate.Width = 116;
+        _manualValidate.Height = 36;
+        _manualValidate.Click += (_, _) => ValidateCurrent();
+        actions.Controls.Add(_manualValidate);
+        _manualExport.Text = "Export package";
+        _manualExport.Width = 161;
+        _manualExport.Height = 36;
+        _manualExport.Click += (_, _) => ExportPackage();
+        actions.Controls.Add(_manualExport);
+        _manualDeploy.Text = "GPO deploy...";
+        _manualDeploy.Width = 165;
+        _manualDeploy.Height = 36;
+        _manualDeploy.Click += (_, _) => OpenDomainDeployment(true);
+        actions.Controls.Add(_manualDeploy);
         actions.Controls.Add(MakeButton("Client feedback", OpenFeedbackSettings, 164));
         actions.Controls.Add(MakeButton("Settings", OpenUiSettings, 124));
         actions.Controls.Add(MakeButton("Diagnostics", OpenDiagnostics, 135));
@@ -363,7 +400,7 @@ public sealed partial class MainForm : Form
         _table.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "№", Width = 42, SortMode = DataGridViewColumnSortMode.NotSortable });
         _table.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Date / time", Width = 164, SortMode = DataGridViewColumnSortMode.NotSortable });
         _table.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Image", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, SortMode = DataGridViewColumnSortMode.NotSortable });
-        _table.SelectionChanged += (_, _) => UpdatePreview();
+        _table.SelectionChanged += (_, _) => { UpdatePreview(); UpdateWorkflow(); };
         _table.CellDoubleClick += (_, _) => ReplaceImage();
     }
 
@@ -552,7 +589,9 @@ public sealed partial class MainForm : Form
         }
         _projectDirty = true;
         UpdateRows(originalCount);
-        _status.Text = $"{selected.Length} image(s) added. Review schedule before deployment.";
+        _status.Text = $"{selected.Length} image(s) added. Next: review dates and time in Schedule.";
+        if (!_advancedMode && _workflowStep == 1) _workflowStep = 2;
+        UpdateWorkflow();
     }
 
     private void ReplaceImage()
