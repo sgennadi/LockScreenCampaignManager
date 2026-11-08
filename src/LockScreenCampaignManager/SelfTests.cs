@@ -38,6 +38,7 @@ internal static class SelfTests
         TestNativeGpoLifecycleListContracts();
         TestNativeGpoLifecyclePreviewContracts();
         TestNativeImmediateActionsContracts();
+        TestNativeGpoDeploymentPlanContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -342,6 +343,51 @@ StartExecutePSFirst=true
               !NativeGpoLifecycleList.IsManagedStartup(
                 ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
             "Native lifecycle excludes foreign or multi-script GPOs");
+    }
+
+    private static void TestNativeGpoDeploymentPlanContracts()
+    {
+        bool badDateRejected = false;
+        try { _ = NativeGpoDeploymentPlan.ParseLocal("01/02/2027"); }
+        catch (FormatException) { badDateRejected = true; }
+        Check(badDateRejected, "Native Deployment Plan only accepts exact ISO local timestamps");
+
+        string folder = Path.Combine(Path.GetTempPath(),
+            "LSCM-Deploy-Plan-CI-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(folder, "images"));
+        try
+        {
+            string agent = Path.Combine(folder, "LockScreen-Agent.ps1");
+            string slide = Path.Combine(folder, "images", "01.jpg");
+            File.WriteAllText(agent, "# self-test agent", new System.Text.UTF8Encoding(false));
+            File.WriteAllText(slide, "self-test jpeg image", new System.Text.UTF8Encoding(false));
+            string agentHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(agent)));
+            string slideHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(slide)));
+            string manifest = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1, campaignId = "selftest-one",
+                timeZoneId = "UTC", endLocal = "2027-06-02T02:00:00",
+                agentSha256 = agentHash, randomizePerDevice = false,
+                slides = new[] { new {
+                    fileName = "01.jpg", atLocal = "2027-06-01T00:00:00",
+                    sha256 = slideHash
+                } }
+            });
+            File.WriteAllText(Path.Combine(folder, "campaign.json"),
+                manifest, new System.Text.UTF8Encoding(false));
+            var proof = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder);
+            Check(proof.Id == "selftest-one" && proof.Count == 1 &&
+                proof.Bytes == new FileInfo(slide).Length,
+                "Native GPO preflight verifies local agent, manifest and JPEG SHA-256");
+            File.AppendAllText(slide, "tampered");
+            bool corruptDenied = false;
+            try { _ = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder); }
+            catch (InvalidDataException) { corruptDenied = true; }
+            Check(corruptDenied, "Native GPO preflight rejects modified campaign JPEGs");
+        }
+        finally { Directory.Delete(folder, true); }
     }
 
     private static void TestNativeImmediateActionsContracts()

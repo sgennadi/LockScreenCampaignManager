@@ -67,6 +67,12 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Immediate && mode is ("List" or "Preview"))
             return NativeImmediateActions.Execute(mode, request, credentials);
 
+        // Deployment preflight reads only: OU/group, GPO name availability,
+        // SYSVOL, campaign schedules and image hashes. PS1 Deploy retains all
+        // existing write safeguards and re-runs its own complete preflight.
+        if (operation == DomainOperation.Deployment && mode == "Plan")
+            return NativeGpoDeploymentPlan.Execute(mode, request, credentials);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
