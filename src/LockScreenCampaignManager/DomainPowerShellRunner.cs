@@ -75,6 +75,25 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Deployment && mode == "Plan")
             return NativeGpoDeploymentPlan.Execute(mode, request, credentials);
 
+        // Explicit migration boundary: only these audited legacy operations
+        // may execute an embedded PS1. All other modes must fail closed.
+        // Keep this in sync with the native dispatch above and the embedded
+        // scripts' ValidateSet declarations as each operation moves to C#.
+        bool legacyAllowed = operation switch
+        {
+            DomainOperation.Deployment => mode == "Deploy",
+            DomainOperation.Lifecycle => mode == "Apply",
+            DomainOperation.ConflictScan =>
+                mode is "Effective" or "VerifyEndpoint" or "VerifyEvidence",
+            DomainOperation.Immediate =>
+                mode is "Push" or "Cleanup" or "Report" or "Repair",
+            DomainOperation.Storage => mode == "Cleanup",
+            _ => false
+        };
+        if (!legacyAllowed)
+            throw new NotSupportedException(
+                "Unsupported or migrated AD operation: " + operation + "/" + mode);
+
         var root = Path.Combine(Path.GetTempPath(), "LSCM-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
