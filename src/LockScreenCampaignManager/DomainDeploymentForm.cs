@@ -66,7 +66,8 @@ internal sealed class DomainDeploymentForm : Form
     }
 
     internal DomainDeploymentForm(CampaignProject project, CompanyProfile? company = null,
-        AdDirectorySnapshot? readOnlyInventory = null, bool advanced = false)
+        AdDirectorySnapshot? readOnlyInventory = null, bool advanced = false,
+        DomainCredentials? authenticatedSession = null)
     {
         _project = project;
         _advancedInitially = advanced;
@@ -98,7 +99,15 @@ internal sealed class DomainDeploymentForm : Form
             _dcBox.Text = readOnlyInventory.Dc;
         }
         _gpoBox.Text = CampaignSchedule.DefaultGpoName(_project);
-        _currentRadio.Checked = true;
+        if (authenticatedSession is { IsAlternate: true })
+        {
+            _suppressConnectionChanged = true;
+            _alternateRadio.Checked = true;
+            _userBox.Text = authenticatedSession.UserName;
+            _passwordBox.Text = authenticatedSession.Password;
+            _suppressConnectionChanged = false;
+        }
+        else _currentRadio.Checked = true;
         SetCredentialFields();
         InvalidatePlan();
         UiStyle.Apply(this);
@@ -108,9 +117,11 @@ internal sealed class DomainDeploymentForm : Form
                 ? "NOT CONNECTED — Connect / Refresh before GPO Preview."
                 : "STEP 1 READ: " + readOnlyInventory.Domain + " / " +
                   readOnlyInventory.Dc +
-                  ". Reconnect here to verify OU/group and permissions before deployment.",
+                  ". Session credentials reused; write permission checks follow OU selection.",
             UiStatusKind.Neutral);
         UiWindowPlacement.Attach(this, "domain-deployment");
+        if (authenticatedSession is not null && readOnlyInventory is not null)
+            Shown += async (_, _) => await ConnectAsync();
     }
 
     private static Control Field(string title, Control child, int width, int height = 76)
