@@ -94,8 +94,8 @@ for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
               'ReadDcWritable(ldap, root)', 'SearchPaged', 'Math.Abs((long)skew) > 300'):
     assert guard in native_deploy_plan, guard
 
-# Immediate Actions List/Preview run through read-only native LDAP/SYSVOL.
-# Legacy Task Scheduler RPC write actions remain embedded for Push/Repair/Report/Cleanup.
+# Immediate Actions List/Preview/VerifyCleanup are read-only C#.
+# Guarded Push/Repair/Report/Cleanup use native C# Scheduler RPC.
 native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
 assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
 assert 'NativeImmediateActions.Execute(mode, request, credentials)' in runner
@@ -111,7 +111,11 @@ for forbidden in ('RegisterTaskDefinition', 'DeleteTask', 'SetValue(',
                   'WriteAllBytes', 'File.Delete(', 'Directory.Delete('):
     assert forbidden not in native_receipt, forbidden
 
-assert 'LockScreenCampaignManager.CampaignPushNow.ps1' in csproj
+assert 'LockScreenCampaignManager.CampaignPushNow.ps1' not in csproj
+native_push = (project / 'NativeImmediateApply.cs').read_text(encoding='utf-8')
+for guard in ('NativeImmediateActions.Execute', 'RegisterTaskDefinition',
+              'Pending', 'IsKnownOffline', 'LogonUser'):
+    assert guard.lower() in native_push.lower(), guard
 for guard in ('LegacyPlanHash', 'Selected(args, candidates)', 'ReadManagedGpo',
               'SearchPaged', 'WindowsIdentity.RunImpersonated',
               'RegistryValueOptions' if False else 'LogonUser',
