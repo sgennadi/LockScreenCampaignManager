@@ -17,7 +17,7 @@ internal static class SelfTests
         Check(CampaignSchedule.DefaultGpoName(p) == "LockScreen - 20261108-1400",
             "compact default GPO name");
         Check(CampaignSchedule.DefaultGpoName(new CampaignProject {
-            StartLocal = new DateTime(2026, 11, 9, 14, 0),
+            StartLocal = new DateTime(2026, 11, 9, 14, 0, 0),
             CompanyProfileId = "01234567-89ab-cdef-0123-456789abcdef"
         }) == "LockScreen - 20261109-1400-c01234567",
             "company-specific compact GPO name");
