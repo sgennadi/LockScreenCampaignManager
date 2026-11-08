@@ -209,6 +209,48 @@ internal static class UiStyle
         }
     }
 
+    // The main editor has four stacked header rows. Resizing only the
+    // title label clips the step hint and the AD controls below it at high DPI.
+    // Always grow the OUTER content row by the same amount.
+    internal static void FitEditorHeader(TableLayoutPanel parent,
+        TableLayoutPanel header, Label title, Label steps, Label company,
+        Control actions, int minimumHeight)
+    {
+        if (parent.IsDisposed || header.IsDisposed || title.IsDisposed ||
+            steps.IsDisposed || company.IsDisposed || actions.IsDisposed) return;
+        if (parent.RowStyles.Count == 0 || header.RowStyles.Count < 4) return;
+
+        static int Required(Label label, int margin) =>
+            TextRenderer.MeasureText("Agpqy", label.Font,
+                new Size(4096, 4096),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+            label.Margin.Vertical + label.Padding.Vertical + margin;
+
+        int titleHeight = Math.Max(68, Required(title, 17));
+        int stepsHeight = Math.Max(37, Required(steps, 12));
+        int companyHeight = Math.Max(38, Required(company, 12));
+        int actionsHeight = Math.Max(60, actions.Padding.Vertical + 12 +
+            actions.Controls.Cast<Control>()
+                .Where(x => x is Button)
+                .Select(x => TextRenderer.MeasureText("Agpqy", x.Font).Height +
+                    x.Margin.Vertical + 17)
+                .DefaultIfEmpty(47).Max());
+
+        int[] rows = [titleHeight, stepsHeight, companyHeight, actionsHeight];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            header.RowStyles[i].SizeType = SizeType.Absolute;
+            if (header.RowStyles[i].Height < rows[i])
+                header.RowStyles[i].Height = rows[i];
+        }
+        int total = Math.Max(minimumHeight,
+            header.RowStyles.Cast<RowStyle>().Take(4).Sum(x => (int)Math.Ceiling(x.Height)) +
+            header.Padding.Vertical + header.Margin.Vertical + 6);
+        parent.RowStyles[0].SizeType = SizeType.Absolute;
+        if (parent.RowStyles[0].Height < total)
+            parent.RowStyles[0].Height = total;
+    }
+
     internal static void DecorateForWizard(Button button, bool primary)
     {
         button.Tag = primary ? "PrimaryAction" : "NoIcon";
