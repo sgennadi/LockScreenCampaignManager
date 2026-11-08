@@ -12,9 +12,9 @@ using Microsoft.Win32.SafeHandles;
 namespace LockScreenCampaignManager;
 
 /// <summary>
-/// Read-only SYSVOL campaign inventory and cross-GPO reference analysis.
-/// Scan and Preview never alter files, GPOs or AD. Cleanup remains on the
-/// guarded legacy engine until deletion behavior has a live-domain pilot.
+/// Native SYSVOL campaign inventory, preview and explicitly approved Cleanup.
+/// Scan/Preview are read-only. Cleanup recomputes AD/SYSVOL evidence before
+/// deleting only one fully verified expired, unreferenced campaign directory.
 /// </summary>
 internal static class NativeSysvolStorage
 {
@@ -107,9 +107,9 @@ internal static class NativeSysvolStorage
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("SYSVOL requires Windows LDAP and SMB access.");
-        if (mode is not ("Scan" or "Preview"))
+        if (mode is not ("Scan" or "Preview" or "Cleanup"))
             throw new ArgumentOutOfRangeException(nameof(mode),
-                "Only read-only Scan and Preview are native.");
+                "Unsupported native SYSVOL operation.");
         var args = JsonSerializer.SerializeToElement(request, Json);
         string domain = Get(args, "domain").Trim().ToLowerInvariant();
         string dc = Get(args, "dc").Trim();
@@ -124,11 +124,11 @@ internal static class NativeSysvolStorage
             Scope scope = ReadScope(ldap, domain, dc);
             var timer = Stopwatch.StartNew();
             Campaign[] campaigns = ReadInventory(scope, timer);
-            if (mode == "Preview")
+            if (mode is "Preview" or "Cleanup")
             {
-                // Unlike Scan, Preview must fail closed on ANY incomplete
-                // inventory or GPO reference audit. The legacy Cleanup engine
-                // will independently re-check the same evidence before deletion.
+                // Preview and Cleanup fail closed on ANY incomplete inventory
+                // or GPO reference audit. Cleanup refreshes source evidence
+                // independently of the previously displayed Preview.
                 VerifyDirectory(scope.root);
                 bool staging = Directory.EnumerateDirectories(scope.root)
                     .Select(Path.GetFileName).Any(name => name is not null &&
@@ -160,7 +160,18 @@ internal static class NativeSysvolStorage
                     g.campaignIds.Contains(id));
                 ValidatePreviewConditions(scope.writable, scope.skewSeconds,
                     staging, endUtc, scope.dcUtc, references);
-                string timestamp = scope.dcUtc.ToString("o", CultureInfo.InvariantCulture);
+                string timestamp = mode == "Cleanup" ? Get(args, "previewUtc")
+                    : scope.dcUtc.ToString("o", CultureInfo.InvariantCulture);
+                if (mode == "Cleanup")
+                {
+                    if (!DateTimeOffset.TryParse(timestamp,
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.AssumeUniversal, out var approvedUtc) ||
+                        approvedUtc.UtcDateTime > scope.dcUtc.AddSeconds(3) ||
+                        approvedUtc.UtcDateTime.AddMinutes(5) < scope.dcUtc)
+                        throw new InvalidOperationException(
+                            "SYSVOL cleanup preview expired or is invalid. Preview again.");
+                }
                 // IMPORTANT: This hash precisely matches legacy Guard-Plan.
                 // Use the selected DC spelling (not LDAP's canonical DC FQDN),
                 // because Cleanup recomputes the hash from the request's DC.
@@ -171,6 +182,38 @@ internal static class NativeSysvolStorage
                     planHash, verified.imageCount, verified.imageBytes,
                     "No GPO file reference found on selected DC. Check offline PCs, " +
                     "custom references and DFSR replication before approving deletion.");
+                if (mode == "Cleanup")
+                {
+                    if (!string.Equals(Get(args, "approveId"), id,
+                            StringComparison.Ordinal) ||
+                        !string.Equals(Get(args, "planHash"), planHash,
+                            StringComparison.Ordinal))
+                        throw new InvalidOperationException(
+                            "SYSVOL cleanup approval or source fingerprint mismatch.");
+                    // One last fresh targeted directory and GPO reference
+                    // verification before the destructive filesystem call.
+                    Campaign now = ReadVerifiedFolder(verified.path, id);
+                    if (!string.Equals(now.fingerprint, verified.fingerprint,
+                            StringComparison.Ordinal) ||
+                        ReadGpoReferences(ldap, scope, Stopwatch.StartNew()).Any(g =>
+                            g.campaignIds.Contains(id)))
+                        throw new InvalidOperationException(
+                            "SYSVOL source or GPO references changed. Refresh Preview.");
+                    VerifyDirectory(now.path);
+                    Directory.Delete(now.path, recursive: true);
+                    if (Directory.Exists(now.path))
+                        throw new IOException("SYSVOL deletion could not be verified.");
+                    return JsonSerializer.SerializeToElement(new
+                    {
+                        success = true,
+                        message = "One unreferenced expired campaign folder deleted after explicit approval.",
+                        data = new
+                        {
+                            campaignId = id, path = now.path, deleted = true,
+                            note = "GPOs and client computers were not modified."
+                        }
+                    }, Json);
+                }
                 return JsonSerializer.SerializeToElement(new
                 {
                     success = true,
