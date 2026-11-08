@@ -911,8 +911,8 @@ finally {
     $mutex.Dispose()
 }
 ) {
-        throw ('Unsupported lock screen GPO client: build {0}, edition {1}. ' +
-            'Requires Windows 10 1607+ or Windows 11 Enterprise/Education/IoT Enterprise (including LTSC).') -f $build,$edition
+        throw (('Unsupported lock screen GPO client: build {0}, edition {1}. ' +
+            'Requires Windows 10 1607+ or Windows 11 Enterprise/Education/IoT Enterprise (including LTSC).') -f $build,$edition)
     }
 }
 function Protect-Directory {
