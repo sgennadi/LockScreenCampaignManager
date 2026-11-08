@@ -1,3 +1,10 @@
+## 0.4.0-preview.30 — public updater and diagnostics acceptance (2026-11-08)
+- Fix the original Windows GUI CI false-positive: self-tests now run with Start-Process -Wait -PassThru, check the actual WinExe process exit code, and verify an explicit non-zero exit probe. The older green pipeline incorrectly hid a failed updater test.
+- Repair the updater synthetic future-release fixture and test both public anonymous and private token-scoped metadata/downloads, GitHub CDN redirects, SHA-256, ZIP safety, PE architecture and unsigned Authenticode rejection. No unattended installation.
+- Public GitHub Issues instructions require explicit privacy review and manual submission; ensure local diagnostic logs redact synthetic DC, domain and IP information.
+- AD-first snapshots are invalidated on new connection attempts, selected DC, OU/security group/company changes and expiry. Deployment independently reconnects and validates scope.
+- Build x86/x64 and full/individual tests before an automated GitHub prerelease upload. Publication requires both tested ZIP architectures, single-EXE updater ZIPs and a SHA-256 manifest. Real DC and Windows 11 client deployment remains untested.
+
 ## 0.4.0-preview.28 — AD-first startup, BitKeyBridge UI and actionable diagnostics (development)
 - Begin with **Step 1 Connect to DC & Read AD** (one signed + sealed read-only LDAP directory snapshot including DCs, OUs, security groups and GPO names); explicit offline mode does not authorize deployment. Revalidate DC and OU/groups again before GPO preview.
 - Apply BitKeyBridge-inspired navy/blue/green UI tokens, high-contrast fallback, readable connection status and DPI layout smoke. Never store AD passwords.
