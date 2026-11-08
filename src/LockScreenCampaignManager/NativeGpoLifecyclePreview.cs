@@ -172,11 +172,8 @@ internal static class NativeGpoLifecyclePreview
                 allLinks, planHash, gptVersion, Note(action));
             if (mode == "Apply")
             {
-                // Reuse changes both AD and SYSVOL and retains the
-                // independently audited legacy engine. Delete is native but
-                // never proceeds while ANY OU/domain/site link still exists.
-                if (action == "Reuse")
-                    throw new NotSupportedException("GPO Reuse is not yet native.");
+                // Reuse and Delete require independent, fresh state checks
+                // beyond GUID/plan-hash equality; link operations remain atomic.
                 string approval = Get(args, "approveGuid").Trim();
                 string approvedHash = Get(args, "planHash");
                 if (!Guid.TryParse(approval, out Guid approvedId) ||
@@ -214,6 +211,24 @@ internal static class NativeGpoLifecyclePreview
                             campaignId = managed.campaignId, ou = ouDn,
                             successful = true, note = Note(action),
                             oldSourcePreserved = true
+                        }
+                    }, Json);
+                }
+
+                if (action == "Reuse")
+                {
+                    long newVersion = ApplyReuse(ldap, actualDc, domain, gpoId,
+                        gpo, packagePath, newCampaignId, dcUtc);
+                    return JsonSerializer.SerializeToElement(new
+                    {
+                        success = true,
+                        message = "Managed GPO reused for a new campaign on the selected DC. Verify SYSVOL and AD replication.",
+                        data = new
+                        {
+                            action, gpoId = gpoId.ToString("D"),
+                            campaignId = managed.campaignId, ou = ouDn,
+                            successful = true, note = Note(action),
+                            oldSourcePreserved = true, newCampaignId, newVersion
                         }
                     }, Json);
                 }
@@ -435,6 +450,173 @@ internal static class NativeGpoLifecyclePreview
             }
         }
         return links;
+    }
+
+    // Reuse preserves the original GPO GUID, all existing OU links and
+    // security filtering. The new package is staged and SHA-256 verified
+    // before touching psscripts.ini or either GPO version. Partial failures
+    // attempt a bounded rollback; the new source package is preserved for
+    // forensic review, matching the legacy PS1 behavior.
+    private static long ApplyReuse(LdapConnection ldap, string dc, string domain,
+        Guid gpoId, GpoState gpo, string packageFolder, string newId, DateTime dcUtc)
+    {
+        var validated = ValidateReusePackage(packageFolder, dcUtc);
+        if (!string.Equals(validated.CampaignId, newId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Campaign changed since preview. Rebuild the plan.");
+        if (gpo.Version is < 0 or > uint.MaxValue ||
+            (gpo.Version & 0xFFFF) == 0xFFFF)
+            throw new InvalidOperationException("GPO computer version overflow.");
+
+        string sourceRoot = @"\\" + dc + @"\SYSVOL\" + domain +
+            @"\scripts\LockScreenCampaigns";
+        SafeDirectory(sourceRoot);
+        string finalDir = Path.Combine(sourceRoot, newId);
+        if (ExistsStrict(finalDir))
+            throw new InvalidOperationException("New campaign ID already exists in SYSVOL.");
+        string tempDir = Path.Combine(sourceRoot, ".lscm-stage-" +
+            Guid.NewGuid().ToString("N"));
+        string gptRoot = @"\\" + dc + @"\SYSVOL\" + domain +
+            @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
+        string ini = Path.Combine(gptRoot, "Machine", "Scripts", "psscripts.ini");
+        string gpt = Path.Combine(gptRoot, "gpt.ini");
+        byte[] oldIni = ReadBoundedBytes(ini, 1, 1_048_576);
+        byte[] oldGpt = ReadBoundedBytes(gpt, 1, 1_048_576);
+        string oldGptText = Encoding.UTF8.GetString(oldGpt);
+        var versionMatch = GptVersionPattern.Match(oldGptText);
+        if (!versionMatch.Success ||
+            !long.TryParse(versionMatch.Groups["version"].Value,
+                NumberStyles.None, CultureInfo.InvariantCulture, out long diskVersion) ||
+            diskVersion != gpo.Version)
+            throw new InvalidOperationException("GPO AD/SYSVOL version changed. Refresh Preview.");
+
+        long newVersion = (gpo.Version & ~65535L) | ((gpo.Version + 1) & 65535L);
+        string clientScript = @"\\" + domain + @"\SYSVOL\" + domain +
+            @"\scripts\LockScreenCampaigns\" + newId + @"\LockScreen-Agent.ps1";
+        if (clientScript.Length >= 260)
+            throw new InvalidDataException("New client script path exceeds the Windows limit.");
+        string iniText = "[ScriptsConfig]\r\nStartExecutePSFirst=true\r\n" +
+            "[Startup]\r\n0CmdLine=" + clientScript +
+            "\r\n0Parameters=-Mode Install\r\n";
+        string updatedGpt = GptVersionPattern.Replace(oldGptText,
+            "Version=" + newVersion.ToString(CultureInfo.InvariantCulture), 1);
+        bool iniWritten = false, gptWritten = false, adWritten = false;
+        bool moved = false;
+
+        try
+        {
+            // Staging is always within the selected DC's SYSVOL share.
+            Directory.CreateDirectory(tempDir);
+            string imagesOut = Path.Combine(tempDir, "images");
+            Directory.CreateDirectory(imagesOut);
+            foreach (string file in new[] { "campaign.json", "LockScreen-Agent.ps1" })
+            {
+                string input = Path.Combine(packageFolder, file);
+                string output = Path.Combine(tempDir, file);
+                File.Copy(input, output, overwrite: false);
+                if (!string.Equals(FileSha256(input, 1, 5 * 1_048_576),
+                        FileSha256(output, 1, 5 * 1_048_576),
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("SYSVOL staged campaign file hash mismatch.");
+            }
+            using (var manifest = JsonDocument.Parse(
+                ReadBoundedBytes(Path.Combine(packageFolder, "campaign.json"),
+                    10, 1_048_576)))
+            {
+                foreach (JsonElement slide in manifest.RootElement.GetProperty("slides").EnumerateArray())
+                {
+                    string image = RequiredString(slide, "fileName");
+                    if (!Regex.IsMatch(image, @"\A[0-9]{2}\.jpg\z"))
+                        throw new InvalidDataException("Invalid image path in campaign manifest.");
+                    string input = Path.Combine(packageFolder, "images", image);
+                    string output = Path.Combine(imagesOut, image);
+                    File.Copy(input, output, overwrite: false);
+                    if (!string.Equals(FileSha256(input, 1, 30 * 1_048_576),
+                            FileSha256(output, 1, 30 * 1_048_576),
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("SYSVOL staged image SHA-256 mismatch.");
+                }
+            }
+            // Revalidation after staging prevents package changes during copy.
+            var fresh = ValidateReusePackage(packageFolder, dcUtc);
+            if (!string.Equals(fresh.Hash, validated.Hash, StringComparison.OrdinalIgnoreCase) ||
+                ExistsStrict(finalDir))
+                throw new IOException("Campaign package or SYSVOL target changed during staging.");
+            Directory.Move(tempDir, finalDir);
+            moved = true;
+
+            // Check AD version immediately before the first GPO modification.
+            if (LongAttr(ReadOne(ldap, gpo.Dn, "(objectClass=groupPolicyContainer)",
+                "versionNumber"), "versionNumber") != gpo.Version)
+                throw new InvalidOperationException("GPO changed during staging. Refresh Preview.");
+
+            File.WriteAllText(ini, iniText, new UnicodeEncoding(false, true));
+            iniWritten = true;
+            File.WriteAllText(gpt, updatedGpt, Encoding.ASCII);
+            gptWritten = true;
+
+            var update = new ModifyRequest(gpo.Dn);
+            var deleteOld = new DirectoryAttributeModification
+            {
+                Name = "versionNumber", Operation = DirectoryAttributeOperation.Delete
+            };
+            deleteOld.Add(gpo.Version.ToString(CultureInfo.InvariantCulture));
+            update.Modifications.Add(deleteOld);
+            var addNew = new DirectoryAttributeModification
+            {
+                Name = "versionNumber", Operation = DirectoryAttributeOperation.Add
+            };
+            addNew.Add(newVersion.ToString(CultureInfo.InvariantCulture));
+            update.Modifications.Add(addNew);
+            ldap.SendRequest(update);
+            adWritten = true;
+
+            var managedNew = NativeGpoLifecycleList.ReadManagedGpo(dc, domain, gpoId);
+            if (managedNew is null ||
+                !string.Equals(managedNew.campaignId, newId, StringComparison.Ordinal))
+                throw new IOException("GPO Startup reference to new campaign was not verified.");
+            if (LongAttr(ReadOne(ldap, gpo.Dn, "(objectClass=groupPolicyContainer)",
+                    "versionNumber"), "versionNumber") != newVersion)
+                throw new IOException("New GPO version was not verified on the selected DC.");
+            return newVersion;
+        }
+        catch (Exception ex)
+        {
+            // Restore only files we actually modified, and never blindly
+            // restore AD when another actor changed the GPO since our write.
+            try { if (iniWritten) File.WriteAllBytes(ini, oldIni); }
+            catch (Exception rollback) { AppLog.Write(rollback, "GPO Reuse rollback ini"); }
+            try { if (gptWritten) File.WriteAllBytes(gpt, oldGpt); }
+            catch (Exception rollback) { AppLog.Write(rollback, "GPO Reuse rollback gpt.ini"); }
+            if (adWritten)
+            {
+                try
+                {
+                    long current = LongAttr(ReadOne(ldap, gpo.Dn,
+                        "(objectClass=groupPolicyContainer)", "versionNumber"), "versionNumber");
+                    if (current == newVersion)
+                    {
+                        var revert = new ModifyRequest(gpo.Dn,
+                            DirectoryAttributeOperation.Replace, "versionNumber",
+                            gpo.Version.ToString(CultureInfo.InvariantCulture));
+                        ldap.SendRequest(revert);
+                    }
+                }
+                catch (Exception rollback) { AppLog.Write(rollback, "GPO Reuse rollback AD"); }
+            }
+            throw new InvalidOperationException(
+                "GPO Reuse failed; rollback attempted. Verify AD/SYSVOL replication manually. " +
+                ex.Message, ex);
+        }
+        finally
+        {
+            // Preserve the moved source package when a partial GPO write
+            // requires administrative forensic review, just as legacy PS1.
+            if (!moved && Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); }
+                catch (Exception cleanup) { AppLog.Write(cleanup, "GPO Reuse stage cleanup"); }
+            }
+        }
     }
 
     private static ReusePackage ValidateReusePackage(string packageFolder, DateTime dcUtc)
