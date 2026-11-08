@@ -40,6 +40,8 @@ public sealed partial class MainForm
     internal event Action? UpdateNoticeChanged;
     internal string? AvailableUpdateVersion => _noticedRelease?.Version.ToString();
     internal string AvailableUpdateSummary => _updateNoticeHelp.GetToolTip(_updateNotice);
+    internal string UpdateNoticeCaption => _updateNotice.Text;
+    internal bool UpdateNoticeWarning => _noticedRelease is not null || _noticeCheckFailed;
 
     private void ConfigureUpdateNotice(TableLayoutPanel footer,
         TableLayoutPanel editorRoot)
