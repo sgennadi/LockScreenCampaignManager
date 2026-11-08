@@ -10,11 +10,11 @@ internal static class ManualGitHubIssueHelp
     internal const string Repository = "sgennadi/LockScreenCampaignManager";
     internal const string IssueUrl = "https://github.com/" + Repository + "/issues/new";
     internal const string Explanation =
-        "The public GitHub Issue form will open with a prepared title and error report.\\n\\n" +
+        "The public GitHub Issue form will open with a prepared title and error report.\n\n" +
         "You must review and explicitly submit it in GitHub; nothing is uploaded automatically. " +
         "This repository is PUBLIC, so remove private names, domains, paths, " +
-        "computer details and secrets before submitting.\\n\\n" +
-        "A copy of the report will also be placed on the clipboard as a fallback.\\n\\n" +
+        "computer details and secrets before submitting.\n\n" +
+        "A copy of the report will also be placed on the clipboard as a fallback.\n\n" +
         "YES: Prepare a GitHub Issue.  NO: Stay here.";
     internal static void OpenReviewedReport(IWin32Window owner, string reviewedReport)
     {
@@ -45,9 +45,9 @@ internal static class ManualGitHubIssueHelp
                     " — " + UniversalDiagnosticsEmbedded.Clean(errorType, 80);
             }
             catch (System.Text.Json.JsonException) { /* Keep a generic title for older reports. */ }
-            var body = "### Diagnostic report (review before publishing)\\n\\n" +
-                "This is a public issue. Remove any private information.\\n\\n" +
-                "```json\\n" + reviewedReport.Replace("```", "`` `") + "\\n```\\n";
+            var body = "### Diagnostic report (review before publishing)\n\n" +
+                "This is a public issue. Remove any private information.\n\n" +
+                "```json\n" + reviewedReport.Replace("```", "`` `") + "\n```\n";
             string target = IssueUrl + "?title=" + Uri.EscapeDataString(title) +
                 "&body=" + Uri.EscapeDataString(body);
             if (target.Length > 7000)
