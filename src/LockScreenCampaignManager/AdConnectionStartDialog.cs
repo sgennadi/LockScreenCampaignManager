@@ -148,6 +148,8 @@ internal sealed class AdConnectionStartDialog : Form
     private bool _busy;
     private bool _mutating;
     internal AdDirectorySnapshot? Snapshot { get; private set; }
+    // Session-only account for subsequent deployment: no password in projects or diagnostics.
+    internal DomainCredentials? ConnectedCredentials { get; private set; }
     internal bool WorkOfflineChosen { get; private set; }
 
     internal AdConnectionStartDialog(CompanyProfile? company = null)
@@ -706,6 +708,7 @@ internal sealed class AdConnectionStartDialog : Form
     {
         if (_mutating) return;
         Snapshot = null;
+        ConnectedCredentials = null;
         _next.Enabled = _continue.Enabled = false;
         if (_page > 0) ShowPage(0);
         UiStyle.ApplyStatus(_state,
@@ -753,6 +756,7 @@ internal sealed class AdConnectionStartDialog : Form
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("DC returned a different server than requested.");
             Snapshot = snapshot;
+            ConnectedCredentials = credential;
             _mutating = true;
             try
             {
@@ -785,7 +789,9 @@ internal sealed class AdConnectionStartDialog : Form
                 Environment.NewLine + Environment.NewLine +
                 "You can edit and save campaigns locally without administrator rights." +
                 Environment.NewLine +
-                "Deployment settings and permissions are checked separately.";
+                "GPO write permissions have NOT been verified. " +
+                "The deployment wizard checks the selected OU/GPO scope before changes; " +
+                "insufficient delegation will require an administrator.";
             // Commit persistence only after successful signed+sealed LDAP authentication.
             if (_alternate.Checked)
             {
