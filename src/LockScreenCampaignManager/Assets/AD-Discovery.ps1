@@ -1,0 +1,200 @@
+#requires -Version 5.1
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true)][string]$RequestPath,
+    [Parameter(Mandatory=$true)][string]$ResponsePath,
+    [ValidateSet('Connect','DomainControllers','OUs','Groups','Users','Snapshot')]
+    [string]$Mode = 'Connect'
+)
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.DirectoryServices.Protocols
+
+function Send-Result {
+    param([bool]$Success, [string]$Message, $Data)
+    $json = [ordered]@{ success=$Success; message=$Message; data=$Data } | ConvertTo-Json -Depth 9 -Compress
+    [IO.File]::WriteAllText($ResponsePath,$json,[Text.UTF8Encoding]::new($false))
+}
+function Get-Attribute {
+    param($Entry,[string]$Name)
+    $attr = $Entry.Attributes[$Name]
+    if ($null -ne $attr -and $attr.Count -gt 0) { return [string]$attr[0] }
+    return ''
+}
+function New-Ldap {
+    param([string]$HostName)
+    $identifier = [System.DirectoryServices.Protocols.LdapDirectoryIdentifier]::new($HostName,389,$false,$false)
+    $conn = [System.DirectoryServices.Protocols.LdapConnection]::new($identifier)
+    $conn.AuthType = [System.DirectoryServices.Protocols.AuthType]::Negotiate
+    $conn.SessionOptions.ProtocolVersion = 3
+    # Signed + sealed LDAP protects the account's directory queries on the wire.
+    $conn.SessionOptions.Signing = $true
+    $conn.SessionOptions.Sealing = $true
+    $conn.Timeout = [TimeSpan]::FromSeconds(25)
+    $conn.Bind()
+    return $conn
+}
+function Search-Entries {
+    param($Connection,[string]$Base,[string]$Filter,[string[]]$Attributes,[int]$Limit=5000)
+    $entries = [Collections.Generic.List[object]]::new()
+    $cookie = [byte[]]@()
+    do {
+        $request = [System.DirectoryServices.Protocols.SearchRequest]::new(
+            $Base,$Filter,[System.DirectoryServices.Protocols.SearchScope]::Subtree,$Attributes)
+        $page = [System.DirectoryServices.Protocols.PageResultRequestControl]::new(500)
+        $page.Cookie = $cookie
+        [void]$request.Controls.Add($page)
+        $response = [System.DirectoryServices.Protocols.SearchResponse]$Connection.SendRequest($request)
+        foreach ($entry in $response.Entries) {
+            $entries.Add($entry)
+            if ($entries.Count -ge $Limit) { return @($entries.ToArray()) }
+        }
+        $cookie = [byte[]]@()
+        foreach ($ctrl in $response.Controls) {
+            if ($ctrl -is [System.DirectoryServices.Protocols.PageResultResponseControl]) { $cookie = $ctrl.Cookie }
+        }
+    } while ($cookie.Length -gt 0)
+    return @($entries.ToArray())
+}
+function Escape-Filter {
+    param([string]$Value)
+    $sb = [Text.StringBuilder]::new()
+    foreach ($c in $Value.ToCharArray()) {
+        switch ([int][char]$c) {
+            0  { [void]$sb.Append('\00'); break }
+            40 { [void]$sb.Append('\28'); break }
+            41 { [void]$sb.Append('\29'); break }
+            42 { [void]$sb.Append('\2a'); break }
+            92 { [void]$sb.Append('\5c'); break }
+            default { [void]$sb.Append($c) }
+        }
+    }
+    return $sb.ToString()
+}
+try {
+    $req = Get-Content -LiteralPath $RequestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $domain = ([string]$req.domain).Trim().ToLowerInvariant()
+    $dc = ([string]$req.dc).Trim()
+    if (-not $domain) {
+        try { $domain = [DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain().Name.ToLowerInvariant() }
+        catch { throw 'Cannot detect a joined AD domain. Enter a DNS domain name.' }
+    }
+    if ($domain -notmatch '^(?=.{3,253}$)[a-z0-9-]+(\.[a-z0-9-]+)+$') { throw 'Invalid DNS domain.' }
+    if ($dc -and ($dc -notmatch '^[a-zA-Z0-9.-]{1,253}$' -or $dc -match '^\d+\.\d+\.\d+\.\d+$')) {
+        throw 'Enter a DC hostname, not an IP address (Kerberos requires DNS).'
+    }
+    $server = if ($dc) { $dc } else { $domain }
+    $conn = New-Ldap $server
+    try {
+        $rootRequest = [System.DirectoryServices.Protocols.SearchRequest]::new(
+            '', '(objectClass=*)', [System.DirectoryServices.Protocols.SearchScope]::Base,
+            [string[]]@('defaultNamingContext','dnsHostName','configurationNamingContext','isRODC'))
+        $rootResp = [System.DirectoryServices.Protocols.SearchResponse]$conn.SendRequest($rootRequest)
+        if ($rootResp.Entries.Count -eq 0) { throw 'LDAP RootDSE could not be read.' }
+        $root = $rootResp.Entries[0]
+        $baseDn = Get-Attribute $root 'defaultNamingContext'
+        $actualDc = Get-Attribute $root 'dnsHostName'
+        if (-not $baseDn -or -not $actualDc) { throw 'LDAP RootDSE missing domain/DC data.' }
+        $resolvedDomain = (([regex]::Matches($baseDn,'(?i)(?:^|,)DC=([^,]+)') | ForEach-Object { $_.Groups[1].Value }) -join '.').ToLowerInvariant()
+        if ($resolvedDomain -ne $domain) { throw ('Selected DC belongs to {0}, not {1}.' -f $resolvedDomain,$domain) }
+        $isRODC = (Get-Attribute $root 'isRODC') -eq 'TRUE'
+        switch ($Mode) {
+            'Snapshot' {
+                # Step 1: read-only LDAP/RootDSE from ONE signed+sealed session.
+                # No GPO or AD writes and no remote client execution.
+                $dcRows = @(Search-Entries $conn $baseDn '(&(objectCategory=computer)(|(primaryGroupID=516)(primaryGroupID=521)))' @('name','dNSHostName','primaryGroupID') 5000)
+                $controllers = @($dcRows | ForEach-Object {
+                    $name = Get-Attribute $_ 'dNSHostName'
+                    if ($name) {
+                        [pscustomobject]@{
+                            name=$name
+                            writable=((Get-Attribute $_ 'primaryGroupID') -ne '521')
+                        }
+                    }
+                } | Sort-Object name)
+                if ($controllers.Count -eq 0) {
+                    $controllers = @([pscustomobject]@{name=$actualDc;writable=(-not $isRODC)})
+                }
+                $ouRows = @(Search-Entries $conn $baseDn '(objectCategory=organizationalUnit)' @('name','distinguishedName') 5000)
+                $ous = @($ouRows | ForEach-Object {
+                    [pscustomobject]@{name=(Get-Attribute $_ 'name');dn=$_.DistinguishedName}
+                } | Sort-Object dn)
+                $groupRows = @(Search-Entries $conn $baseDn '(&(objectCategory=group)(groupType:1.2.840.113556.1.4.803:=2147483648))' @('name','sAMAccountName','distinguishedName') 5000)
+                $groups = @($groupRows | ForEach-Object {
+                    [pscustomobject]@{
+                        name=(Get-Attribute $_ 'name')
+                        sam=(Get-Attribute $_ 'sAMAccountName')
+                        dn=$_.DistinguishedName
+                    }
+                } | Sort-Object name)
+                $policyRoot = 'CN=Policies,CN=System,' + $baseDn
+                $policyRows = @(Search-Entries $conn $policyRoot '(objectClass=groupPolicyContainer)' @('displayName','name') 5000)
+                $gpos = @($policyRows | ForEach-Object {
+                    [pscustomobject]@{
+                        name=(Get-Attribute $_ 'displayName')
+                        id=(Get-Attribute $_ 'name')
+                    }
+                } | Sort-Object name)
+                $result = [pscustomobject]@{
+                    domain=$resolvedDomain
+                    dc=$actualDc
+                    baseDn=$baseDn
+                    dcWritable=(-not $isRODC)
+                    readOnly=$true
+                    observedUtc=[datetime]::UtcNow.ToString('o')
+                    capped=($dcRows.Count -ge 5000 -or $ouRows.Count -ge 5000 -or
+                        $groupRows.Count -ge 5000 -or $policyRows.Count -ge 5000)
+                    controllers=@($controllers)
+                    ous=@($ous)
+                    groups=@($groups)
+                    gpos=@($gpos)
+                }
+            }
+            'Connect' {
+                $result = [pscustomobject]@{
+                    domain=$resolvedDomain; dc=$actualDc; baseDn=$baseDn
+                    credentialContext=[Security.Principal.WindowsIdentity]::GetCurrent().Name
+                    gpoToolsAvailable=$true
+                    rsatRequired=$false
+                    deploymentMode='Native ADSI/LDAP and Windows GPO COM, no RSAT/WinRM'
+                    dcWritable=(-not $isRODC)
+                }
+            }
+            'DomainControllers' {
+                $computers = @(Search-Entries $conn $baseDn '(&(objectCategory=computer)(|(primaryGroupID=516)(primaryGroupID=521)))' @('name','dNSHostName','primaryGroupID') 5000)
+                $result = @($computers | ForEach-Object {
+                    $host = Get-Attribute $_ 'dNSHostName'
+                    if ($host) {
+                        [pscustomobject]@{ name=$host; site=''; writable=((Get-Attribute $_ 'primaryGroupID') -ne '521') }
+                    }
+                } | Sort-Object name)
+                if (@($result).Count -eq 0) { $result = @([pscustomobject]@{ name=$actualDc;site='';writable=(-not $isRODC) }) }
+            }
+            'OUs' {
+                $result = @(Search-Entries $conn $baseDn '(objectCategory=organizationalUnit)' @('name','distinguishedName') 5000 | ForEach-Object {
+                    [pscustomobject]@{ name=(Get-Attribute $_ 'name'); dn=$_.DistinguishedName }
+                } | Sort-Object dn)
+            }
+            'Groups' {
+                $result = @(Search-Entries $conn $baseDn '(&(objectCategory=group)(groupType:1.2.840.113556.1.4.803:=2147483648))' @('name','sAMAccountName','distinguishedName') 5000 | ForEach-Object {
+                    [pscustomobject]@{ name=(Get-Attribute $_ 'name'); sam=(Get-Attribute $_ 'sAMAccountName'); dn=$_.DistinguishedName }
+                } | Sort-Object name)
+            }
+            'Users' {
+                $search = ([string]$req.search).Trim()
+                if ($search.Length -lt 2 -or $search.Length -gt 48) { throw 'User search must have 2-48 characters.' }
+                $term = Escape-Filter $search
+                $filter = '(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=*' + $term + '*)(displayName=*' + $term + '*)))'
+                $result = @(Search-Entries $conn $baseDn $filter @('name','sAMAccountName','distinguishedName') 75 | ForEach-Object {
+                    [pscustomobject]@{ name=(Get-Attribute $_ 'name'); sam=(Get-Attribute $_ 'sAMAccountName'); dn=$_.DistinguishedName }
+                } | Sort-Object sam)
+            }
+        }
+    }
+    finally { $conn.Dispose() }
+    Send-Result -Success $true -Message 'Signed LDAP discovery succeeded; no workstation RSAT needed.' -Data $result
+}
+catch {
+    Send-Result -Success $false -Message $_.Exception.Message -Data $null
+    exit 1
+}

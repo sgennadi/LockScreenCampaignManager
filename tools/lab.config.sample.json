@@ -1,0 +1,9 @@
+{
+  "domain": "example.com",
+  "dc": "dc01.example.com",
+  "ouDn": "OU=LSCM-CI,OU=Test,DC=example,DC=com",
+  "groupDn": "CN=LSCM-CI-Computers,OU=Test,DC=example,DC=com",
+  "clients": [
+    "WIN11CI01"
+  ]
+}

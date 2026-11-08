@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>LockScreenCampaignManager</AssemblyName>
+    <RootNamespace>LockScreenCampaignManager</RootNamespace>
+    <Version>0.4.0-preview.29</Version>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\LockScreen-Agent.ps1" LogicalName="LockScreenCampaignManager.Agent.ps1" />
+    <EmbeddedResource Include="Assets\AD-Discovery.ps1" LogicalName="LockScreenCampaignManager.ADDiscovery.ps1" />
+    <EmbeddedResource Include="Assets\GPO-Deploy.ps1" LogicalName="LockScreenCampaignManager.GPODeploy.ps1" />
+    <EmbeddedResource Include="Assets\Gpo-Lifecycle.ps1" LogicalName="LockScreenCampaignManager.GpoLifecycle.ps1" />
+    <EmbeddedResource Include="Assets\Gpo-ConflictScan.ps1" LogicalName="LockScreenCampaignManager.GpoConflictScan.ps1" />
+    <EmbeddedResource Include="Assets\Campaign-PushNow.ps1" LogicalName="LockScreenCampaignManager.CampaignPushNow.ps1" />
+    <EmbeddedResource Include="Assets\Computer-GroupAssignment.ps1" LogicalName="LockScreenCampaignManager.ComputerGroupAssignment.ps1" />
+    <EmbeddedResource Include="Assets\Sysvol-Storage.ps1" LogicalName="LockScreenCampaignManager.SysvolStorage.ps1" />
+    <EmbeddedResource Include="Assets\Dc-Consistency.ps1" LogicalName="LockScreenCampaignManager.DcConsistency.ps1" />
+  </ItemGroup>
+</Project>

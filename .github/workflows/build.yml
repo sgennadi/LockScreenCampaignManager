@@ -1,0 +1,220 @@
+name: Build portable EXE
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep only the latest check for each PR; preserve every main branch build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-x86]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Python for offline policy regression checks
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Fail closed on sensitive public snapshot content
+        shell: pwsh
+        run: |
+          python tools/test_public_snapshot.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/audit_public_snapshot.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check GPO lifecycle and registry policy fixtures
+        shell: pwsh
+        run: |
+          python tools/test_package.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_gpo_operations.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_feedback_protocol.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_manager_features.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_live_ad_lab_contracts.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_diagnostics_issue_review.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate Windows PowerShell 5.1 syntax
+        shell: powershell
+        run: |
+          $scripts = @(
+            'src/LockScreenCampaignManager/Assets/LockScreen-Agent.ps1',
+            'src/LockScreenCampaignManager/Assets/AD-Discovery.ps1',
+            'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
+            'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
+            'src/LockScreenCampaignManager/Assets/Gpo-ConflictScan.ps1',
+            'src/LockScreenCampaignManager/Assets/Campaign-PushNow.ps1',
+            'src/LockScreenCampaignManager/Assets/Sysvol-Storage.ps1',
+            'src/LockScreenCampaignManager/Assets/Dc-Consistency.ps1',
+            'tools/test_dc_consistency.ps1',
+            'tools/test_effective_gpo.ps1',
+            'tools/lab_ad_integration.ps1',
+            'tools/lab_win11_probe.ps1',
+            'tools/test_hosted_agent_lifecycle.ps1'
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              foreach ($parseError in $errors) {
+                $lineNumber = $parseError.Extent.StartLineNumber
+                $columnNumber = $parseError.Extent.StartColumnNumber
+                Write-Host ("PowerShell parse failure in {0} line {1}:{2}: {3}" -f $script,$lineNumber,$columnNumber,$parseError.Message)
+              }
+              exit 1
+            }
+          }
+
+      - name: Check multi-DC SYSVOL/AD audit read-only UTC and SHA-256 contracts
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_dc_consistency.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify effective GPO candidate safety contracts (offline)
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_effective_gpo.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify client integrity and recovery functions
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File tools/test_client_integrity.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exercise real agent lifecycle in isolated HKCU on hosted Windows
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_hosted_agent_lifecycle.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify read-only post-cleanup registry comparison and no remote task execution
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_postcleanup_verification.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate computer group assignment parser and offline security fixtures
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File tools/test_computer_group_assignment.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Smart SYSVOL Storage safeguards and selected DC clock
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File tools/test_sysvol_storage.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify flexible schedule and stable client-side image selection
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File tools/test_schedule_selection.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify deferred retry offline classification
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File tools/test_deferred_repair.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish single-file self-contained EXE
+        shell: pwsh
+        run: |
+          dotnet publish src/LockScreenCampaignManager/LockScreenCampaignManager.csproj `
+            --configuration Release --runtime '${{ matrix.rid }}' --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false `
+            --output "dist/${{ matrix.rid }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe")) { exit 2 }
+
+      - name: Run schedule self-tests
+        shell: pwsh
+        run: |
+          & "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate WinForms dialogs at multiple simulated font scales
+        shell: pwsh
+        run: |
+          & "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe" --ui-smoke-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          # Derive package version from the single csproj version source.
+          $version = (dotnet msbuild src/LockScreenCampaignManager/LockScreenCampaignManager.csproj -getProperty:Version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^\d+\.\d+\.\d+-preview\.\d+$') {
+            throw "Unexpected or missing application preview version"
+          }
+          $zip = "LockScreenCampaignManager-$version-${{ matrix.rid }}.zip"
+          $stage = "dist/${{ matrix.rid }}"
+          New-Item -Path "$stage/docs" -ItemType Directory -Force | Out-Null
+          Copy-Item "docs/GMSA-REPAIR-RU.md" "$stage/docs/" -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/$zip" -Force
+          # UniversalUpdater accepts only a one-file archive.
+          # GitHub Releases must be published separately; Actions artifacts
+          # are not automatically visible through the Releases API.
+          $updateZip = "LockScreenCampaignManager-Update-${{ matrix.rid }}.zip"
+          $exe = Join-Path $stage "LockScreenCampaignManager.exe"
+          Compress-Archive -LiteralPath $exe -DestinationPath "dist/$updateZip" -Force
+          Add-Type -AssemblyName System.IO.Compression
+          $verified = [System.IO.Compression.ZipFile]::OpenRead("dist/$updateZip")
+          try {
+            if ($verified.Entries.Count -ne 1 -or
+                $verified.Entries[0].FullName -ne "LockScreenCampaignManager.exe") {
+              throw "UniversalUpdater ZIP must contain exactly one EXE"
+            }
+          } finally { $verified.Dispose() }
+
+      # PRs run the full build, self-test and ZIP integrity checks without
+      # consuming Actions artifact storage for every preview commit.
+      - name: Upload release build
+        id: upload_release_build
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: LockScreenCampaignManager-${{ matrix.rid }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 2
+
+      # Storage quota errors must be visible but should not invalidate code
+      # tests on a passing main/dispatch build. No false artifact success.
+      - name: Report artifact upload problem
+        if: always() && steps.upload_release_build.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Warning 'Build and self-tests passed, but GitHub artifact upload failed. Check repository Actions artifact storage quota.'
+          'Build/tests PASS; artifact upload FAILED. Free old Actions artifact storage or increase the quota, then rerun this workflow to get a downloadable ZIP.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

@@ -1,0 +1,3258 @@
+namespace LockScreenCampaignManager;
+
+internal static class SelfTests
+{
+    public static void Run()
+    {
+        var p = new CampaignProject {
+            Name = "Test campaign",
+            StartLocal = new DateTime(2026, 11, 8, 14, 0, 0),
+            LastImageHours = 24,
+            ImagePaths = new List<string> { "1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg" }
+        };
+        Check(CampaignSchedule.Format(CampaignSchedule.At(p, 0)) == "2026-11-08T14:00:00", "day 1");
+        Check(CampaignSchedule.Format(CampaignSchedule.At(p, 4)) == "2026-11-12T14:00:00", "day 5");
+        Check(CampaignSchedule.Format(CampaignSchedule.End(p)) == "2026-11-13T14:00:00", "cleanup");
+        Check(CampaignSchedule.BuildId(p) == "test-campaign-202611081400", "id");
+        p.LastImageHours = 12;
+        Check(CampaignSchedule.Format(CampaignSchedule.End(p)) == "2026-11-13T02:00:00", "short last image");
+        p.StartLocal = new DateTime(2028, 2, 28, 14, 0, 0);
+        Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
+        Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
+        TestFlexibleSchedules();
+        TestFilenameScheduleInference();
+        TestExpectedCampaignValidation();
+        TestAdDirectorySnapshot();
+        // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
+        var simulated = new InvalidOperationException(@"Unable to access \\dc01.corp.example.com\SYSVOL from 198.51.100.42");
+        var payload = UniversalDiagnosticsEmbedded.MakePayload("Conflict scan", simulated);
+        string preview = UniversalDiagnosticsEmbedded.Preview(payload);
+        Check(preview.Contains("universal-diagnostics/v1"), "diagnostics schema");
+        Check(!preview.Contains("corp.example.com"), "domain path must be redacted");
+        Check(!preview.Contains("198.51.100.42"), "IP must be redacted");
+        Check(!preview.Contains("dc01"), "DC name must be redacted");
+        Check(UniversalDiagnosticsEmbedded.Clean("password = abc") != "password = abc", "password redaction");
+        string? original = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
+        string temp = Path.Combine(Path.GetTempPath(), "lscm-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", temp);
+            Check(!Directory.Exists(UniversalDiagnosticsEmbedded.QueueDirectory()), "no automatic capture");
+            var receipt = UniversalDiagnosticsEmbedded.Capture(payload);
+            Check(File.Exists(receipt.Path), "manual capture writes locally");
+            string approvedPreview = UniversalDiagnosticsEmbedded.Preview(payload);
+            var approvedReceipt = UniversalDiagnosticsEmbedded.CaptureReviewed(approvedPreview);
+            Check(File.ReadAllText(approvedReceipt.Path) == approvedPreview,
+                "operator-approved diagnostic preview is stored byte-for-byte");
+            using var reviewed = System.Text.Json.JsonDocument.Parse(approvedPreview);
+            Check(reviewed.RootElement.GetProperty("event").GetProperty("id").GetString() ==
+                approvedReceipt.Id, "reviewed diagnostic ID is identical to saved ID");
+            Check(reviewed.RootElement.GetProperty("event").GetProperty("version").GetString() ==
+                AppVersion.Current, "UniversalDiagnostics uses application version");
+            bool tampered = false;
+            try {
+                UniversalDiagnosticsEmbedded.CaptureReviewed(
+                    approvedPreview.Replace("\"pending\"", "\"submitted\"", StringComparison.Ordinal));
+            }
+            catch (InvalidDataException) { tampered = true; }
+            Check(tampered, "reviewed diagnostic cannot be modified to submitted before capture");
+            using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(receipt.Path));
+            Check(report.RootElement.GetProperty("event").GetProperty("schema").GetString() ==
+                "universal-diagnostics/v1", "saved report schema");
+            Check(report.RootElement.GetProperty("delivery").GetProperty("status").GetString() ==
+                "pending", "report pending status");
+
+            // Local trends MUST validate every reviewed report, not just group
+            // arbitrary JSON or infer endpoint errors from a file name.
+            var originalReports = UniversalDiagnosticsEmbedded.GetReports();
+            var trends = DiagnosticsTrendAnalyzer.Analyze(originalReports, DateTimeOffset.UtcNow);
+            Check(trends.ValidReports == 2 && trends.InvalidReports == 0 &&
+                trends.Groups.Count == 1 && trends.Groups[0].Count == 2,
+                "Local diagnostics groups only explicitly captured matching fingerprints");
+            string safeTrends = trends.ExportSafeJson();
+            Check(safeTrends.Contains("lscm-diagnostics-trends/v1", StringComparison.Ordinal) &&
+                !safeTrends.Contains("198.51.100.42", StringComparison.Ordinal) &&
+                !safeTrends.Contains("dc01", StringComparison.Ordinal) &&
+                !safeTrends.Contains("source-state", StringComparison.Ordinal) &&
+                !safeTrends.Contains(receipt.Path, StringComparison.Ordinal),
+                "Trends export omits raw client metadata, error text and private file paths");
+
+            File.WriteAllText(Path.Combine(UniversalDiagnosticsEmbedded.QueueDirectory(),
+                "injected.json"), "{\"event\":{\"schema\":\"fake\"}}");
+            File.WriteAllText(Path.Combine(UniversalDiagnosticsEmbedded.QueueDirectory(),
+                "wrong-uuid.json"), approvedPreview);
+            var contaminated = DiagnosticsTrendAnalyzer.Analyze(
+                UniversalDiagnosticsEmbedded.GetReports(), DateTimeOffset.UtcNow);
+            Check(contaminated.ValidReports == 2 && contaminated.InvalidReports == 2 &&
+                contaminated.Groups.Count == 1,
+                "Malformed JSON and renamed reports are rejected without hiding good reports");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", original);
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, true); } catch { }
+        }
+        Check(new UiPreferences { Density = "Unknown", UiScalePercent = 999,
+            FontScalePercent = 1 }.Validate().Density == "Auto", "UI preferences sanity");
+        TestUiWindowPlacement();
+        TestCompanyProfiles();
+        Check(FeedbackPath.ValidateRoot(@"\\fileserver\LockScreenReports$") ==
+              @"\\fileserver\LockScreenReports$", "SMB share path validation");
+        bool dangerous = false;
+        try { FeedbackPath.ValidateRoot(@"\\dc01\SYSVOL"); }
+        catch (ArgumentException) { dangerous = true; }
+        Check(dangerous, "SYSVOL rejected as telemetry destination");
+        TestClientFeedback();
+        TestDeviceRepairDashboard();
+        TestCampaignClosureAudit();
+        TestDcConsistencyAudit();
+        TestEffectiveGpoCandidates();
+        TestWinningPolicyAnalysis();
+        TestEndpointLockScreenObservation();
+        TestEndpointSourceEvidence();
+        TestRsopEvidenceImport();
+        TestPostCleanupVerification();
+        TestGmsaManualDuplicateGuard();
+        TestDeferredRepairQueue();
+        TestRepairHistoryJournal();
+        TestInitialRepairTracking();
+        TestBackgroundApproval();
+        TestGmsaQueue();
+        TestGmsaDisabledQueueAudit();
+        TestGmsaQueueHealthAudit();
+        TestGmsaRebootRecovery();
+        TestGmsaWorkerSchedule();
+        TestGmsaReadOnlyDiagnostic();
+        TestProductionReadiness();
+        TestGmsaWorkerHeartbeat();
+        TestUniversalUpdaterAdapter();
+        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        TestAlertsAndHistory();
+        Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
+    }
+
+    private static void TestAdDirectorySnapshot()
+    {
+        const string domain = "example.com", dc = "dc01.example.com";
+        var now = DateTimeOffset.UtcNow;
+        var profile = new CompanyProfile {
+            Id = Guid.NewGuid().ToString("D"),
+            Name = "Example",
+            Domain = domain,
+            PreferredDc = dc
+        };
+        object Inventory(bool readOnly = true, string resultDomain = domain, bool capped = false) => new {
+            success = true,
+            data = new {
+                readOnly, domain = resultDomain, dc,
+                baseDn = "DC=example,DC=com",
+                dcWritable = true,
+                observedUtc = now,
+                capped,
+                controllers = new[] { new { name = dc, writable = true } },
+                ous = new[] { new { name = "Clients", dn = "OU=Clients,DC=example,DC=com" } },
+                groups = new[] { new { name = "Screen", sam = "Screen", dn = "CN=Screen,DC=example,DC=com" } },
+                gpos = new[] { new { name = "LockScreen", id = "{11111111-1111-1111-1111-111111111111}", flags = 0 } }
+            }
+        };
+        using (var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Inventory())))
+        {
+            var record = AdDirectorySnapshot.Parse(doc.RootElement, domain, profile);
+            Check(record.Domain == domain && record.Dc == dc &&
+                record.Writable && !record.Capped && record.OrganizationalUnits.Count == 1 &&
+                record.ComputerGroups.Count == 1 && record.GroupPolicies.Count == 1 &&
+                record.DomainControllers.Count == 1,
+                "signed LDAP snapshot parsed with known domain, DC, OU, group and GPO counts");
+            Check(record.ObservedUtc <= DateTimeOffset.UtcNow &&
+                record.ObservedUtc >= DateTimeOffset.UtcNow.AddMinutes(-10),
+                "AD startup observation timestamp stays fresh");
+        }
+        using (var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Inventory(capped: true))))
+        {
+            Check(AdDirectorySnapshot.Parse(doc.RootElement, domain, profile).Capped,
+                "truncated AD inventory is exposed, not passed as complete");
+        }
+        bool rejectedWriteMode = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Inventory(readOnly: false))))
+        {
+            try { AdDirectorySnapshot.Parse(doc.RootElement, domain, profile); }
+            catch (InvalidDataException) { rejectedWriteMode = true; }
+        }
+        Check(rejectedWriteMode, "startup rejects an AD response without explicit read-only attestation");
+        bool rejectedWrongDomain = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Inventory(resultDomain: "other.example.com"))))
+        {
+            try { AdDirectorySnapshot.Parse(doc.RootElement, domain, profile); }
+            catch (InvalidDataException) { rejectedWrongDomain = true; }
+        }
+        Check(rejectedWrongDomain, "startup rejects cross-domain response even if DC is reachable");
+    }
+
+    private static void TestExpectedCampaignValidation()
+    {
+        var empty = new CampaignProject
+        {
+            Name = "Draft campaign", TimeZoneId = "UTC", ImagePaths = new List<string>(),
+            StartLocal = new DateTime(2026, 11, 9, 14, 0, 0)
+        };
+        // Editing or saving an incomplete project is legal; deployment isn't.
+        CampaignSchedule.Validate(empty, requireImages: false);
+        bool actionable = false;
+        try { CampaignSchedule.Validate(empty, requireImages: true); }
+        catch (CampaignValidationException ex) {
+            actionable = ex.Message == "Add at least one image.";
+        }
+        Check(actionable, "empty campaign must be actionable form validation, not an app crash");
+
+        empty.Name = " ";
+        bool invalidName = false;
+        try { CampaignSchedule.Validate(empty, requireImages: false); }
+        catch (CampaignValidationException ex) {
+            invalidName = ex.Message == "Enter a campaign name.";
+        }
+        Check(invalidName, "incorrect campaign names must be form validation");
+
+        Check(ManualGitHubIssueHelp.IssueUrl ==
+            "https://github.com/sgennadi/LockScreenCampaignManager/issues/new" &&
+            ManualGitHubIssueHelp.SignInUrl.StartsWith(
+                "https://github.com/login?return_to=", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("PRIVATE", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("404", StringComparison.Ordinal) &&
+            ManualGitHubIssueHelp.Explanation.Contains("pending", StringComparison.Ordinal),
+            "manual GitHub diagnostics warns of authentication, private 404 and no delivery");
+    }
+
+    private static void TestFilenameScheduleInference()
+    {
+        string folder = Path.Combine(Path.GetTempPath(),
+            "lscm-import-fixture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string monday = Path.Combine(folder, "Monday01.jpg");
+            string tuesday = Path.Combine(folder, "tue_02.png");
+            string wednesday = Path.Combine(folder, "ср_03.bmp");
+            foreach (var file in new[] { monday, tuesday, wednesday })
+            {
+                using var image = new System.Drawing.Bitmap(900, 500);
+                using (var graphics = System.Drawing.Graphics.FromImage(image))
+                    graphics.Clear(System.Drawing.Color.SteelBlue);
+                var format = Path.GetExtension(file).ToLowerInvariant() switch {
+                    ".png" => System.Drawing.Imaging.ImageFormat.Png,
+                    ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
+                    _ => System.Drawing.Imaging.ImageFormat.Jpeg
+                };
+                image.Save(file, format);
+            }
+            var names = ImageFilenameMatcher.ScanFolder(folder);
+            Check(names.Count == 3, "Image folder scan includes only supported extensions");
+            var project = new CampaignProject {
+                TimeZoneId = "UTC", Name = "Filename matches",
+                StartLocal = new DateTime(2026, 11, 9, 8, 35, 0),
+                ScheduleMode = CampaignScheduleMode.Workdays
+            };
+            var proposal = ImageFilenameMatcher.Suggest(project,
+                new[] { wednesday, monday, tuesday });
+            Check(proposal.ConfidentCount == 3 && proposal.ReviewCount == 0 &&
+                proposal.Slots[0].SuggestedPath == monday &&
+                proposal.Slots[1].SuggestedPath == tuesday &&
+                proposal.Slots[2].SuggestedPath == wednesday &&
+                proposal.Slots.All(x => x.Strong),
+                "English/Russian weekday and adjacent image numbers match real workday slots");
+            var mondayAgain = ImageFilenameMatcher.Parse("Monday01.jpg");
+            Check(mondayAgain.Weekday == DayOfWeek.Monday &&
+                mondayAgain.Ordinal == 1, "Adjacent weekday+number filename is understood");
+            Check(ImageFilenameMatcher.Parse("Friday_Monday_01.jpg").Conflicting,
+                "Conflicting weekdays never silently receive an image slot");
+            var noMatch = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "unknown.jpg") });
+            Check(noMatch.Slots.Count == 1 &&
+                !noMatch.Slots[0].Strong &&
+                noMatch.ReviewCount == 1,
+                "Unrecognized names are marked for explicit manual review");
+
+            var number1 = Path.Combine(folder, "slide_01.jpg");
+            var number2 = Path.Combine(folder, "slide_02.jpg");
+            File.WriteAllBytes(number1, [1, 2, 3]);
+            File.WriteAllBytes(number2, [4, 5, 6]);
+            var numeric = ImageFilenameMatcher.Suggest(project,
+                new[] { number2, number1 });
+            Check(numeric.ConfidentCount == 2 &&
+                numeric.Slots[0].SuggestedPath == number1 &&
+                numeric.Slots[1].SuggestedPath == number2,
+                "Numbered filenames correctly align to the first and second schedule slots");
+
+            string date1 = Path.Combine(folder, "2026-11-10.jpg");
+            string date2 = Path.Combine(folder, "2026-11-09.jpg");
+            File.WriteAllBytes(date1, [7, 8, 9]);
+            File.WriteAllBytes(date2, [10, 11, 12]);
+            project.ScheduleMode = CampaignScheduleMode.SpecificDates;
+            var dates = ImageFilenameMatcher.Suggest(project, new[] { date1, date2 });
+            Check(dates.ConfidentCount == 2 &&
+                dates.Schedule.SpecificDatesLocal.Count == 2 &&
+                dates.Slots[0].LocalTime == new DateTime(2026, 11, 9, 8, 35, 0) &&
+                dates.Slots[0].SuggestedPath == date2 &&
+                dates.Slots[1].LocalTime == new DateTime(2026, 11, 10, 8, 35, 0) &&
+                dates.Slots[1].SuggestedPath == date1,
+                "ISO date filenames propose specific dates without swapping image/date pairs");
+            bool repeatedFileRejected = false;
+            try { _ = ImageFilenameMatcher.Suggest(project, new[] { date1, date1 }); }
+            catch (InvalidDataException) { repeatedFileRejected = true; }
+            Check(repeatedFileRejected, "Folder importer disallows duplicate physical filenames");
+            var hebrew = ImageFilenameMatcher.Parse("יום_שני_03.png");
+            Check(hebrew.Weekday == DayOfWeek.Monday &&
+                hebrew.Ordinal == 3, "Hebrew weekday filenames can be recognized for review");
+            var badDate = ImageFilenameMatcher.Parse("Monday_2026-11-10.jpg");
+            Check(badDate.Conflicting,
+                "Filename calendar dates contradicting weekdays require manual review");
+            var twoDates = ImageFilenameMatcher.Parse(
+                "2026-11-09_2026-11-10.jpg");
+            Check(twoDates.Conflicting && twoDates.Date is null,
+                "Two different date tokens require manual review rather than taking the first");
+            var invalidDate = ImageFilenameMatcher.Parse("slide_2026-02-30.jpg");
+            Check(invalidDate.Conflicting && invalidDate.Ordinal is null,
+                "Malformed date token is not silently treated as an image number");
+            var datedOrdinal = ImageFilenameMatcher.Parse(
+                "Monday_02_2026-11-09.jpg");
+            Check(!datedOrdinal.Conflicting &&
+                datedOrdinal.Date == new DateOnly(2026, 11, 9) &&
+                datedOrdinal.Ordinal == 2,
+                "Ordinal outside an ISO date is still checked independently");
+            // A filename with only a weekday/date is ambiguous when a
+            // campaign changes images more than once on that weekday/date.
+            project.ScheduleMode = CampaignScheduleMode.EveryInterval;
+            project.IntervalMinutes = 150;
+            var repeatedWeekday = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "Monday.jpg"), number2 });
+            Check(repeatedWeekday.Slots[0].SuggestedPath is null &&
+                !repeatedWeekday.Slots[0].Strong &&
+                repeatedWeekday.Slots[0].Reason.Contains("multiple", StringComparison.Ordinal) &&
+                repeatedWeekday.Slots[1].SuggestedPath == number2,
+                "Weekday-only filename cannot auto-map when two image changes share a day");
+            var repeatedDate = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "2026-11-09.jpg"), number2 });
+            Check(repeatedDate.Slots[0].SuggestedPath is null &&
+                repeatedDate.Slots[1].SuggestedPath == number2,
+                "Date-only filename cannot auto-map to multiple times on that date");
+            var preciseHint = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "Monday_01.jpg"), number2 });
+            Check(preciseHint.ConfidentCount == 2 &&
+                preciseHint.Slots[0].SuggestedPath is not null,
+                "Explicit slot number resolves same-weekday interval ambiguity");
+            project.ScheduleMode = CampaignScheduleMode.Workdays;
+            var multiWeek = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "Monday.jpg"), number2,
+                    Path.Combine(folder, "slide_03.jpg"),
+                    Path.Combine(folder, "slide_04.jpg"),
+                    Path.Combine(folder, "slide_05.jpg"),
+                    Path.Combine(folder, "slide_06.jpg") });
+            Check(multiWeek.Slots[0].SuggestedPath is null &&
+                multiWeek.Slots[5].SuggestedPath?.EndsWith("slide_06.jpg", StringComparison.Ordinal) == true,
+                "Repeated weekday in a multi-week schedule is never guessed");
+            project.ScheduleMode = CampaignScheduleMode.Workdays;
+            var contradictoryOrdinal = ImageFilenameMatcher.Suggest(project,
+                new[] { Path.Combine(folder, "Monday_02_2026-11-09.jpg") });
+            Check(contradictoryOrdinal.ConfidentCount == 0 &&
+                contradictoryOrdinal.Slots[0].SuggestedPath is null,
+                "Matching date with contradictory ordinal is not auto-assigned");
+        }
+        finally
+        {
+            try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+            catch { }
+        }
+    }
+
+    private static void TestFlexibleSchedules()
+    {
+        string temp = Path.Combine(Path.GetTempPath(),
+            "lscm-schedule-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try
+        {
+            string image = Path.Combine(temp, "sample.jpg");
+            using (var bitmap = new System.Drawing.Bitmap(900, 500))
+            {
+                using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                    graphics.Clear(System.Drawing.Color.SteelBlue);
+                bitmap.Save(image, System.Drawing.Imaging.ImageFormat.Jpeg);
+            }
+            var project = new CampaignProject {
+                Name = "Flexible Pilot", TimeZoneId = "UTC",
+                StartLocal = new DateTime(2026, 11, 6, 8, 30, 0), // Friday
+                LastImageHours = 12,
+                ImagePaths = new List<string> { image, image, image },
+                ScheduleMode = CampaignScheduleMode.Workdays
+            };
+            Check(CampaignSchedule.At(project, 0) == new DateTime(2026, 11, 6, 8, 30, 0) &&
+                CampaignSchedule.At(project, 1) == new DateTime(2026, 11, 9, 8, 30, 0) &&
+                CampaignSchedule.At(project, 2) == new DateTime(2026, 11, 10, 8, 30, 0),
+                "Workday scheduling skips Saturday and Sunday");
+            CampaignSchedule.Validate(project, true);
+            project.ScheduleMode = CampaignScheduleMode.CustomDays;
+            project.WeekdayMask = (1 << 0) | (1 << 2) | (1 << 4); // Mon/Wed/Fri
+            Check(CampaignSchedule.At(project, 0) == new DateTime(2026, 11, 6, 8, 30, 0) &&
+                CampaignSchedule.At(project, 1) == new DateTime(2026, 11, 9, 8, 30, 0) &&
+                CampaignSchedule.At(project, 2) == new DateTime(2026, 11, 11, 8, 30, 0),
+                "Selected weekday mask determines each image change date");
+            CampaignSchedule.Validate(project, true);
+            project.WeekdayMask = 0;
+            bool noDaysRejected = false;
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { noDaysRejected = true; }
+            Check(noDaysRejected, "Custom weekdays cannot silently produce an empty schedule");
+            project.ScheduleMode = CampaignScheduleMode.Daily;
+            CampaignSchedule.Validate(project, true);
+            Check(CampaignSchedule.At(project, 1) == new DateTime(2026, 11, 7, 8, 30, 0),
+                "A legacy Daily campaign still advances every calendar day");
+
+            project.ScheduleMode = CampaignScheduleMode.EveryInterval;
+            project.TimeZoneId = "UTC";
+            project.IntervalMinutes = 150;
+            CampaignSchedule.Validate(project, true);
+            Check(CampaignSchedule.At(project, 0) == new DateTime(2026, 11, 6, 8, 30, 0) &&
+                CampaignSchedule.At(project, 1) == new DateTime(2026, 11, 6, 11, 0, 0) &&
+                CampaignSchedule.At(project, 2) == new DateTime(2026, 11, 6, 13, 30, 0),
+                "Interval schedule changes image every 2 hours 30 minutes on the same day");
+            project.IntervalMinutes = 0;
+            bool shortIntervalRejected = false;
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { shortIntervalRejected = true; }
+            Check(shortIntervalRejected, "Zero-hour zero-minute interval is blocked");
+            project.IntervalMinutes = CampaignSchedule.MaxIntervalMinutes + 1;
+            bool longIntervalRejected = false;
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { longIntervalRejected = true; }
+            Check(longIntervalRejected, "Interval beyond seven days is blocked");
+            project.TimeZoneId = "Eastern Standard Time";
+            project.StartLocal = new DateTime(2027, 3, 14, 1, 30, 0);
+            project.IntervalMinutes = 60;
+            Check(CampaignSchedule.At(project, 1) == new DateTime(2027, 3, 14, 3, 30, 0),
+                "An elapsed 60-minute DST spring interval skips nonexistent local 02:30");
+            CampaignSchedule.Validate(project, true);
+            project.StartLocal = new DateTime(2027, 11, 7, 0, 30, 0);
+            bool fallOverlapRejected = false;
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { fallOverlapRejected = true; }
+            Check(fallOverlapRejected, "Interval slots cannot target an ambiguous fall-back wall time");
+            project.TimeZoneId = "UTC";
+            project.StartLocal = new DateTime(2026, 11, 6, 8, 30, 0);
+            project.IntervalMinutes = 150;
+            project.ScheduleMode = CampaignScheduleMode.SpecificDates;
+            project.SpecificDatesLocal = new List<DateTime> {
+                new(2026, 11, 6, 8, 30, 0),
+                new(2026, 11, 11, 14, 15, 0),
+                new(2026, 12, 1, 9, 45, 0)
+            };
+            project.RandomizePerDevice = true;
+            CampaignSchedule.Validate(project, true);
+            Check(CampaignSchedule.At(project, 1) == project.SpecificDatesLocal[1] &&
+                CampaignSchedule.End(project) == new DateTime(2026, 12, 1, 21, 45, 0),
+                "Specific dates and times determine the final cleanup precisely");
+            bool datesRejected = false;
+            project.SpecificDatesLocal[2] = project.SpecificDatesLocal[1];
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { datesRejected = true; }
+            Check(datesRejected, "Identical image switch times are forbidden");
+            project.SpecificDatesLocal[2] = new DateTime(2026, 12, 1, 9, 45, 0);
+            datesRejected = false;
+            project.SpecificDatesLocal[2] = new DateTime(2026, 11, 8, 15, 0, 0);
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { datesRejected = true; }
+            Check(datesRejected, "Decreasing specific dates are rejected before export");
+            project.SpecificDatesLocal[2] = new DateTime(2026, 12, 1, 9, 45, 0);
+
+            var oldId = new CampaignProject {
+                Name = "Test campaign",
+                StartLocal = new DateTime(2026, 11, 8, 14, 0, 0)
+            };
+            Check(CampaignSchedule.BuildId(oldId) == "test-campaign-202611081400" &&
+                oldId.ScheduleMode == CampaignScheduleMode.Daily &&
+                !oldId.RandomizePerDevice,
+                "Existing projects default to unchanged daily and fixed image order");
+
+            string id = CampaignSchedule.BuildId(project);
+            var one = CampaignDeviceImageOrder.Resolve(id, "TESTPC01", 8, true);
+            var repeat = CampaignDeviceImageOrder.Resolve(id, "testpc01", 8, true);
+            var another = CampaignDeviceImageOrder.Resolve(id, "TESTPC02", 8, true);
+            Check(one.SequenceEqual(repeat) && one.Order().SequenceEqual(Enumerable.Range(0, 8)) &&
+                !one.SequenceEqual(another) &&
+                CampaignDeviceImageOrder.Resolve(id, "TESTPC01", 8, false)
+                    .SequenceEqual(Enumerable.Range(0, 8)),
+                "Stable per-computer SHA-256 permutation preserves all images and legacy fixed order");
+
+            string folder = CampaignExporter.Export(project, temp);
+            using var doc = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(folder, "campaign.json")));
+            var manifest = doc.RootElement;
+            var slides = manifest.GetProperty("slides").EnumerateArray().ToArray();
+            Check(manifest.GetProperty("schemaVersion").GetInt32() == 1 &&
+                manifest.GetProperty("randomizePerDevice").GetBoolean() &&
+                slides.Length == 3 &&
+                slides[1].GetProperty("atLocal").GetString() == "2026-11-11T14:15:00" &&
+                slides[2].GetProperty("atLocal").GetString() == "2026-12-01T09:45:00" &&
+                manifest.GetProperty("endLocal").GetString() == "2026-12-01T21:45:00",
+                "Export preserves arbitrary scheduled dates and opt-in stable device shuffle");
+            Check(slides.Select(x => x.GetProperty("fileName").GetString()).SequenceEqual(
+                    new[] { "01.jpg", "02.jpg", "03.jpg" }) &&
+                slides.All(x => x.GetProperty("sha256").GetString()?.Length == 64),
+                "Repeating source image creates unique verified destination names");
+            string deployedAgent = File.ReadAllText(
+                Path.Combine(folder, "LockScreen-Agent.ps1"));
+            Check(deployedAgent.Contains("$ResolvedSlotImages", StringComparison.Ordinal) &&
+                deployedAgent.Contains("Get-ExpectedSlide", StringComparison.Ordinal),
+                "Exporter includes the embedded agent that resolves device-specific image slots");
+
+            project.TimeZoneId = "Eastern Standard Time";
+            project.StartLocal = new DateTime(2027, 3, 14, 2, 30, 0);
+            project.ImagePaths = new List<string> { image };
+            project.SpecificDatesLocal = new List<DateTime> { project.StartLocal };
+            bool dstRejected = false;
+            try { CampaignSchedule.Validate(project, true); }
+            catch (InvalidOperationException) { dstRejected = true; }
+            Check(dstRejected, "Skipped DST local time is blocked before campaign deployment");
+        }
+        finally
+        {
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static void TestCompanyProfiles()
+    {
+        string path = Path.Combine(Path.GetTempPath(),
+            "lscm-company-test-" + Guid.NewGuid().ToString("N"));
+        string? previous = CompanyProfilesStore.TestRootOverride;
+        CompanyProfilesStore.TestRootOverride = path;
+        try
+        {
+            Directory.CreateDirectory(path);
+            Check(CompanyProfilesStore.All().Count == 0 &&
+                CompanyProfilesStore.Active() is null,
+                "Company profiles start empty without accessing Active Directory");
+            var alpha = CompanyProfilesStore.Validate(new CompanyProfile {
+                Name = "Alpha Office", Domain = "alpha.example.com",
+                PreferredDc = "dc01.alpha.example.com",
+                DefaultOuDn = "OU=Clients,DC=alpha,DC=example,DC=com",
+                DefaultGroupDn = "CN=LockScreen,OU=Groups,DC=alpha,DC=example,DC=com",
+                TimeZoneId = "UTC", EnableFeedback = true,
+                FeedbackShare = @"\\report-alpha\LockScreenReports$"
+            });
+            var beta = CompanyProfilesStore.Validate(new CompanyProfile {
+                Name = "Beta Office", Domain = "beta.example.com",
+                DefaultOuDn = "OU=Clients,DC=beta,DC=example,DC=com",
+                TimeZoneId = "UTC"
+            });
+            CompanyProfilesStore.Upsert(alpha);
+            CompanyProfilesStore.Upsert(beta);
+            CompanyProfilesStore.SetActive(alpha.Id);
+            Check(CompanyProfilesStore.All().Count == 2 &&
+                CompanyProfilesStore.Active()?.Id == alpha.Id &&
+                CompanyProfilesStore.Active()?.Domain == "alpha.example.com",
+                "Local company selection survives reload without AD access");
+            string raw = File.ReadAllText(CompanyProfilesStore.FilePath);
+            Check(!raw.Contains("password", StringComparison.OrdinalIgnoreCase) &&
+                !raw.Contains("secret", StringComparison.OrdinalIgnoreCase) &&
+                !raw.Contains("gMSA", StringComparison.OrdinalIgnoreCase),
+                "Company profiles do not serialize account credentials or gMSA secrets");
+            CampaignProject first = CompanyProfilesStore.NewCampaign(alpha);
+            CampaignProject second = CompanyProfilesStore.NewCampaign(beta);
+            Check(first.CompanyProfileId == alpha.Id &&
+                first.EnableFeedback && first.FeedbackShare == alpha.FeedbackShare &&
+                first.TimeZoneId == "UTC" &&
+                second.CompanyProfileId == beta.Id && !second.EnableFeedback,
+                "New campaigns inherit only the selected company's non-secret defaults");
+            first.Name = second.Name = "Identical Campaign";
+            first.StartLocal = second.StartLocal = new DateTime(2026, 11, 9, 14, 0, 0);
+            string idA = CampaignSchedule.BuildId(first);
+            string idB = CampaignSchedule.BuildId(second);
+            Check(idA != idB && idA.Length <= 71 && idB.Length <= 71 &&
+                FeedbackPath.CampaignDirectory(@"\\report-alpha\LockScreenReports$", idA)
+                    .EndsWith(idA, StringComparison.Ordinal) &&
+                CampaignSchedule.BuildId(new CampaignProject {
+                    Name = "Test campaign", StartLocal = new DateTime(2026, 11, 8, 14, 0, 0)
+                }) == "test-campaign-202611081400",
+                "Company campaigns have separate namespace IDs and legacy IDs stay unchanged");
+
+            bool duplicateRejected = false;
+            try { CompanyProfilesStore.Upsert(beta with {
+                Id = Guid.NewGuid().ToString("D"), Name = "ALPHA OFFICE"
+            }); }
+            catch (InvalidDataException) { duplicateRejected = true; }
+            Check(duplicateRejected, "Duplicate company display names cannot create ambiguous selection");
+            bool foreignScopeRejected = false;
+            try { CompanyProfilesStore.Validate(alpha with {
+                DefaultOuDn = "OU=Clients,DC=other,DC=example,DC=com"
+            }); }
+            catch (InvalidDataException) { foreignScopeRejected = true; }
+            Check(foreignScopeRejected, "Company OU cannot point to a different domain");
+            bool forbiddenShareRejected = false;
+            try { CompanyProfilesStore.Validate(alpha with {
+                FeedbackShare = @"\\dc01\SYSVOL"
+            }); }
+            catch (ArgumentException) { forbiddenShareRejected = true; }
+            Check(forbiddenShareRejected, "Company SMB defaults cannot target SYSVOL");
+            bool activeDeletionRejected = false;
+            try { CompanyProfilesStore.Remove(alpha.Id); }
+            catch (InvalidOperationException) { activeDeletionRejected = true; }
+            Check(activeDeletionRejected, "Active company cannot be deleted without switching");
+            CompanyProfilesStore.SetActive(beta.Id);
+            CompanyProfilesStore.Remove(alpha.Id);
+            Check(CompanyProfilesStore.All().Count == 1 &&
+                CompanyProfilesStore.Active()?.Id == beta.Id,
+                "Switching companies and removing inactive profiles leaves other records intact");
+            CompanyProfilesStore.SetActive(null);
+            Check(CompanyProfilesStore.Active() is null,
+                "Explicit unassigned workspace does not inherit previous company scope");
+            File.WriteAllText(CompanyProfilesStore.FilePath, "{\"schemaVersion\":99}");
+            bool invalidFileRejected = false;
+            try { _ = CompanyProfilesStore.All(); }
+            catch (InvalidDataException) { invalidFileRejected = true; }
+            Check(invalidFileRejected, "Untrusted company storage never silently selects another domain");
+        }
+        finally
+        {
+            CompanyProfilesStore.TestRootOverride = previous;
+            try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static void TestDeviceRepairDashboard()
+    {
+        string domain = "example.com";
+        string ou = "OU=Clients,DC=example,DC=com";
+        string group = "CN=Computers,OU=Groups,DC=example,DC=com";
+        string campaignId = "dashboard-202611081400";
+        string gpoId = Guid.NewGuid().ToString("D");
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var known = new[] {
+            "PC001.example.com", "PC002.example.com",
+            "PC003.example.com", "PC004.example.com"
+        };
+        var client = new ClientHealthSnapshot {
+            CampaignId = campaignId, SharePath = @"\\reports\LockScreenReports$\dashboard-202611081400",
+            ObservedUtc = now, Expected = known.Length, Healthy = 1,
+            Errors = 1, NoReport = 1, Completed = 1,
+            Rows = new ClientHealthRow[] {
+                new("PC001", "Healthy", "Active", "02.jpg", "08.11 12:00:00",
+                    "OK", "OK", "Yes", "0.4.0-preview.1"),
+                new("PC002", "No report", "Unknown", "—", "—",
+                    "—", "—", "—", "—"),
+                new("PC003", "Needs attention", "Active", "02.jpg", "08.11 12:01:00",
+                    "Missing 1, Corrupt 0", "OK", "Yes", "0.4.0-preview.1"),
+                new("PC004", "Completed", "Completed", "—", "08.11 12:02:00",
+                    "OK", "OK", "No", "0.4.0-preview.1")
+            }
+        };
+        DeferredRepairItem Repair(string fqdn, string status, string id) => new() {
+            Domain = domain, OuDn = ou, GroupDn = group,
+            ComputerFqdn = fqdn, CampaignId = campaignId,
+            GpoId = id, State = status, Reason = "Approved tracking",
+            ApprovedUtc = now.AddMinutes(-2), NextAttemptUtc = now
+        };
+        var history = new CampaignHistoryEntry {
+            Kind = "Snapshot", CampaignId = campaignId,
+            Domain = domain, OuDn = ou, GroupDn = group,
+            OccurredUtc = now.AddMinutes(-3),
+            Rows = new List<ClientHealthRow> {
+                new("PC001", "Ready / pending", "Pending", "01.jpg",
+                    "08.11 10:00", "OK", "Not verified", "Yes", "0.4.0-preview.1")
+            }
+        };
+        var snapshot = DeviceDashboardModel.Build(campaignId, gpoId,
+            @"\\reports\LockScreenReports$", known, client,
+            new[] { Repair("PC002.example.com", "Queued", gpoId) },
+            new[] { Repair("PC003.example.com", "AwaitingTask", gpoId),
+                Repair("PC004.example.com", "NeedsAttention", gpoId) },
+            new[] { history }, domain, ou, group);
+        Check(snapshot.Rows.Count == 4 && snapshot.HealthClaims == 2 &&
+            snapshot.NoReport == 1 && snapshot.ActiveRepair == 2 &&
+            snapshot.Problems == 2,
+            "Device Dashboard merges eligible AD clients and queued Repair without inventing health");
+        var one = snapshot.Rows.Single(x => x.ShortName == "PC001");
+        Check(one.ExpectedImage == "02.jpg" && one.Integrity == "Reported OK" &&
+            one.History.Count == 1 && one.History[0].ExpectedImage == "01.jpg",
+            "Dashboard shows agent expected image separately from older local history");
+        var two = snapshot.Rows.Single(x => x.ShortName == "PC002");
+        Check(two.ClientHealth == "No report" && two.Integrity == "Unknown" &&
+            two.HasPendingRepair && two.RepairState == "User: Queued" &&
+            !two.NeedsAttention && two.RepairEvidence.Count == 1 &&
+            two.RepairEvidence[0].Source == "User" &&
+            two.RepairEvidence[0].Attempts == 0 &&
+            two.RepairEvidence[0].ApprovedUtc == now.AddMinutes(-2),
+            "Missing client telemetry is unknown while queued Repair is still tracked");
+        var three = snapshot.Rows.Single(x => x.ShortName == "PC003");
+        Check(three.RepairState == "gMSA: AwaitingTask" &&
+            three.HasPendingRepair && three.NeedsAttention &&
+            three.RepairEvidence.Count == 1 &&
+            three.RepairEvidence[0].IsInFlight,
+            "Unknown gMSA RPC never looks like a successful computer repair");
+        var four = snapshot.Rows.Single(x => x.ShortName == "PC004");
+        Check(four.ClientHealth == "Completed" &&
+            four.RepairState == "gMSA: NeedsAttention" &&
+            four.NeedsAttention && !four.HasPendingRepair,
+            "Completed agent report cannot hide an unresolved Repair review");
+        bool ambiguousRejected = false;
+        try {
+            DeviceDashboardModel.ValidateAndNormalizeAdNames(new[] {
+                "PC001.example.com", "PC001.other.example.com"
+            });
+        }
+        catch (InvalidDataException) { ambiguousRejected = true; }
+        Check(ambiguousRejected, "AD duplicate short hostname cannot silently target wrong client");
+        Check(DeviceDashboardModel.ValidateAndNormalizeAdNames(
+            Array.Empty<string>()).Count == 0,
+            "Empty authorized AD scope is reported honestly without inventing clients");
+        bool wrongCampaignRejected = false;
+        try {
+            DeviceDashboardModel.Build("unrelated", gpoId,
+                @"\\reports\LockScreenReports$", known, client,
+                Array.Empty<DeferredRepairItem>(), Array.Empty<DeferredRepairItem>(),
+                Array.Empty<CampaignHistoryEntry>(), domain, ou, group);
+        }
+        catch (InvalidDataException) { wrongCampaignRejected = true; }
+        Check(wrongCampaignRejected, "Dashboard refuses feedback from a different managed campaign");
+    }
+
+    private static void TestRsopEvidenceImport()
+    {
+        const string fqdn = "PC022.example.com";
+        const string domain = "example.com";
+        string appliedId = Guid.NewGuid().ToString("D");
+        string rejectedId = Guid.NewGuid().ToString("D");
+        var utc = DateTimeOffset.UtcNow;
+        string Xml(string computer = fqdn, DateTimeOffset? snapshot = null,
+            bool duplicate = false, bool allFlags = true)
+        {
+            string flags = allFlags
+                ? "<Enabled>true</Enabled><IsValid>true</IsValid>" +
+                  "<FilterAllowed>true</FilterAllowed><AccessDenied>false</AccessDenied>"
+                : "<Enabled>true</Enabled>";
+            string applied = "<GPO><Name>Configured lock screen</Name>" +
+                "<Path>LDAP://CN={" + appliedId + "},CN=Policies,CN=System," +
+                "DC=example,DC=com</Path>" + flags + "</GPO>";
+            string denied = "<GPO><Name>Other LockScreen GPO</Name>" +
+                "<Identifier>{" + rejectedId + "}</Identifier>" +
+                "<Enabled>true</Enabled><IsValid>true</IsValid>" +
+                "<FilterAllowed>false</FilterAllowed><AccessDenied>false</AccessDenied></GPO>";
+            return "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+                "<ReadTime>" + (snapshot ?? utc).ToString("o") + "</ReadTime>" +
+                "<DataType>LoggedData</DataType>" +
+                "<UserResults><GPO><Name>User settings</Name>" +
+                "<Path>CN={" + Guid.NewGuid().ToString("D") + "}</Path></GPO></UserResults>" +
+                "<ComputerResults><Name>" + computer + "</Name>" +
+                "<Domain>" + domain + "</Domain>" +
+                applied + denied + (duplicate ? applied : "") +
+                "<GPO><Name>Local Group Policy</Name>" +
+                "<Enabled>true</Enabled></GPO></ComputerResults></Rsop>";
+        }
+        var parsed = RsopEvidence.ParseXml(Xml(), fqdn, domain, utc);
+        Check(parsed.Policies.Count == 2 && parsed.UnidentifiedEntries == 1 &&
+            parsed.ObservationFor(appliedId) == "Reported applied" &&
+            parsed.ObservationFor(rejectedId) == "Reported filtered" &&
+            parsed.ObservationFor(Guid.NewGuid().ToString("D")) == "Not listed (unknown)" &&
+            !parsed.IsSignedEndpointAttestation &&
+            !parsed.HasCompleteSettingPrecedenceEvidence,
+            "gpresult importer matches only computer GPO GUIDs and separates filtered/absent/unsigned evidence");
+
+        var uncertain = RsopEvidence.ParseXml(Xml(allFlags: false), fqdn, domain, utc);
+        Check(uncertain.ObservationFor(appliedId) == "Insufficient flags",
+            "Partial gpresult flags must not yield an applied-policy claim");
+        var old = RsopEvidence.ParseXml(Xml(snapshot: utc.AddDays(-3)), fqdn, domain, utc);
+        Check(old.ReadUtc < utc.AddHours(-48),
+            "Older signed-offset XML timestamps remain historical, not current evidence");
+
+        bool wrongComputerBlocked = false;
+        try { RsopEvidence.ParseXml(Xml(computer: "FOREIGN.example.com"), fqdn, domain, utc); }
+        catch (InvalidDataException) { wrongComputerBlocked = true; }
+        Check(wrongComputerBlocked, "RSoP from another computer cannot be merged with selected PC");
+
+        bool duplicateBlocked = false;
+        try { RsopEvidence.ParseXml(Xml(duplicate: true), fqdn, domain, utc); }
+        catch (InvalidDataException) { duplicateBlocked = true; }
+        Check(duplicateBlocked, "Duplicate computer GPO GUIDs are not silently combined");
+
+        bool externalEntityBlocked = false;
+        try {
+            RsopEvidence.ParseXml(
+                Xml().Replace("<Rsop xmlns=", 
+                    "<!DOCTYPE Rsop [<!ENTITY x SYSTEM \"file:///C:/Windows/win.ini\">]><Rsop xmlns=")
+                .Replace("Configured lock screen", "&x;"), fqdn, domain, utc);
+        } catch (InvalidDataException) { externalEntityBlocked = true; }
+        Check(externalEntityBlocked, "Untrusted RSoP XML external entities are rejected");
+
+        bool wrongNamespaceBlocked = false;
+        try { RsopEvidence.ParseXml(Xml().Replace(
+            "http://www.microsoft.com/GroupPolicy/Rsop", "urn:evil"), fqdn, domain, utc); }
+        catch (InvalidDataException) { wrongNamespaceBlocked = true; }
+        Check(wrongNamespaceBlocked, "Spoofed RSoP XML namespace is rejected");
+
+        bool contradictoryIdBlocked = false;
+        string conflict = "<Identifier>{" + Guid.NewGuid().ToString("D") +
+            "}</Identifier><Path>LDAP://CN={" + appliedId + "}";
+        try {
+            RsopEvidence.ParseXml(Xml().Replace(
+                "<Path>LDAP://CN={" + appliedId + "}", conflict), fqdn, domain, utc);
+        } catch (InvalidDataException ex) {
+            contradictoryIdBlocked = ex.Message.Contains(
+                "Conflicting GPO identifiers", StringComparison.Ordinal);
+        }
+        Check(contradictoryIdBlocked,
+            "Contradictory GPO identifiers fail closed instead of matching by friendly name");
+
+        string temp = Path.Combine(Path.GetTempPath(),
+            "lscm-gpresult-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try
+        {
+            string file = Path.Combine(temp, "gpresult.xml");
+            File.WriteAllText(file, Xml(), new System.Text.UTF8Encoding(false));
+            var loaded = RsopEvidence.LoadLocalXml(file, fqdn, domain);
+            Check(loaded.ObservationFor(appliedId) == "Reported applied" &&
+                loaded.Sha256.Length == 64 &&
+                loaded.Sha256.All(Uri.IsHexDigit),
+                "Local gpresult XML is hashed and parsed without executing external code");
+        }
+        finally { try { Directory.Delete(temp, recursive: true); } catch { } }
+    }
+
+    private static void TestEffectiveGpoCandidates()
+    {
+        const string domain = "example.com";
+        const string dc = "dc01.example.com";
+        const string ou = "OU=Windows11,DC=example,DC=com";
+        const string group = "CN=LockScreens,OU=Groups,DC=example,DC=com";
+        const string fqdn = "PC022.example.com";
+        const string campaign = "effective-20261108";
+        string managed = Guid.NewGuid().ToString("D");
+        string candidate = Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow;
+        var first = new
+        {
+            gpo = "Conflicting Lock Screen", gpoId = candidate,
+            linkedAt = ou, site = "", link = "Candidate",
+            linkOrder = 1, scopeDepth = 1,
+            enforced = false, blockedBelow = false,
+            machinePartDisabled = false,
+            security = "Read and Apply grants observed", wmi = "None",
+            staticRead = "Read", startupScript = false,
+            category = "Potentially applicable",
+            settings = new object[] { new
+            {
+                source = "Registry.pol",
+                key = @"Software\Policies\Microsoft\Windows\Personalization",
+                name = "LockScreenImage", value = "C:\\Windows\\conflict.jpg",
+                risk = "High", reason = "Potential managed Lock Screen policy overlap"
+            } }
+        };
+        var second = new
+        {
+            gpo = "Site display policy", gpoId = Guid.NewGuid().ToString("D"),
+            linkedAt = "CN=Headquarters,CN=Sites,CN=Configuration,DC=example,DC=com",
+            site = "CN=Headquarters,CN=Sites,CN=Configuration,DC=example,DC=com",
+            link = "Candidate", enforced = false, blockedBelow = false,
+            linkOrder = 1, scopeDepth = -1,
+            machinePartDisabled = false,
+            security = "Read and Apply grants observed",
+            wmi = "Present - not evaluated",
+            staticRead = "Read", startupScript = false,
+            category = "Site applicability unknown",
+            settings = Array.Empty<object>()
+        };
+        string Json(string? alternateGpo = null) =>
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                domain, dc, targetOu = ou, groupDn = group, computer = fqdn,
+                managedGpoId = alternateGpo ?? managed, campaignId = campaign,
+                analyzedUtc = now, membership = "Nested/direct", tokenStatus = "Read",
+                siteAssociation = "Unknown", siteInventoryComplete = true,
+                actualComputerContainer = ou,
+                linkedCount = 1, siteCandidates = 1, potentialHigh = 1,
+                policies = new object[] { first, second },
+                warnings = Array.Empty<string>()
+            });
+
+        using (var doc = System.Text.Json.JsonDocument.Parse(Json()))
+        {
+            var report = EffectiveGpoReport.Parse(doc.RootElement, domain,
+                dc, ou, group, fqdn, campaign, managed, now);
+            Check(report.Policies.Count == 2 &&
+                report.PotentialHigh == 1 && report.NeedsVerification == 1 &&
+                report.Policies.Any(x => x.Category == "Site applicability unknown") &&
+                report.Policies.Any(x => x.HighSettings == 1 &&
+                    x.Category == "Potentially applicable") &&
+                !report.IsConclusiveResultantSetOfPolicy,
+                "Effective GPO distinguishes static potential overlap from unknown site and RSoP");
+        }
+        bool otherGpoRejected = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(
+            Json(Guid.NewGuid().ToString("D"))))
+        {
+            try {
+                EffectiveGpoReport.Parse(doc.RootElement, domain,
+                    dc, ou, group, fqdn, campaign, managed, now);
+            } catch (InvalidDataException) { otherGpoRejected = true; }
+        }
+        Check(otherGpoRejected,
+            "Effective GPO refuses evidence substituted from another managed campaign");
+        bool otherComputerRejected = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(Json()))
+        {
+            try {
+                EffectiveGpoReport.Parse(doc.RootElement, domain,
+                    dc, ou, group, "FOREIGN.example.com", campaign, managed, now);
+            } catch (InvalidDataException) { otherComputerRejected = true; }
+        }
+        Check(otherComputerRejected,
+            "Effective GPO report cannot be reused for another AD computer");
+
+        var badSite = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        badSite["policies"]![1]!["category"] = "Potentially applicable";
+        bool falseSiteSuccessRejected = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(badSite.ToJsonString()))
+        {
+            try {
+                EffectiveGpoReport.Parse(doc.RootElement, domain,
+                    dc, ou, group, fqdn, campaign, managed, now);
+            } catch (InvalidDataException) { falseSiteSuccessRejected = true; }
+        }
+        Check(falseSiteSuccessRejected,
+            "Site GPOs cannot be promoted to confirmed applicability without site evidence");
+
+        var missingSecurity = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        missingSecurity["policies"]![0]!["security"] = "Unknown token";
+        bool falseAclSuccessRejected = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(missingSecurity.ToJsonString()))
+        {
+            try {
+                EffectiveGpoReport.Parse(doc.RootElement, domain,
+                    dc, ou, group, fqdn, campaign, managed, now);
+            } catch (InvalidDataException) { falseAclSuccessRejected = true; }
+        }
+        Check(falseAclSuccessRejected,
+            "Unknown security token cannot support potentially applicable status");
+        var missingStatic = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        missingStatic["policies"]![0]!["staticRead"] = "Partial or unreadable";
+        bool falseStaticReadRejected = false;
+        using (var doc = System.Text.Json.JsonDocument.Parse(missingStatic.ToJsonString()))
+        {
+            try {
+                EffectiveGpoReport.Parse(doc.RootElement, domain,
+                    dc, ou, group, fqdn, campaign, managed, now);
+            } catch (InvalidDataException) { falseStaticReadRejected = true; }
+        }
+        Check(falseStaticReadRejected,
+            "Unreadable SYSVOL registry data cannot be treated as confirmed applicable");
+    }
+
+
+    private static void TestWinningPolicyAnalysis()
+    {
+        const string domain = "example.com", dc = "dc01.example.com";
+        const string ou = "OU=Clients,DC=example,DC=com";
+        const string child = "OU=Windows11,OU=Clients,DC=example,DC=com";
+        const string group = "CN=LockScreen,OU=Groups,DC=example,DC=com";
+        const string computer = "PC022.example.com";
+        const string campaign = "priority-test";
+        string managed = Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow;
+
+        object Setting(string name, string value, string source = "Registry.pol") =>
+            new
+            {
+                source, key = @"Software\Policies\Microsoft\Windows\Personalization",
+                name, value, risk = "High", reason = "Static test"
+            };
+        object Policy(string name, string id, string linkedAt,
+            int linkOrder, int depth, bool enforced,
+            string value, string setting = "LockScreenImage",
+            string source = "Registry.pol", string link = "Candidate") =>
+            new
+            {
+                gpo = name, gpoId = id, linkedAt, site = "", link,
+                linkOrder, scopeDepth = depth, enforced,
+                blockedBelow = false, machinePartDisabled = false,
+                security = "Read and Apply grants observed", wmi = "None",
+                staticRead = "Read", startupScript = false,
+                category = link == "Candidate" ? "Potentially applicable" : "Excluded by link/config",
+                settings = new[] { Setting(setting, value, source) }
+            };
+
+        // Highest priority is child OU (unless parent is Enforced), then
+        // GPMC link order 1. Preferences cannot safely be assigned a leader.
+        string parent = Guid.NewGuid().ToString("D");
+        string childLow = Guid.NewGuid().ToString("D");
+        string childHigh = Guid.NewGuid().ToString("D");
+        string parentEnforced = Guid.NewGuid().ToString("D");
+        var policies = new object[] {
+            Policy("Parent", parent, ou, 1, 1, false, "A", "NoLockScreen"),
+            Policy("Child low", childLow, child, 2, 2, false, "B", "NoLockScreen"),
+            Policy("Child high", childHigh, child, 1, 2, false, "C", "NoLockScreen"),
+            Policy("Enforced parent", parentEnforced, ou, 2, 1, true, "P", "LockScreenImage"),
+            Policy("Child alternative", Guid.NewGuid().ToString("D"), child, 1, 2, false, "Q", "LockScreenImage"),
+            Policy("Preference", Guid.NewGuid().ToString("D"), child, 1, 2, false,
+                "R", "NoChangingLockScreen", @"Preferences\Registry\Registry.xml"),
+            Policy("Registry value", Guid.NewGuid().ToString("D"), child, 2, 2, false,
+                "S", "NoChangingLockScreen"),
+            Policy("Disabled link", Guid.NewGuid().ToString("D"), child, 4, 2,
+                false, "Inactive", "RotatingLockScreenEnabled", link: "Disabled link")
+        };
+        using var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(new {
+                domain, dc, targetOu = ou, groupDn = group, computer,
+                campaignId = campaign, managedGpoId = managed,
+                actualComputerContainer = child, analyzedUtc = now,
+                membership = "Nested/direct", tokenStatus = "Read",
+                siteAssociation = "Unknown", siteInventoryComplete = true,
+                linkedCount = policies.Length, siteCandidates = 0,
+                potentialHigh = policies.Length - 1,
+                policies, warnings = Array.Empty<string>()
+            }));
+        var report = EffectiveGpoReport.Parse(doc.RootElement, domain, dc,
+            ou, group, computer, campaign, managed, now);
+        var result = WinningPolicyAnalysis.Build(report);
+        var noLock = result.Rows.Single(x => x.Name == "NoLockScreen");
+        var image = result.Rows.Single(x => x.Name == "LockScreenImage");
+        var preference = result.Rows.Single(x => x.Name == "NoChangingLockScreen");
+        var disabled = result.Rows.Single(x => x.Name == "RotatingLockScreenEnabled");
+        Check(noLock.SuggestedGpoId == childHigh && noLock.HasConflict,
+            "Winning static priority honors closest OU and GPMC link order 1");
+        Check(image.SuggestedGpoId == parentEnforced && image.HasConflict,
+            "Enforced parent overrides non-enforced nested OU");
+        Check(preference.SuggestedGpoId.Length == 0 &&
+            preference.Assessment == "Order uncertain",
+            "GPP item targeting prevents falsely verified static leader");
+        Check(disabled.SuggestedGpoId.Length == 0 &&
+            disabled.Assessment == "No ranked OU/domain candidate",
+            "Disabled links cannot win a static priority estimate");
+        Check(!result.IsVerifiedWinner && result.PriorityLeaders == 2 &&
+            result.ConflictingSettings == 3 &&
+            result.ActualComputerContainer == child,
+            "Priority model never claims confirmed endpoint winner");
+
+        // A client XML applies GPOs, not individual LockScreen settings.
+        string oldXml = "<?xml version=\"1.0\"?>" +
+            "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.AddDays(-2).ToString("o") + "</ReadTime>" +
+            "<DataType>LoggedData</DataType>" +
+            "<ComputerResults><Name>" + computer + "</Name><Domain>" + domain + "</Domain>" +
+            "<GPO><Identifier>{" + childHigh + "}</Identifier><Name>Child high</Name>" +
+            "<Enabled>true</Enabled><IsValid>true</IsValid>" +
+            "<FilterAllowed>true</FilterAllowed><AccessDenied>false</AccessDenied>" +
+            "</GPO></ComputerResults></Rsop>";
+        var imported = RsopEvidence.ParseXml(oldXml, computer, domain, now);
+        var withXml = WinningPolicyAnalysis.Build(report, imported);
+        Check(!withXml.IsVerifiedWinner &&
+            withXml.Limitations.Any(x => x.Contains("historical", StringComparison.OrdinalIgnoreCase)),
+            "Historical unsigned client XML does not verify a winning setting");
+    }
+
+
+    private static void TestEndpointLockScreenObservation()
+    {
+        const string domain = "example.com", dc = "dc01.example.com";
+        const string ou = "OU=Windows11,DC=example,DC=com";
+        const string group = "CN=LockScreens,OU=Groups,DC=example,DC=com";
+        const string computer = "PC022.example.com";
+        const string campaign = "endpoint-ci";
+        string managed = Guid.NewGuid().ToString("D");
+        string policy = Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow;
+        const string managedPath = @"C:\Pictures\managed.jpg";
+        const string otherPath = @"C:\Pictures\other.jpg";
+        using var doc = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(new {
+                domain, dc, targetOu = ou, groupDn = group, computer,
+                managedGpoId = managed, campaignId = campaign,
+                actualComputerContainer = ou, analyzedUtc = now,
+                membership = "Nested/direct", tokenStatus = "Read",
+                siteAssociation = "Unknown", siteInventoryComplete = true,
+                linkedCount = 1, siteCandidates = 0, potentialHigh = 1,
+                warnings = Array.Empty<string>(),
+                policies = new object[] { new {
+                    gpo = "Managed Windows Lock Screen", gpoId = policy,
+                    linkedAt = ou, linkOrder = 1, scopeDepth = 1,
+                    site = "", link = "Candidate", enforced = false,
+                    blockedBelow = false, machinePartDisabled = false,
+                    security = "Read and Apply grants observed", wmi = "None",
+                    staticRead = "Read", startupScript = false,
+                    category = "Potentially applicable",
+                    settings = new object[] {
+                        new {source = "Registry.pol",
+                            key = @"Software\Policies\Microsoft\Windows\Personalization",
+                            name = "LockScreenImage", value = managedPath,
+                            risk = "High", reason = "Fixture"},
+                        new {source = "Registry.pol",
+                            key = @"Software\Policies\Microsoft\Windows\Personalization",
+                            name = "NoLockScreen", value = "0",
+                            risk = "High", reason = "Fixture"}
+                    }
+                }}
+            }));
+        var report = EffectiveGpoReport.Parse(doc.RootElement, domain, dc, ou,
+            group, computer, campaign, managed, now);
+
+        const string personalization = EndpointLockScreenObservation.PersonalizationKey;
+        const string cloud = EndpointLockScreenObservation.CloudKey;
+        const string csp = EndpointLockScreenObservation.CspKey;
+        var values = new [] {
+            new { key = personalization, name = "LockScreenImage",
+                status = "Present", kind = "String", value = otherPath },
+            new { key = personalization, name = "NoChangingLockScreen",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = personalization, name = "NoLockScreen",
+                status = "Present", kind = "DWord", value = "0" },
+            new { key = cloud, name = "RotatingLockScreenEnabled",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = cloud, name = "DisableWindowsSpotlightFeatures",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = cloud, name = "RotatingLockScreenOverlayEnabled",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = cloud, name = "ConfigureWindowsSpotlight",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = cloud, name = "DisableCloudOptimizedContent",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = csp, name = "LockScreenImagePath",
+                status = "Present", kind = "String", value = @"C:\MDM\image.jpg" },
+            new { key = csp, name = "LockScreenImageUrl",
+                status = "Absent", kind = "Unknown", value = "" },
+            new { key = csp, name = "LockScreenImageStatus",
+                status = "Absent", kind = "Unknown", value = "" },
+        };
+        string Json() => System.Text.Json.JsonSerializer.Serialize(new {
+            domain, dc, targetOu = ou, groupDn = group, computer,
+            campaignId = campaign, managedGpoId = managed,
+            actualComputerContainer = ou, observedUtc = now,
+            registryStatus = "Readable", osStatus = "Windows11",
+            osBuild = "22631", note = "Read-only fixture", values
+        });
+
+        using (var snapshot = System.Text.Json.JsonDocument.Parse(Json()))
+        {
+            var endpoint = EndpointLockScreenObservation.Parse(
+                snapshot.RootElement, report, now);
+            var result = WinningPolicyAnalysis.Build(report, endpoint: endpoint);
+            Check(endpoint.Values.Count == 11 &&
+                endpoint.RegistryStatus == "Readable" &&
+                !endpoint.IsVerifiedGpoSource &&
+                !endpoint.IsPhysicalLockScreenVerified,
+                "Read-only endpoint snapshot is complete but never a source/display attestation");
+            Check(result.Rows.Single(x => x.Name == "LockScreenImage")
+                    .EndpointComparison == "Differs from static estimate (source unknown)" &&
+                result.Rows.Single(x => x.Name == "NoLockScreen")
+                    .EndpointComparison == "Matches static estimate (source unverified)" &&
+                result.EndpointValueMatches == 1 && result.EndpointValueDiffers == 1 &&
+                !result.IsVerifiedWinner,
+                "Mismatch and match are value-only observations; the originating GPO is unknown");
+            Check(result.Rows.Single(x => x.Name == "LockScreenImagePath")
+                    .EndpointComparison == "Observed without a ranked static GPO source" &&
+                result.Rows.Single(x => x.Name == "NoChangingLockScreen")
+                    .EndpointState == "Absent",
+                "MDM CSP values and absent policy names remain visible without GPO attribution");
+        }
+
+        var wrong = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        wrong["computer"] = "OTHER.example.com";
+        bool foreign = false;
+        using (var p = System.Text.Json.JsonDocument.Parse(wrong.ToJsonString()))
+        {
+            try { EndpointLockScreenObservation.Parse(p.RootElement, report, now); }
+            catch (InvalidDataException) { foreign = true; }
+        }
+        Check(foreign, "Remote snapshot cannot be substituted for a different AD computer");
+        var duplicate = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        duplicate["values"]![1]!["name"] = "LockScreenImage";
+        bool duplicateBlocked = false;
+        using (var p = System.Text.Json.JsonDocument.Parse(duplicate.ToJsonString()))
+        {
+            try { EndpointLockScreenObservation.Parse(p.RootElement, report, now); }
+            catch (InvalidDataException) { duplicateBlocked = true; }
+        }
+        Check(duplicateBlocked, "Remote snapshot duplicate registry names fail closed");
+
+        var partial = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        partial["registryStatus"] = "Partial";
+        partial["values"]![0]!["status"] = "Unreadable";
+        partial["values"]![0]!["kind"] = "Unknown";
+        partial["values"]![0]!["value"] = "";
+        using (var p = System.Text.Json.JsonDocument.Parse(partial.ToJsonString()))
+        {
+            var endpoint = EndpointLockScreenObservation.Parse(p.RootElement, report, now);
+            var result = WinningPolicyAnalysis.Build(report, endpoint: endpoint);
+            Check(result.EndpointValueMatches == 1 && result.EndpointValueDiffers == 0 &&
+                result.Rows.Single(x => x.Name == "LockScreenImage")
+                    .EndpointComparison == "Value could not be read reliably",
+                "Denied/partial registry value never counts as match, mismatch or absent");
+        }
+
+        var offline = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        offline["registryStatus"] = "Unavailable";
+        offline["osStatus"] = "Unknown";
+        offline["osBuild"] = "";
+        offline["values"] = new System.Text.Json.Nodes.JsonArray();
+        using (var p = System.Text.Json.JsonDocument.Parse(offline.ToJsonString()))
+        {
+            var endpoint = EndpointLockScreenObservation.Parse(p.RootElement, report, now);
+            var result = WinningPolicyAnalysis.Build(report, endpoint: endpoint);
+            Check(endpoint.Values.Count == 0 &&
+                result.Rows.Single(x => x.Name == "LockScreenImage")
+                    .EndpointComparison == "Remote Registry unavailable" &&
+                result.EndpointValueMatches == 0 && result.EndpointValueDiffers == 0,
+                "Offline endpoint is Unknown, never absence or a successful remote read");
+        }
+        var otherOs = System.Text.Json.Nodes.JsonNode.Parse(Json())!;
+        otherOs["osStatus"] = "OtherWindows";
+        otherOs["osBuild"] = "20348";
+        using (var p = System.Text.Json.JsonDocument.Parse(otherOs.ToJsonString()))
+        {
+            var endpoint = EndpointLockScreenObservation.Parse(p.RootElement, report, now);
+            var result = WinningPolicyAnalysis.Build(report, endpoint: endpoint);
+            Check(result.EndpointValueMatches == 0 && result.EndpointValueDiffers == 0 &&
+                result.Rows.Single(x => x.Name == "LockScreenImage")
+                    .EndpointComparison == "Windows 11 not confirmed - no comparison",
+                "Non-Windows 11 target is not reported as verified Windows 11");
+        }
+    }
+
+
+    private static void TestEndpointSourceEvidence()
+    {
+        const string domain = "example.com", dc = "dc01.example.com";
+        const string ou = "OU=Win11,DC=example,DC=com";
+        const string group = "CN=Screen,DC=example,DC=com";
+        const string computer = "PC042.example.com";
+        const string campaign = "integrity-fixture";
+        string managed = Guid.NewGuid().ToString("D");
+        string winning = Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow;
+        using var json = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(new {
+                domain, dc, targetOu = ou, groupDn = group, computer,
+                managedGpoId = managed, campaignId = campaign,
+                actualComputerContainer = ou, analyzedUtc = now,
+                membership = "Nested/direct", tokenStatus = "Read",
+                siteAssociation = "Unknown", siteInventoryComplete = true,
+                linkedCount = 0, siteCandidates = 0, potentialHigh = 0,
+                policies = Array.Empty<object>(), warnings = Array.Empty<string>()
+            }));
+        var report = EffectiveGpoReport.Parse(json.RootElement, domain, dc, ou,
+            group, computer, campaign, managed, now);
+        object[] values =
+        [
+            new { key = EndpointLockScreenObservation.PersonalizationKey,
+                name = "LockScreenImage", status = "Present",
+                kind = "String", value = @"C:\ProgramData\LockScreenCampaigns\integrity-fixture\images\01.jpg" },
+            new { key = EndpointLockScreenObservation.PersonalizationKey,
+                name = "NoChangingLockScreen", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.PersonalizationKey,
+                name = "NoLockScreen", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CloudKey,
+                name = "RotatingLockScreenEnabled", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CloudKey,
+                name = "DisableWindowsSpotlightFeatures", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CloudKey,
+                name = "RotatingLockScreenOverlayEnabled", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CloudKey,
+                name = "ConfigureWindowsSpotlight", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CloudKey,
+                name = "DisableCloudOptimizedContent", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CspKey,
+                name = "LockScreenImagePath", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CspKey,
+                name = "LockScreenImageUrl", status = "Absent",
+                kind = "Unknown", value = "" },
+            new { key = EndpointLockScreenObservation.CspKey,
+                name = "LockScreenImageStatus", status = "Absent",
+                kind = "Unknown", value = "" }
+        ];
+        string digest = new('a', 64);
+        string GpoRow(string id, int precedence) => ""; // Marker for fixture readability.
+        object Evidence(string status = "HashMatches",
+            string expected = "", string actual = "", int winners = 1) => new {
+                domain, dc, targetOu = ou, groupDn = group, computer,
+                campaignId = campaign, managedGpoId = managed,
+                actualComputerContainer = ou, observedUtc = now,
+                registryStatus = "Readable", osStatus = "Windows11",
+                osBuild = "22631", note = "Read-only synthetic fixture", values,
+                rsop = new {
+                    status = "Available", observedUtc = now,
+                    note = "Cached CSE", settings = Enumerable.Range(0,winners)
+                        .Select(_ => new {
+                            key = EndpointLockScreenObservation.PersonalizationKey.ToUpperInvariant(),
+                            name = "LockScreenImage", precedence = 1,
+                            gpoId = winning, deleted = false, valueType = 1
+                        }).ToArray()
+                },
+                image = new {
+                    status, observedUtc = now, fileName = "01.jpg",
+                    expectedSha256 = expected.Length == 0 ? digest : expected,
+                    actualSha256 = actual.Length == 0 ? digest : actual,
+                    bytes = 1234, note = "SHA-256 checked over SMB"
+                }
+            };
+        using (var data = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Evidence())))
+        {
+            var registry = EndpointLockScreenObservation.Parse(data.RootElement, report, now);
+            var evidence = EndpointSourceEvidence.Parse(data.RootElement, report, registry, now);
+            var reported = evidence.Assessment(
+                EndpointLockScreenObservation.PersonalizationKey, "LockScreenImage");
+            var view = WinningPolicyAnalysis.Build(report, endpoint: registry,
+                sourceEvidence: evidence);
+            Check(reported.Status == "CSE reported winner (cached)" &&
+                reported.GpoId == winning && reported.Precedence == 1 &&
+                !evidence.CurrentRSoPProven && !evidence.IsSignedEvidence,
+                "CSE precedence=1 gives cached source only, never current attestation");
+            Check(evidence.Image.FileHashMatches &&
+                evidence.Image.FileName == "01.jpg" &&
+                !evidence.Image.ImageDisplayedVerified &&
+                !evidence.PhysicalImageDisplayedProven && !view.IsVerifiedWinner &&
+                view.ImageHashStatus == "HashMatches",
+                "SMB SHA matches selected-DC manifest but never proves screen display");
+        }
+        using (var data = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(
+                Evidence(status: "HashDiffers", actual: new string('b', 64)))))
+        {
+            var registry = EndpointLockScreenObservation.Parse(data.RootElement, report, now);
+            var evidence = EndpointSourceEvidence.Parse(data.RootElement, report, registry, now);
+            Check(evidence.Image.Status == "HashDiffers" &&
+                !evidence.Image.FileHashMatches,
+                "Tampered/mismatched JPEG hash is explicitly detected");
+        }
+        bool duplicateRejected = false;
+        using (var data = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Evidence(winners: 2))))
+        {
+            var registry = EndpointLockScreenObservation.Parse(data.RootElement, report, now);
+            try { EndpointSourceEvidence.Parse(data.RootElement, report, registry, now); }
+            catch (InvalidDataException) { duplicateRejected = true; }
+        }
+        Check(duplicateRejected, "Duplicate CSE precedence/source records fail closed");
+
+        var spoof = System.Text.Json.Nodes.JsonNode.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Evidence()))!;
+        spoof["rsop"]!["settings"]![0]!["key"] =
+            @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+        bool foreignKeyRejected = false;
+        using (var data = System.Text.Json.JsonDocument.Parse(spoof.ToJsonString()))
+        {
+            var registry = EndpointLockScreenObservation.Parse(data.RootElement, report, now);
+            try { EndpointSourceEvidence.Parse(data.RootElement, report, registry, now); }
+            catch (InvalidDataException) { foreignKeyRejected = true; }
+        }
+        Check(foreignKeyRejected, "RSoP result cannot smuggle arbitrary registry paths");
+
+        var forged = System.Text.Json.Nodes.JsonNode.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Evidence()))!;
+        forged["image"]!["status"] = "HashMatches";
+        forged["image"]!["actualSha256"] = new string('b', 64);
+        bool forgedHashRejected = false;
+        using (var data = System.Text.Json.JsonDocument.Parse(forged.ToJsonString()))
+        {
+            var registry = EndpointLockScreenObservation.Parse(data.RootElement, report, now);
+            try { EndpointSourceEvidence.Parse(data.RootElement, report, registry, now); }
+            catch (InvalidDataException) { forgedHashRejected = true; }
+        }
+        Check(forgedHashRejected, "Claimed hash success rejected when SHA-256 differs");
+    }
+
+    private static void TestDcConsistencyAudit()
+    {
+        const string domain = "example.com";
+        const string campaign = "dc-consistency-20261108";
+        const string selected = "dc01.example.com";
+        string gpo = Guid.NewGuid().ToString("D");
+        string[] discovered = [selected, "dc02.example.com", "dc03.example.com"];
+        var now = DateTimeOffset.UtcNow;
+        string manifest = new('a', 64), agent = new('b', 64),
+            gpt = new('c', 64), startup = new('d', 64), image = new('e', 64);
+
+        object Node(string host, string? manifestOverride = null, int skew = 0,
+            string status = "Readable", string reason = "OK")
+        {
+            bool readable = status == "Readable";
+            return new
+            {
+                dc = host, status, reason, rodc = "No",
+                dcUtc = now.AddSeconds(skew).ToString("o"),
+                sampledUtc = now.ToString("o"), offsetSeconds = skew,
+                manifestHash = readable ? manifestOverride ?? manifest : "",
+                agentHash = readable ? agent : "",
+                gptIniHash = readable ? gpt : "",
+                psScriptsHash = readable ? startup : "",
+                adVersion = readable ? 65537 : -1,
+                gptVersion = readable ? 65537 : -1,
+                images = readable
+                    ? new object[] { new { name = "01.jpg", sha256 = image, bytes = 14024L } }
+                    : Array.Empty<object>()
+            };
+        }
+
+        System.Text.Json.JsonDocument Json(params object[] nodes) =>
+            System.Text.Json.JsonDocument.Parse(
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    domain, selectedDc = selected, campaignId = campaign,
+                    gpoId = gpo, scannedUtc = now,
+                    rows = nodes
+                }));
+
+        using (var doc = Json(Node(selected), Node("dc02.example.com"),
+            Node("dc03.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, discovered, discovered, now);
+            Check(result.Overall == "Matching at scan time" &&
+                result.Matching == 3 && result.ScopeComplete &&
+                result.Rows.All(x => x.Assessment == "Matching"),
+                "Multi-DC matching manifests, images and AD/GPT versions are observed correctly");
+        }
+
+        using (var doc = Json(Node(selected),
+            Node("dc02.example.com", manifestOverride: new string('f', 64)),
+            Node("dc03.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, discovered, discovered, now);
+            Check(result.Overall == "Mismatch" && result.Mismatch == 1 &&
+                result.Rows.Single(x => x.Node.Dc == "dc02.example.com")
+                    .Assessment == "Mismatch",
+                "Different manifest SHA-256 is never shown as replicated");
+        }
+
+        using (var doc = Json(Node(selected), Node("dc02.example.com", skew: 190),
+            Node("dc03.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, discovered, discovered, now);
+            Check(result.Overall == "Clock drift" && result.ClockWarning == 1,
+                "RootDSE DC timestamp offsets expose cross-controller drift");
+        }
+
+        using (var doc = Json(Node(selected),
+            Node("dc02.example.com", status: "Unavailable",
+                reason: "ReadDeniedOrUnavailable"),
+            Node("dc03.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, discovered, discovered, now);
+            Check(result.Overall == "Incomplete" && result.Unavailable == 1,
+                "Offline DC cannot be counted as consistent");
+        }
+
+        using (var doc = Json(Node(selected), Node("dc02.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, discovered,
+                [selected, "dc02.example.com"], now);
+            Check(result.Overall == "Partial scope" && !result.ScopeComplete &&
+                result.DiscoveredCount == 3,
+                "Subset scan never implies all AD controllers were checked");
+        }
+
+        using (var doc = Json(Node(selected)))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement,
+                domain, selected, campaign, gpo, [selected], [selected], now);
+            Check(result.Overall == "Single DC only",
+                "Single DC scan cannot claim cross-DC consistency");
+        }
+
+        using (var doc = Json(
+            Node(selected, status: "Invalid", reason: "AdGptVersionMismatch"),
+            Node("dc02.example.com")))
+        {
+            var result = DcConsistencyReport.Parse(doc.RootElement, domain,
+                selected, campaign, gpo, [selected, "dc02.example.com"],
+                [selected, "dc02.example.com"], now);
+            Check(result.Overall == "Unverified" &&
+                result.Rows.Single(x => x.Node.Dc == "dc02.example.com")
+                    .Assessment == "Unverified",
+                "Invalid baseline disables cross-DC comparison");
+        }
+
+        bool wrongGpoRejected = false;
+        using (var doc = Json(Node(selected)))
+            try
+            {
+                DcConsistencyReport.Parse(doc.RootElement, domain, selected,
+                    campaign, Guid.NewGuid().ToString("D"),
+                    [selected], [selected], now);
+            }
+            catch (InvalidDataException) { wrongGpoRejected = true; }
+        Check(wrongGpoRejected,
+            "DC consistency refuses results for a different managed GPO");
+
+        bool duplicateRejected = false;
+        using (var doc = Json(Node(selected), Node(selected)))
+            try
+            {
+                DcConsistencyReport.Parse(doc.RootElement, domain, selected,
+                    campaign, gpo, [selected, "dc02.example.com"],
+                    [selected, "dc02.example.com"], now);
+            }
+            catch (InvalidDataException) { duplicateRejected = true; }
+        Check(duplicateRejected,
+            "Duplicate or swapped domain controller response is rejected");
+    }
+
+    private static void TestCampaignClosureAudit()
+    {
+        const string domain = "example.com";
+        const string ou = "OU=Clients,DC=example,DC=com";
+        const string group = "CN=Computers,OU=Groups,DC=example,DC=com";
+        const string campaign = "closure-test-20261108";
+        string gpo = Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow;
+        string[] hosts =
+        [
+            "PC001.example.com", "PC002.example.com", "PC003.example.com",
+            "PC004.example.com", "PC005.example.com"
+        ];
+        var client = new ClientHealthSnapshot
+        {
+            CampaignId = campaign, SharePath = @"\\reports\LockScreenReports$\closure-test-20261108",
+            ObservedUtc = now, Expected = 5,
+            Completed = 2, Healthy = 1, NoReport = 1, Errors = 1,
+            Rows =
+            [
+                new("PC001", "Completed", "Completed", "—", "11.07 18:00",
+                    "OK", "Not verified", "No", "preview.19"),
+                new("PC002", "Completed", "Completed", "—", "11.07 18:00",
+                    "OK", "Not verified", "No", "preview.19"),
+                new("PC003", "Healthy", "Active", "02.jpg", "11.07 18:00",
+                    "OK", "OK", "Yes", "preview.19"),
+                new("PC004", "No report", "Unknown", "—", "—",
+                    "—", "—", "—", "—"),
+                new("PC005", "Needs attention", "Active", "02.jpg",
+                    "11.07 18:00", "Corrupt 1", "Not verified", "Yes", "preview.19")
+            ]
+        };
+        var stuck = new DeferredRepairItem
+        {
+            ComputerFqdn = "PC002.example.com", CampaignId = campaign,
+            GpoId = gpo, Domain = domain, OuDn = ou, GroupDn = group,
+            State = "AwaitingTask", Reason = "Unknown RPC outcome",
+            ApprovedUtc = now.AddMinutes(-3), NextAttemptUtc = now
+        };
+        var snapshot = DeviceDashboardModel.Build(campaign, gpo,
+            @"\\reports\LockScreenReports$", hosts, client,
+            Array.Empty<DeferredRepairItem>(), [stuck],
+            Array.Empty<CampaignHistoryEntry>(), domain, ou, group);
+        var result = CampaignClosureAudit.Assess(snapshot, now);
+        Check(result.Total == 5 && result.ReportedComplete == 1 &&
+            result.RepairTracked == 1 && result.Outstanding == 1 &&
+            result.NoReport == 1 && result.NeedsReview == 1 &&
+            result.WithoutCompletionReport == 4 &&
+            !result.FleetShutdownIndependentlyVerified,
+            "Closure audit distinguishes agent completion claims, unresolved RPC and unknown devices");
+        Check(result.Rows.Single(x => x.ComputerFqdn == "PC002.example.com")
+                .Category == "Repair unresolved" &&
+            result.Rows.Single(x => x.ComputerFqdn == "PC004.example.com")
+                .Category == "No report",
+            "Completed client report never hides pending Repair and missing report is unknown");
+        bool staleRejected = false;
+        try { CampaignClosureAudit.Assess(snapshot, now.AddMinutes(11)); }
+        catch (InvalidDataException) { staleRejected = true; }
+        Check(staleRejected, "Closure refuses stale AD/Client Health snapshot");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            data = new[]
+            {
+                new
+                {
+                    id = gpo, campaignId = campaign, gpoFlags = 1,
+                    links = new[]
+                    {
+                        new { ou = ou, enabled = false },
+                        new { ou = "CN=Site1,CN=Sites,DC=example,DC=com",
+                              enabled = true }
+                    }
+                }
+            }
+        });
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var evidence = CampaignGpoLinkEvidence.FromManagedList(
+            doc.RootElement.GetProperty("data"), "dc01.example.com", ou,
+            campaign, gpo, now);
+        Check(evidence.Available &&
+            evidence.DirectOuLink == "Direct OU link disabled" &&
+            evidence.OtherLinks == 1 &&
+            evidence.MachineConfiguration == "GPO computer configuration enabled",
+            "Selected DC direct OU link does not hide inherited/site links or machine GPO flags");
+
+        bool mismatchRejected = false;
+        try {
+            CampaignGpoLinkEvidence.FromManagedList(
+                doc.RootElement.GetProperty("data"), "dc01.example.com",
+                ou, "different-campaign", gpo, now);
+        }
+        catch (InvalidDataException) { mismatchRejected = true; }
+        Check(mismatchRejected, "Closure rejects GPO metadata from another campaign");
+        var unknown = CampaignGpoLinkEvidence.Unavailable("dc01.example.com",
+            "No domain connectivity");
+        Check(!unknown.Available && unknown.DirectOuLink == "Unknown",
+            "Unreachable DC is unknown rather than treated as unlinked");
+    }
+
+    private static void TestPostCleanupVerification()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-postcleanup-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        PostCleanupVerificationStore.TestRootOverride = root;
+        try
+        {
+            string gpo = Guid.NewGuid().ToString("D");
+            const string campaign = "postcleanup-20261108";
+            var now = DateTimeOffset.UtcNow;
+            string[] hosts = ["PC001.example.com", "PC002.example.com"];
+            string Payload(bool badClaim = false, string name = "PC001.example.com")
+            {
+                return System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    campaignId = campaign, gpoId = gpo,
+                    results = new object[]
+                    {
+                        new {
+                            computer = name, campaignId = campaign,
+                            observedUtc = now, status = "Verified",
+                            reason = "RemoteFootprintMatchesPostCleanupReceipt",
+                            receiptValid = !badClaim, tasksGone = true,
+                            localFolderGone = true, ownerReleased = true,
+                            registryRestored = true
+                        },
+                        new {
+                            computer = "PC002.example.com", campaignId = campaign,
+                            observedUtc = now, status = "Unknown",
+                            reason = "ClientOfflineOrUnreachable",
+                            receiptValid = false, tasksGone = false,
+                            localFolderGone = false, ownerReleased = false,
+                            registryRestored = false
+                        }
+                    }
+                });
+            }
+            using var doc = System.Text.Json.JsonDocument.Parse(Payload());
+            var evidence = PostCleanupObservation.ParseBatch(doc.RootElement,
+                campaign, gpo, hosts, now);
+            Check(evidence.Count == 2 &&
+                evidence.Single(x => x.Computer == "PC001.example.com").IsObservedVerified &&
+                evidence.Single(x => x.Computer == "PC002.example.com").Status == "Unknown",
+                "Read-only post-cleanup evidence separates observed clean from unreachable");
+
+            bool falseClaimBlocked = false;
+            using (var altered = System.Text.Json.JsonDocument.Parse(Payload(badClaim: true)))
+                try {
+                    PostCleanupObservation.ParseBatch(altered.RootElement,
+                        campaign, gpo, hosts, now);
+                } catch (InvalidDataException) { falseClaimBlocked = true; }
+            Check(falseClaimBlocked,
+                "Post-cleanup cannot claim verified when any observed check is missing");
+
+            bool otherHostBlocked = false;
+            using (var altered = System.Text.Json.JsonDocument.Parse(
+                Payload(name: "FOREIGN.example.com")))
+                try {
+                    PostCleanupObservation.ParseBatch(altered.RootElement,
+                        campaign, gpo, hosts, now);
+                } catch (InvalidDataException) { otherHostBlocked = true; }
+            Check(otherHostBlocked,
+                "Post-cleanup cannot include a host outside the verified AD intersection");
+
+            var scope = new PostCleanupScope("example.com", "dc01.example.com",
+                "OU=Clients,DC=example,DC=com",
+                "CN=Computers,OU=Groups,DC=example,DC=com", campaign, gpo);
+            PostCleanupVerificationStore.Save(scope, hosts, evidence);
+            var persisted = PostCleanupVerificationStore.Load(scope, hosts);
+            Check(persisted.Count == 2 &&
+                persisted.Single(x => x.Computer == "PC002.example.com").Status == "Unknown",
+                "Offline endpoint remains tracked across closing/reopening the manager");
+
+            string[] oneHost = ["PC001.example.com"];
+            PostCleanupVerificationStore.Save(scope, hosts,
+                [evidence.Single(x => x.Computer == "PC001.example.com")]);
+            persisted = PostCleanupVerificationStore.Load(scope, hosts);
+            Check(persisted.Count == 2 &&
+                persisted.Single(x => x.Computer == "PC002.example.com").Status == "Unknown",
+                "Manually rechecking one machine does not discard another offline machine");
+            Check(PostCleanupVerificationStore.Load(scope, oneHost).Count == 1,
+                "Out-of-scope cached device never grants visibility or authorization");
+            var unrelated = scope with { GpoId = Guid.NewGuid().ToString("D") };
+            Check(PostCleanupVerificationStore.Load(unrelated, hosts).Count == 0,
+                "Post-cleanup cache is keyed to exact GPO and campaign scope");
+
+            var file = Directory.GetFiles(root, "*.json").Single();
+            File.WriteAllText(file, "{\"scope\":\"invalid\"}");
+            bool corruptBlocked = false;
+            try { PostCleanupVerificationStore.Load(scope, hosts); }
+            catch (InvalidDataException) { corruptBlocked = true; }
+            Check(corruptBlocked, "Corrupt post-cleanup cache fails closed, never shows verified");
+        }
+        finally
+        {
+            PostCleanupVerificationStore.TestRootOverride = null;
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static void TestGmsaManualDuplicateGuard()
+    {
+        string id = Guid.NewGuid().ToString("D");
+        string otherGpo = Guid.NewGuid().ToString("D");
+        string campaign = "duplicate-202611081400";
+        DeferredRepairItem Repair(string host, string status, string gpo) => new() {
+            ComputerFqdn = host, CampaignId = campaign, GpoId = gpo,
+            State = status
+        };
+        var records = new[] {
+            Repair("PC001.example.com", "Queued", id),
+            Repair("PC002.example.com", "AwaitingTask", id),
+            Repair("PC003.example.com", "AwaitingHealth", id),
+            Repair("PC004.example.com", "NeedsAttention", id),
+            Repair("PC005.example.com", "Queued", otherGpo)
+        };
+        var requested = records.Select(x => x.ComputerFqdn).ToArray();
+        var disabled = GmsaRepairConflictGuard.BlockedHosts(records,
+            campaign, id, requested, workerEnabled: false);
+        Check(disabled.Count == 3 &&
+            disabled.Contains("PC001.example.com") &&
+            disabled.Contains("PC002.example.com") &&
+            disabled.Contains("PC003.example.com") &&
+            !disabled.Contains("PC004.example.com") &&
+            !disabled.Contains("PC005.example.com"),
+            "Disabled gMSA protects Queued and remote-in-flight tasks from manual duplicate RPC");
+        var enabled = GmsaRepairConflictGuard.BlockedHosts(records,
+            campaign, id, requested, workerEnabled: true);
+        Check(enabled.Count == 2 && !enabled.Contains("PC001.example.com") &&
+            enabled.Contains("PC002.example.com") &&
+            enabled.Contains("PC003.example.com"),
+            "Active gMSA queued request may only be superseded by reserved approval");
+        Check(GmsaRepairConflictGuard.BlockedHosts(records, "another-campaign", id,
+            requested, workerEnabled: false).Count == 0,
+            "Foreign campaign queue entries do not match a new approval");
+    }
+
+    private static void TestUiWindowPlacement()
+    {
+        var primary = new System.Drawing.Rectangle(0, 0, 1920, 1080);
+        var secondary = new System.Drawing.Rectangle(-1280, 0, 1280, 1024);
+        var minimum = new System.Drawing.Size(720, 520);
+        var left = UiWindowPlacement.ClampToScreens(
+            new System.Drawing.Rectangle(-1100, 100, 950, 660), minimum,
+            new[] { primary, secondary });
+        Check(left.X == -1100 && left.Y == 100 &&
+            left.Width == 950 && left.Height == 660,
+            "Window placement keeps the selected secondary monitor");
+        var lost = UiWindowPlacement.ClampToScreens(
+            new System.Drawing.Rectangle(8000, 8000, 900, 600),
+            minimum, new[] { primary });
+        Check(lost.Left >= primary.Left && lost.Right <= primary.Right &&
+            lost.Top >= primary.Top && lost.Bottom <= primary.Bottom,
+            "Removed monitor restores the window into visible primary working area");
+        var oversized = UiWindowPlacement.ClampToScreens(
+            new System.Drawing.Rectangle(-350, -200, 8000, 8000),
+            minimum, new[] { primary });
+        Check(oversized == primary,
+            "Oversized HiDPI window is clamped to full available working area");
+        var undersized = UiWindowPlacement.ClampToScreens(
+            new System.Drawing.Rectangle(100, 100, 10, 10),
+            minimum, new[] { primary });
+        Check(undersized.Width >= minimum.Width &&
+            undersized.Height >= minimum.Height,
+            "Restored dialog respects minimum usable dimensions");
+        bool invalid = false;
+        try
+        {
+            UiWindowPlacement.ClampToScreens(
+                new System.Drawing.Rectangle(0, 0, 500, 500),
+                minimum, Array.Empty<System.Drawing.Rectangle>());
+        }
+        catch (ArgumentException) { invalid = true; }
+        Check(invalid, "Invalid monitor geometry cannot silently create offscreen windows");
+    }
+
+    private static void TestClientFeedback()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lscm-feedback-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var good = new
+            {
+                schemaVersion = 1, campaignId = "test-campaign-202611081400",
+                computerName = "PC001", timestampUtc = now,
+                stage = "Active", health = "Healthy", expectedImage = "02.jpg",
+                imageMatches = true, registryMatches = true, taskPresent = true,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.1"
+            };
+            File.WriteAllText(Path.Combine(root, "PC001.json"),
+                System.Text.Json.JsonSerializer.Serialize(good));
+            var snapshot = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001", "PC002" }, now);
+            Check(snapshot.Expected == 2 && snapshot.Healthy == 1 && snapshot.NoReport == 1,
+                "health denominator uses AD list and reports");
+            var stale = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001" }, now.AddHours(2));
+            Check(stale.Stale == 1 && stale.Healthy == 0, "stale report is not counted active");
+            var finished = new {
+                schemaVersion = 1, campaignId = "test-campaign-202611081400",
+                computerName = "PC001", timestampUtc = now,
+                stage = "Completed", health = "Completed", expectedImage = "",
+                imageMatches = true, registryMatches = true, taskPresent = false,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.1"
+            };
+            File.WriteAllText(Path.Combine(root, "PC001.json"),
+                System.Text.Json.JsonSerializer.Serialize(finished));
+            var afterExpiry = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001" }, now.AddHours(24));
+            Check(afterExpiry.Completed == 1 && afterExpiry.Stale == 0,
+                "terminal completion remains visible after feedback heartbeat expires");
+            File.WriteAllText(Path.Combine(root, "PC001.json"),
+                System.Text.Json.JsonSerializer.Serialize(good));
+            var forged = new
+            {
+                schemaVersion = 1, campaignId = "test-campaign-202611081400",
+                computerName = "PC001", timestampUtc = now,
+                stage = "Active", health = "Healthy", expectedImage = "02.jpg",
+                imageMatches = true, registryMatches = true, taskPresent = true,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.1"
+            };
+            File.WriteAllText(Path.Combine(root, "FORGED.json"),
+                System.Text.Json.JsonSerializer.Serialize(forged));
+            snapshot = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001", "PC002" }, now);
+            Check(snapshot.Healthy == 1 && snapshot.InvalidReports == 1,
+                "forged file name is rejected");
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
+    private static void TestAlertsAndHistory()
+    {
+        var now = new DateTimeOffset(2026, 11, 6, 10, 0, 0, TimeSpan.Zero);
+        const string id = "test-campaign-202611081400";
+        static ClientHealthSnapshot Example(string id, DateTimeOffset now, int errors) => new()
+        {
+            CampaignId = id, SharePath = "TEST", ObservedUtc = now, Expected = 10,
+            Errors = errors, Healthy = 10 - errors,
+            Rows = new[] {
+                new ClientHealthRow("=HYPERLINK(1)", "<script>bad</script>", "Active",
+                    "01.jpg", "Today", "OK", "OK", "Yes", "0.4.0")
+            }
+        };
+        var alert = new ClientAlertEngine();
+        var prefs = new ClientAlertPreferences { Enabled = true, NewErrorsThreshold = 2,
+            CooldownMinutes = 30, IncludeStale = false };
+        Check(alert.Observe(Example(id, now, 3), prefs, now) is null,
+            "first client scan establishes alert baseline");
+        Check(alert.Observe(Example(id, now.AddMinutes(1), 4), prefs, now.AddMinutes(1)) is null,
+            "single new error below threshold");
+        Check(alert.Observe(Example(id, now.AddMinutes(2), 5), prefs, now.AddMinutes(2)) is not null,
+            "increased errors show notification");
+        Check(alert.Observe(Example(id, now.AddMinutes(3), 8), prefs, now.AddMinutes(3)) is null,
+            "alert cooldown suppresses floods");
+        Check(alert.Observe(Example(id, now.AddMinutes(34), 8), prefs, now.AddMinutes(34)) is not null,
+            "new alert after cooldown");
+        prefs.Enabled = false;
+        Check(alert.Observe(Example(id, now.AddHours(1), 10), prefs, now.AddHours(1)) is null,
+            "disabled notifications never fire");
+
+        var oldRoot = CampaignHistoryStore.TestRootOverride;
+        string temp = Path.Combine(Path.GetTempPath(), "lscm-history-test-" + Guid.NewGuid().ToString("N"));
+        CampaignHistoryStore.TestRootOverride = temp;
+        try
+        {
+            var snap = Example(id, now, 2);
+            var saved = CampaignHistoryStore.SaveHealth(snap, "corp.example.com",
+                "OU=Machines,DC=corp,DC=example,DC=com", "CN=Target,DC=corp,DC=example,DC=com", true);
+            Check(File.Exists(saved.SourceFile), "final archive saved locally");
+            var evt = CampaignHistoryStore.SaveEvent(id, "GPO Deploy", "Test only");
+            Check(File.Exists(evt.SourceFile), "campaign event saved locally");
+            var list = CampaignHistoryStore.LoadRecent();
+            Check(list.Count == 2 && list.Any(x => x.Kind == "Final"),
+                "event and health report are recoverable after reopening history");
+            var html = CampaignHistoryStore.HtmlReport(saved);
+            Check(html.Contains("&lt;script&gt;bad&lt;/script&gt;") &&
+                  !html.Contains("<script>bad</script>"), "HTML report safely encodes client text");
+            var csv = CampaignHistoryStore.CsvReport(saved);
+            Check(csv.Contains("'=HYPERLINK"), "CSV report blocks formula injection");
+            CampaignHistoryStore.Delete(evt);
+            Check(CampaignHistoryStore.LoadRecent().Count == 1,
+                "delete affects only the chosen local history record");
+        }
+        finally
+        {
+            CampaignHistoryStore.TestRootOverride = oldRoot;
+            try { if (Directory.Exists(temp)) Directory.Delete(temp, true); } catch { }
+        }
+    }
+
+    private static void TestRepairHistoryJournal()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-repair-history-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string gpo = Guid.NewGuid().ToString("D");
+            DateTimeOffset now = DateTimeOffset.UtcNow.AddMinutes(-3);
+            var entry = new DeferredRepairItem {
+                Domain = "example.com",
+                DomainController = "dc01.example.com",
+                OuDn = "OU=Test,DC=example,DC=com",
+                GroupDn = "CN=Computers,OU=Test,DC=example,DC=com",
+                GpoId = gpo,
+                CampaignId = "journal-pilot",
+                ComputerFqdn = "PC011.example.com",
+                State = "Queued", Reason = "Operator-approved deferred Repair.",
+                ApprovedUtc = now, NextAttemptUtc = now.AddMinutes(1)
+            };
+            RepairHistoryJournal.RecordQueueDiff(root, "User", [], [entry]);
+            var events = RepairHistoryJournal.ReadScope(root, "User",
+                entry.Domain, entry.DomainController, entry.OuDn, entry.GroupDn,
+                entry.CampaignId, gpo);
+            Check(events.Count == 1 && events[0].Action == "Approved",
+                "Journal persists operator approval independently of active queue");
+            var attempt = System.Text.Json.JsonSerializer.Deserialize<DeferredRepairItem>(
+                System.Text.Json.JsonSerializer.Serialize(entry))!;
+            attempt.State = "Attempting";
+            attempt.Attempts = 1;
+            attempt.SubmittedUtc = now.AddMinutes(1);
+            attempt.Reason = "RPC started but remote completion is not yet known.";
+            RepairHistoryJournal.RecordQueueDiff(root, "User", [entry], [attempt]);
+            var unknown = System.Text.Json.JsonSerializer.Deserialize<DeferredRepairItem>(
+                System.Text.Json.JsonSerializer.Serialize(attempt))!;
+            unknown.State = "AwaitingTask";
+            unknown.Reason = "Worker stopped before the RPC outcome was received.";
+            RepairHistoryJournal.RecordQueueDiff(root, "User", [attempt], [unknown]);
+            RepairHistoryJournal.RecordQueueDiff(root, "User", [unknown], [],
+                "HealthyConfirmed");
+            events = RepairHistoryJournal.ReadScope(root, "User",
+                entry.Domain, entry.DomainController, entry.OuDn, entry.GroupDn,
+                entry.CampaignId, gpo);
+            Check(events.Count == 4 &&
+                events.Any(e => e.Action == "RpcStarted" && e.Attempts == 1) &&
+                events.Any(e => e.Action == "RpcUncertain") &&
+                events.Any(e => e.Action == "HealthyConfirmed"),
+                "Journal keeps RPC, interrupted outcome and confirmed recovery after deletion");
+            Check(RepairHistoryJournal.ReadScope(root, "User",
+                "other.example.com", entry.DomainController, entry.OuDn,
+                entry.GroupDn, entry.CampaignId, gpo).Count == 0,
+                "Repair journal does not reveal entries outside selected AD scope");
+            bool sourceRejected = false;
+            try {
+                RepairHistoryJournal.ReadScope(root, "gMSA",
+                    entry.Domain, entry.DomainController, entry.OuDn,
+                    entry.GroupDn, entry.CampaignId, gpo);
+            }
+            catch (InvalidDataException) { sourceRejected = true; }
+            Check(sourceRejected, "Wrong queue source cannot masquerade as an authorized history");
+            // Unexpected files must be noticed rather than being silently
+            // accepted as proof that a Repair succeeded.
+            string file = Directory.GetFiles(root, "repair-history-*.jsonl").Single();
+            File.AppendAllText(file, "{\"incomplete\":", new System.Text.UTF8Encoding(false));
+            bool rejected = false;
+            try {
+                RepairHistoryJournal.ReadScope(root, "User",
+                    entry.Domain, entry.DomainController, entry.OuDn,
+                    entry.GroupDn, entry.CampaignId, gpo);
+            }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "Truncated Repair history is detected instead of silently treated as success");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static void TestDeferredRepairQueue()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lscm-deferred-test-" + Guid.NewGuid().ToString("N"));
+        DeferredRepairQueue.TestRootOverride = root;
+        try
+        {
+            var now = DateTimeOffset.UtcNow.AddMinutes(-20); // Simulate elapsed retries without future-dated records.
+            string gpo = Guid.NewGuid().ToString("D");
+            const string domain = "example.com";
+            const string dc = "dc01.example.com";
+            const string ou = "OU=Test,DC=example,DC=com";
+            const string group = "CN=LockScreenPCs,OU=Test,DC=example,DC=com";
+            const string campaign = "test-campaign-202611081400";
+            int added = DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group,
+                gpo, campaign, new[] { "PC001.example.com" }, now);
+            Check(added == 1, "operator-approved offline PC queued");
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group,
+                gpo, campaign, new[] { "pc001.example.com" }, now) == 0,
+                "deferred retry deduplicates host case");
+            var item = DeferredRepairQueue.All().Single();
+            Check(item.State == "Queued" && item.Attempts == 0,
+                "new deferred item is pending without remote action");
+            Check(!item.Due(now) && item.Due(now.AddMinutes(2)),
+                "deferred queue obeys initial delay");
+            Check(DeferredRepairQueue.ForScope("other.com", dc, ou, group).Count == 0,
+                "deferred queue never leaks into another domain scope");
+            DeferredRepairQueue.Update(item.Id, "Queued", "RPC temporarily unavailable", now.AddMinutes(2));
+            item = DeferredRepairQueue.All().Single();
+            Check(item.Attempts == 1 && item.NextAttemptUtc > now.AddMinutes(3),
+                "repeated offline repair uses increasing backoff");
+            Check(!item.Due(now.AddDays(15)), "expired explicit approval cannot auto retry");
+            DeferredRepairQueue.Update(item.Id, "AwaitingTask",
+                "Remote task outcome unknown", now.AddMinutes(7), now.AddMinutes(6));
+            Check(DeferredRepairQueue.All().Single().State == "AwaitingTask" &&
+                  !DeferredRepairQueue.All().Single().Due(now.AddHours(2)),
+                "uncertain remote task never auto-duplicates");
+            DeferredRepairQueue.FlagForReview(item.Id, "AD scope changed", now.AddMinutes(8));
+            Check(DeferredRepairQueue.All().Single().State == "NeedsAttention",
+                "invalid scope requires fresh approval");
+            Check(DeferredRepairQueue.Cancel(item.Id),
+                "administrator can cancel ambiguous job without rerunning it");
+            Check(DeferredRepairQueue.All().Count == 0, "cancel removes job");
+            var cancelledTimeline = RepairHistoryJournal.ReadScope(root, "User",
+                domain, dc, ou, group, campaign, gpo);
+            Check(cancelledTimeline.Any(x => x.Action == "Approved" &&
+                x.ComputerFqdn.Equals("PC001.example.com", StringComparison.OrdinalIgnoreCase)) &&
+                cancelledTimeline.Any(x => x.Action == "Cancelled" &&
+                x.ComputerFqdn.Equals("PC001.example.com", StringComparison.OrdinalIgnoreCase)),
+                "User Repair history survives cancellation and retains original approval");
+            Check(!File.ReadAllText(Path.Combine(root, "queue.json"))
+                .Contains("Password", StringComparison.OrdinalIgnoreCase),
+                "deferred queue never stores domain passwords");
+
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo,
+                campaign, new[] { "PC002.example.com" }, now) == 1,
+                "second offline computer can be approved separately");
+            var second = DeferredRepairQueue.All().Single();
+            var submitted = now.AddMinutes(1);
+            DeferredRepairQueue.Update(second.Id, "AwaitingHealth",
+                "Task completed; await status", now.AddMinutes(2), submitted);
+            Check(DeferredRepairQueue.All().Single().State == "AwaitingHealth" &&
+                  !DeferredRepairQueue.All().Single().Due(now.AddHours(1)),
+                "RPC task completion alone is NOT client repair success");
+
+            var unhealthy = new ClientFeedbackRecord("PC002", campaign, now.AddMinutes(3),
+                "Active", "RepairNeeded", "02.jpg", false, false, true, 1, 0, "0.4.0");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, unhealthy, now.AddMinutes(4)),
+                "broken JPG and registry cannot complete deferred repair");
+            var stale = new ClientFeedbackRecord("PC002", campaign, now.AddMinutes(-5),
+                "Active", "Healthy", "02.jpg", true, true, true, 0, 0, "0.4.0");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, stale, now.AddMinutes(4)),
+                "old report cannot confirm a new remote task");
+            var otherHost = new ClientFeedbackRecord("PC003", campaign, now.AddMinutes(3),
+                "Active", "Healthy", "02.jpg", true, true, true, 0, 0, "0.4.0");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, otherHost, now.AddMinutes(4)),
+                "wrong computer cannot confirm repair");
+            var otherCampaign = new ClientFeedbackRecord("PC002", "other-campaign",
+                now.AddMinutes(3), "Active", "Healthy", "02.jpg", true, true, true, 0, 0, "0.4.0");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, otherCampaign, now.AddMinutes(4)),
+                "different campaign cannot confirm repair");
+            var activeBadRegistry = new ClientFeedbackRecord("PC002", campaign,
+                now.AddMinutes(3), "Active", "Healthy", "02.jpg", true, false, true, 0, 0, "0.4.0");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, activeBadRegistry, now.AddMinutes(4)),
+                "active campaign must match registry");
+            var healthy = new ClientFeedbackRecord("PC002", campaign, now.AddMinutes(3),
+                "Active", "Healthy", "02.jpg", true, true, true, 0, 0, "0.4.0");
+            Check(DeferredRepairQueue.CompleteVerified(second.Id, healthy, now.AddMinutes(4)),
+                "fresh healthy client report completes deferred repair");
+            Check(DeferredRepairQueue.All().Count == 0, "confirmed repair is removed from queue");
+            var completedTimeline = RepairHistoryJournal.ReadScope(root, "User",
+                domain, dc, ou, group, campaign, gpo);
+            Check(completedTimeline.Any(x => x.Action == "HealthyConfirmed" &&
+                x.ComputerFqdn.Equals("PC002.example.com", StringComparison.OrdinalIgnoreCase)) &&
+                completedTimeline.Any(x => x.Action == "StateChanged" &&
+                x.State == "AwaitingHealth" &&
+                x.ComputerFqdn.Equals("PC002.example.com", StringComparison.OrdinalIgnoreCase)),
+                "Client Health confirmation removes pending User repair but preserves its timeline");
+            Check(RepairHistoryJournal.ReadScope(root, "User", "other.example.com",
+                dc, ou, group, campaign, gpo).Count == 0,
+                "User Repair history never leaks into another domain scope");
+            Check(!DeferredRepairQueue.CompleteVerified(second.Id, healthy, now.AddMinutes(4)),
+                "duplicate feedback cannot re-complete removed job");
+
+            var feedbackDir = Path.Combine(root, "feedback-test");
+            Directory.CreateDirectory(feedbackDir);
+            var feedbackJson = new
+            {
+                schemaVersion = 1, campaignId = campaign,
+                computerName = "PC002", timestampUtc = now.AddMinutes(3),
+                stage = "Active", health = "Healthy", expectedImage = "02.jpg",
+                imageMatches = true, registryMatches = true, taskPresent = true,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0"
+            };
+            File.WriteAllText(Path.Combine(feedbackDir, "PC002.json"),
+                System.Text.Json.JsonSerializer.Serialize(feedbackJson));
+            var observed = ClientFeedbackReader.ReadSingleDirectory(
+                feedbackDir, campaign, "PC002", now.AddMinutes(4));
+            Check(observed is { Health: "Healthy", RegistryMatches: true },
+                "single-client feedback reader validates fresh report");
+            Check(ClientFeedbackReader.ReadSingleDirectory(
+                feedbackDir, campaign, "PC004", now.AddMinutes(4)) is null,
+                "missing client feedback is not a healthy result");
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo,
+                campaign, new[] { "PC099.example.com" }, now) == 1,
+                "offline approval can be durably stored before forced journal error");
+            var journalTarget = DeferredRepairQueue.All().Single();
+            var journalFile = Directory.GetFiles(root, "repair-history-*.jsonl").Single();
+            File.AppendAllText(journalFile, "{\"broken\":",
+                new System.Text.UTF8Encoding(false));
+            bool historyFaultBlockedRpc = false;
+            try {
+                DeferredRepairQueue.BeginAttempt(journalTarget.Id, now.AddMinutes(3));
+            }
+            catch (InvalidDataException) { historyFaultBlockedRpc = true; }
+            Check(historyFaultBlockedRpc &&
+                DeferredRepairQueue.All().Single().State == "Attempting" &&
+                DeferredRepairQueue.All().Single().Attempts == 1 &&
+                !DeferredRepairQueue.BeginAttempt(journalTarget.Id, now.AddMinutes(4)),
+                "journal append failure leaves ambiguous RPC blocked, never auto-retries");
+        }
+        finally
+        {
+            DeferredRepairQueue.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+            catch { /* Keep cleanup independent of assertions. */ }
+        }
+    }
+
+    private static void TestInitialRepairTracking()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lscm-repair-results-" + Guid.NewGuid().ToString("N"));
+        DeferredRepairQueue.TestRootOverride = root;
+        try
+        {
+            DateTimeOffset approved = DateTimeOffset.UtcNow.AddMinutes(-9);
+            const string campaign = "test-campaign-202611081400";
+            const string domain = "example.com";
+            const string dc = "dc01.example.com";
+            const string ou = "OU=Test,DC=example,DC=com";
+            const string group = "CN=LockScreenPCs,OU=Test,DC=example,DC=com";
+            string gpo = Guid.NewGuid().ToString("D");
+            var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PC001.example.com"] = "offline",
+                ["PC002.example.com"] = "success",
+                ["PC003.example.com"] = "pending",
+                ["PC004.example.com"] = "failed"
+            };
+            var counts = DeferredRepairQueue.EnqueueInitialApprovedResults(
+                domain, dc, ou, group, gpo, campaign, results, approved, approved.AddMinutes(1));
+            Check(counts == (1, 1, 1, 1), "track offline, successful, ambiguous and failed initial RPC separately");
+            var items = DeferredRepairQueue.All();
+            Check(items.Count == 4 && items.Single(x => x.ComputerFqdn.StartsWith("PC004")).State == "NeedsAttention",
+                "failed RPC is visible for manual review, never queued for retry");
+            var offline = items.Single(x => x.ComputerFqdn.StartsWith("PC001"));
+            var success = items.Single(x => x.ComputerFqdn.StartsWith("PC002"));
+            var pending = items.Single(x => x.ComputerFqdn.StartsWith("PC003"));
+            Check(offline.State == "Queued" && offline.SubmittedUtc is null,
+                "only proven offline RPC may retry");
+            Check(success.State == "AwaitingHealth" && success.SubmittedUtc == approved,
+                "successful remote task still waits for fresh health confirmation");
+            Check(pending.State == "AwaitingTask" && !pending.Due(approved.AddMinutes(3)),
+                "uncertain initial RPC must never be automatically repeated");
+
+            var healthy = new ClientFeedbackRecord("PC001", campaign, approved.AddMinutes(2),
+                "Active", "Healthy", "02.jpg", true, true, true, 0, 0, "0.4.0");
+            var stale = healthy with { LastSeenUtc = approved.AddMinutes(-1) };
+            Check(!DeferredRepairQueue.CompleteHealthyOffline(offline.Id, stale, approved.AddMinutes(3)),
+                "offline self-healing cannot be confirmed by stale pre-approval report");
+            Check(!DeferredRepairQueue.CompleteHealthyOffline(offline.Id,
+                healthy with { ImageMatches = false }, approved.AddMinutes(3)),
+                "offline self-healing requires verified image integrity");
+            Check(DeferredRepairQueue.CompleteHealthyOffline(offline.Id, healthy,
+                approved.AddMinutes(3)), "self-healed offline client skips redundant RPC");
+            Check(!DeferredRepairQueue.CompleteHealthyOffline(offline.Id, healthy,
+                approved.AddMinutes(3)), "self-heal confirmation is idempotent");
+
+            var confirmed = healthy with { Computer = "PC002", LastSeenUtc = approved.AddMinutes(3) };
+            Check(!DeferredRepairQueue.CompleteVerified(success.Id,
+                confirmed with { RegistryMatches = false }, approved.AddMinutes(4)),
+                "successful remote task is not enough without correct registry");
+            DeferredRepairQueue.ScheduleHealthPoll(success.Id, approved.AddMinutes(4));
+            var scheduled = DeferredRepairQueue.All().Single(x => x.Id == success.Id);
+            Check(scheduled.NextAttemptUtc == approved.AddMinutes(5) &&
+                  scheduled.State == "AwaitingHealth",
+                "SMB confirmation rescheduled without another RPC attempt");
+            Check(DeferredRepairQueue.CompleteVerified(success.Id, confirmed, approved.AddMinutes(4)),
+                "fresh healthy report completes successful first Repair");
+
+            var ambiguous = healthy with { Computer = "PC003", LastSeenUtc = approved.AddMinutes(4) };
+            Check(DeferredRepairQueue.CompleteVerified(pending.Id, ambiguous, approved.AddMinutes(5)),
+                "uncertain remote task can finish based on later healthy feedback, without retry");
+            Check(DeferredRepairQueue.All().Count == 1 &&
+                  DeferredRepairQueue.All().Single().State == "NeedsAttention",
+                "confirmed repairs clear while initial failed repair remains visible");
+
+            bool rejected = false;
+            try
+            {
+                DeferredRepairQueue.EnqueueInitialApprovedResults(domain, dc, ou, group,
+                    gpo, campaign, new Dictionary<string, string> { ["PC005.example.com"] = "mystery" },
+                    approved, approved.AddMinutes(1));
+            }
+            catch (ArgumentException) { rejected = true; }
+            Check(rejected && DeferredRepairQueue.All().Count == 1,
+                "unknown remote status is rejected before any state is saved");
+
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo,
+                campaign, new[] { "PC006.example.com" }, approved) == 1,
+                "extra approved offline request allows retry-limit coverage");
+            var finalRetry = DeferredRepairQueue.All().Single(x => x.ComputerFqdn.StartsWith("PC006"));
+            for (int i = 1; i < 20; i++)
+                DeferredRepairQueue.Update(finalRetry.Id, "Queued", "RPC unavailable",
+                    approved.AddSeconds(i));
+            DeferredRepairQueue.Update(finalRetry.Id, "AwaitingHealth",
+                "Final approved attempt executed", approved.AddSeconds(20), approved.AddSeconds(19));
+            var last = DeferredRepairQueue.All().Single(x => x.Id == finalRetry.Id);
+            Check(last.Attempts == 20 && last.State == "AwaitingHealth",
+                "last permitted RPC attempt can still await client health confirmation");
+
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo, campaign,
+                new[] { "PC007.example.com" }, approved) == 1,
+                "another offline PC can be monitored before a second approved action");
+            var replacement = DeferredRepairQueue.EnqueueInitialApprovedResults(
+                domain, dc, ou, group, gpo, campaign,
+                new Dictionary<string, string> { ["PC007.example.com"] = "success" },
+                approved.AddMinutes(1), approved.AddMinutes(2));
+            var replaced = DeferredRepairQueue.All().Where(x => x.ComputerFqdn.StartsWith("PC007")).ToArray();
+            Check(replacement == (0, 1, 0, 0) && replaced.Length == 1 &&
+                  replaced[0].State == "AwaitingHealth",
+                "new approved successful Repair supersedes older Queued entry and cannot leave duplicate retry");
+
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo, campaign,
+                new[] { "PC008.example.com" }, approved) == 1,
+                "crash-safe retry test target is queued");
+            var crashSafe = DeferredRepairQueue.All().Single(x => x.ComputerFqdn.StartsWith("PC008"));
+            Check(DeferredRepairQueue.BeginAttempt(crashSafe.Id, approved.AddMinutes(1)),
+                "retry transitions into durable Attempting state before RPC");
+            var inFlight = DeferredRepairQueue.All().Single(x => x.Id == crashSafe.Id);
+            Check(inFlight.State == "Attempting" && !inFlight.Due(approved.AddMinutes(2)) &&
+                  inFlight.SubmittedUtc.HasValue,
+                "interrupted manager cannot automatically re-execute an in-flight RPC");
+            Check(!DeferredRepairQueue.BeginAttempt(crashSafe.Id, approved.AddMinutes(2)),
+                "second RPC attempt is blocked while first outcome is uncertain");
+            var selfRecovered = healthy with { Computer = "PC008",
+                LastSeenUtc = approved.AddMinutes(2) };
+            Check(DeferredRepairQueue.CompleteVerified(crashSafe.Id, selfRecovered,
+                approved.AddMinutes(3)), "healthy client feedback can resolve interrupted RPC safely");
+
+            Check(DeferredRepairQueue.EnqueueApproved(domain, dc, ou, group, gpo, campaign,
+                new[] { "PC009.example.com" }, approved) == 1,
+                "offline retry result target is queued");
+            var checkedOffline = DeferredRepairQueue.All().Single(x => x.ComputerFqdn.StartsWith("PC009"));
+            Check(DeferredRepairQueue.BeginAttempt(checkedOffline.Id, approved.AddMinutes(1)),
+                "offline retry is marked in flight");
+            DeferredRepairQueue.FinishAttempt(checkedOffline.Id, "offline", approved.AddMinutes(2));
+            var retryable = DeferredRepairQueue.All().Single(x => x.Id == checkedOffline.Id);
+            Check(retryable.State == "Queued" && retryable.SubmittedUtc is null &&
+                  retryable.Attempts == 1 && retryable.NextAttemptUtc > approved.AddMinutes(2),
+                "only verified pre-registration offline result permits later retry");
+            Check(DeferredRepairQueue.BeginAttempt(checkedOffline.Id, approved.AddMinutes(3)),
+                "new retry begins with another persisted in-flight marker");
+            DeferredRepairQueue.FinishAttempt(checkedOffline.Id, "pending", approved.AddMinutes(4));
+            var ambiguousRetry = DeferredRepairQueue.All().Single(x => x.Id == checkedOffline.Id);
+            Check(ambiguousRetry.State == "AwaitingTask" &&
+                  !ambiguousRetry.Due(approved.AddHours(1)),
+                "ambiguous RPC outcome never re-enters automatic retry queue");
+        }
+        finally
+        {
+            DeferredRepairQueue.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static void TestBackgroundApproval()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lscm-bg-test-" + Guid.NewGuid().ToString("N"));
+        BackgroundRepairSettings.TestRootOverride = Path.Combine(root, "settings");
+        DeferredRepairQueue.TestRootOverride = Path.Combine(root, "queue");
+        BackgroundRepairStatus.TestRootOverride = Path.Combine(root, "status");
+        try
+        {
+            string sid = BackgroundRepairIdentity.CurrentSid();
+            var disabled = new BackgroundRepairSettings { AccountSid = sid, Enabled = false };
+            disabled.Save();
+            Check(!BackgroundRepairSettings.Load().Enabled, "background mode defaults to opt-out");
+            var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+            string gpo = Guid.NewGuid().ToString("D");
+            const string domain = "example.com";
+            const string dc = "dc01.example.com";
+            const string ou = "OU=Test,DC=example,DC=com";
+            const string group = "CN=LockScreenPCs,OU=Test,DC=example,DC=com";
+            const string campaign = "test-campaign-202611081400";
+
+            var first = DeferredRepairQueue.EnqueueInitialApprovedResults(domain, dc, ou,
+                group, gpo, campaign,
+                new Dictionary<string, string> { ["PC001.example.com"] = "offline" }, now, now);
+            Check(first.Offline == 1 && !DeferredRepairQueue.All().Single().BackgroundAllowed,
+                "existing Repair remains foreground-only by default");
+
+            var settings = new BackgroundRepairSettings
+            {
+                Enabled = true, AccountSid = sid, EnabledUtc = now.AddMinutes(-1),
+                FeedbackShareRoot = @"\\fileserver\LockScreenReports$",
+                ExecutablePath = Environment.ProcessPath ?? ""
+            };
+            settings.Save();
+            Check(BackgroundRepairSettings.Load().Enabled, "valid explicit background settings saved");
+
+            var second = DeferredRepairQueue.EnqueueInitialApprovedResults(domain, dc, ou,
+                group, gpo, campaign,
+                new Dictionary<string, string> { ["PC002.example.com"] = "offline" },
+                now.AddMinutes(1), DateTimeOffset.UtcNow, backgroundAllowed: true);
+            Check(second.Offline == 1, "newly approved background item recorded");
+            var all = DeferredRepairQueue.All();
+            var old = all.Single(x => x.ComputerFqdn.StartsWith("PC001"));
+            var allowed = all.Single(x => x.ComputerFqdn.StartsWith("PC002"));
+            Check(!settings.Allows(old), "opt-in never upgrades legacy requests");
+            Check(allowed.BackgroundAllowed && allowed.ApprovalSid == sid &&
+                  settings.Allows(allowed), "worker accepts only same SID and explicit approval");
+            Check(!new BackgroundRepairSettings {
+                Enabled = true, AccountSid = "S-1-5-21-9999", EnabledUtc = settings.EnabledUtc
+            }.Allows(allowed), "different account cannot execute approved background jobs");
+
+            DeferredRepairQueue.SuspendBackgroundForApprovedRepair(
+                domain, gpo, campaign, new[] { "PC002.example.com" });
+            var suspended = DeferredRepairQueue.All().Single(x => x.Id == allowed.Id);
+            Check(!suspended.BackgroundAllowed && suspended.State == "NeedsAttention",
+                "fresh manual approval supersedes earlier background queued job");
+            Check(!DeferredRepairQueue.BeginAttempt(suspended.Id, DateTimeOffset.UtcNow,
+                    requireBackgroundPermission: true),
+                "old worker snapshot cannot bypass revoked background permission");
+            Check(!DeferredRepairQueue.BeginAttempt(suspended.Id, DateTimeOffset.UtcNow),
+                "old foreground timer also cannot retry the superseded request");
+
+            settings.Enabled = false;
+            settings.Save();
+            Check(!BackgroundRepairSettings.Load().Allows(allowed),
+                "turning off background execution revokes worker permission");
+            var status = new BackgroundRepairStatus { LastRunUtc = DateTimeOffset.UtcNow,
+                Checked = 3, Summary = "Test only" };
+            status.Save();
+            Check(BackgroundRepairStatus.Load().Checked == 3,
+                "background status survives manager restart without external network");
+        }
+        finally
+        {
+            BackgroundRepairSettings.TestRootOverride = null;
+            DeferredRepairQueue.TestRootOverride = null;
+            BackgroundRepairStatus.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static void TestGmsaDisabledQueueAudit()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-gmsa-disabled-audit-" + Guid.NewGuid().ToString("N"));
+        GmsaRepairConfig.TestRootOverride = root;
+        try
+        {
+            Directory.CreateDirectory(GmsaRepairConfig.QueueDirectory);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var config = new GmsaRepairConfig
+            {
+                Enabled = true, GmsaAccount = @"EXAMPLE\gmsaLSCM$",
+                GmsaSid = BackgroundRepairIdentity.CurrentSid(),
+                Domain = "example.com",
+                OuDn = "OU=Test,DC=example,DC=com",
+                GroupDn = "CN=LockPCs,OU=Groups,DC=example,DC=com",
+                FeedbackShare = @"\\fileserver\LockScreenReports$",
+                ExecutablePath = Path.Combine(root, "LockScreenCampaignManager.exe"),
+                InstalledUtc = now.AddDays(-1)
+            };
+            config.Validate();
+            const string campaign = "disabled-audit-202611081400";
+            string gpo = Guid.NewGuid().ToString("D");
+            GmsaRepairQueue.EnqueueApprovedResults(config,
+                "dc01.example.com", gpo, campaign,
+                new Dictionary<string, string> {
+                    ["PCQUEUED.example.com"] = "offline",
+                    ["PCWAITING.example.com"] = "pending",
+                    ["PCHEALTH.example.com"] = "success",
+                    ["PCFAILED.example.com"] = "failed"
+                }, now.AddMinutes(-5), now.AddMinutes(-4));
+            var active = GmsaRepairQueue.All(config);
+            Check(active.Count == 4 && active.Any(x => x.State == "Queued"),
+                "approved gMSA queue starts in normal operating mode");
+            string path = Path.Combine(GmsaRepairConfig.QueueDirectory, "queue.json");
+            string before = File.ReadAllText(path);
+            config.Enabled = false;
+            config.ValidateForInspection();
+            Check(config.ScopeMatchesForInspection(config.Domain, config.OuDn, config.GroupDn) &&
+                !config.ScopeMatches(config.Domain, config.OuDn, config.GroupDn),
+                "disabled config can only match read-only inspection scope");
+
+            bool activeBlocked = false;
+            try { GmsaRepairQueue.All(config); }
+            catch (InvalidDataException) { activeBlocked = true; }
+            Check(activeBlocked, "disabled gMSA cannot use the operational queue read");
+
+            var inspected = GmsaRepairQueue.InspectReadOnly(config);
+            string counts = GmsaQueueAudit.FormatCounts(inspected);
+            Check(inspected.Count == 4 && counts.Contains("Queued: 1") &&
+                counts.Contains("Awaiting task: 1") &&
+                counts.Contains("Awaiting health: 1") &&
+                counts.Contains("Needs attention: 1"),
+                "disabled gMSA dashboard displays all pending and manual states");
+            Check(File.ReadAllText(path) == before &&
+                inspected.All(x => active.Any(y => x.Id == y.Id &&
+                    x.ApprovedUtc == y.ApprovedUtc &&
+                    x.Attempts == y.Attempts && x.State == y.State)),
+                "read-only audit never modifies a queued Repair or its approval");
+
+            bool denied = false;
+            try { GmsaRepairQueue.BeginAttempt(config,
+                active.Single(x => x.State == "Queued").Id, now); }
+            catch (InvalidDataException) { denied = true; }
+            Check(denied && File.ReadAllText(path) == before,
+                "disabled configuration cannot begin new remote Repair");
+
+            config.GroupDn = "CN=WrongGroup,OU=Groups,DC=example,DC=com";
+            bool wrongScopeRejected = false;
+            try { GmsaRepairQueue.InspectReadOnly(config); }
+            catch (InvalidDataException) { wrongScopeRejected = true; }
+            Check(wrongScopeRejected, "wrong AD scope cannot inspect the disabled queue");
+            config.GroupDn = "CN=LockPCs,OU=Groups,DC=example,DC=com";
+
+            // Re-enabling the same config does not issue a new approval or RPC.
+            config.Enabled = true;
+            var resumed = GmsaRepairQueue.All(config);
+            var queued = resumed.Single(x => x.State == "Queued");
+            Check(resumed.Count == active.Count && queued.Due(now) &&
+                queued.ApprovedUtc == active.Single(x => x.Id == queued.Id).ApprovedUtc &&
+                queued.Attempts == 0 && File.ReadAllText(path) == before,
+                "reenabling preserves queued approval and normal retry eligibility");
+        }
+        finally
+        {
+            GmsaRepairConfig.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+            catch { }
+        }
+    }
+
+    private static void TestGmsaQueueHealthAudit()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DeferredRepairItem Entry(string host, string state,
+            DateTimeOffset approved, DateTimeOffset next,
+            DateTimeOffset? submitted = null, int attempts = 0) => new() {
+                Id = Guid.NewGuid().ToString("N"),
+                ComputerFqdn = host + ".example.com",
+                CampaignId = "health-audit",
+                State = state, ApprovedUtc = approved,
+                NextAttemptUtc = next, SubmittedUtc = submitted,
+                Attempts = attempts, Reason = "A previously approved Repair."
+            };
+        var entries = new List<DeferredRepairItem> {
+            Entry("expired", "Queued", now.AddDays(-15), now),
+            Entry("retrylimit", "Queued", now.AddDays(-1), now, attempts: 20),
+            Entry("due", "Queued", now.AddHours(-1), now.AddMinutes(-1)),
+            Entry("delayed", "Queued", now.AddHours(-1), now.AddMinutes(-11)),
+            Entry("scheduled", "Queued", now.AddHours(-1), now.AddMinutes(5)),
+            Entry("attempting", "Attempting", now.AddHours(-1),
+                now, now.AddMinutes(-2), 1),
+            Entry("stalled", "Attempting", now.AddHours(-1),
+                now, now.AddMinutes(-17), 1),
+            Entry("unknown", "AwaitingTask", now.AddHours(-1),
+                now, now.AddMinutes(-20), 1),
+            Entry("unknownmissing", "AwaitingTask", now.AddHours(-1), now),
+            Entry("overdue", "AwaitingHealth", now.AddHours(-3),
+                now, now.AddHours(-3), 1),
+            Entry("waiting", "AwaitingHealth", now.AddHours(-1),
+                now, now.AddMinutes(-10), 1),
+            Entry("review", "NeedsAttention", now.AddDays(-2), now)
+        };
+        string before = System.Text.Json.JsonSerializer.Serialize(entries);
+        var result = GmsaQueueAudit.Analyze(entries, now, workerReady: true);
+        GmsaQueueAuditRow Find(string host) => result.Single(x =>
+            x.ComputerFqdn == host + ".example.com");
+        Check(result.Count == entries.Count &&
+            result[0].Priority == GmsaQueuePriority.Attention,
+            "queue audit keeps all records and surfaces high-priority states first");
+        Check(Find("expired").Health == "Approval expired" &&
+            Find("retrylimit").Health == "Retry limit reached" &&
+            Find("due").Health == "Due for retry" &&
+            Find("scheduled").Health == "Scheduled retry" &&
+            Find("delayed").Health == "Retry delayed",
+            "queue audit differentiates expiration, retry limits and due dates");
+        Check(Find("attempting").Priority == GmsaQueuePriority.Monitor &&
+            Find("stalled").Priority == GmsaQueuePriority.Attention &&
+            Find("stalled").Guidance.Contains("AwaitingTask", StringComparison.Ordinal),
+            "unconfirmed in-flight RPC is flagged without authorizing another attempt");
+        Check(Find("unknown").Health == "RPC result unknown" &&
+            Find("unknown").Guidance.Contains("never automatically repeat RPC") &&
+            Find("unknownmissing").Priority == GmsaQueuePriority.Attention,
+            "unknown remote outcome remains health-only even without submission timestamp");
+        Check(Find("overdue").Health == "Health confirmation overdue" &&
+            Find("overdue").Priority == GmsaQueuePriority.Attention &&
+            Find("waiting").Priority == GmsaQueuePriority.Monitor &&
+            Find("review").Priority == GmsaQueuePriority.Attention,
+            "feedback older than two hours requires explicit administrator review");
+        Check(GmsaQueueAudit.Analyze(entries, now, workerReady: false)
+                .Single(x => x.ComputerFqdn == "due.example.com").Health == "Paused" &&
+            GmsaQueueAudit.Analyze(entries, now, workerReady: false)
+                .Single(x => x.ComputerFqdn == "attempting.example.com")
+                .Health == "RPC unconfirmed",
+            "disabled worker never presents queued or active work as successful");
+        Check(GmsaQueueAudit.FormatAttention(result).Contains("Operator review:") &&
+            GmsaQueueAudit.FormatCounts(entries).Contains("Awaiting task: 2"),
+            "dashboard renders explicit state counts and operator-attention summary");
+        Check(System.Text.Json.JsonSerializer.Serialize(entries) == before &&
+            entries.Single(x => x.ComputerFqdn == "unknown.example.com").State ==
+            "AwaitingTask",
+            "read-only queue health audit does not change approval, state or RPC flags");
+    }
+
+    private static void TestGmsaWorkerSchedule()
+    {
+        var daily = new GmsaWorkerTriggerSpec(
+            GmsaWorkerSchedule.DailyTrigger, true,
+            GmsaWorkerSchedule.Interval, GmsaWorkerSchedule.Duration, 1, "");
+        var boot = new GmsaWorkerTriggerSpec(
+            GmsaWorkerSchedule.BootTrigger, true, "", "", 0,
+            GmsaWorkerSchedule.BootDelay);
+        Check(GmsaWorkerSchedule.Matches(new[] { daily, boot }),
+            "reboot-safe worker requires recurring daily and delayed boot triggers");
+        Check(GmsaWorkerSchedule.Matches(new[] { boot, daily }),
+            "trigger collection order does not affect schedule authorization");
+        Check(!GmsaWorkerSchedule.Matches(new[] { daily }),
+            "legacy daily-only scheduler requires native GUI reinstallation");
+        Check(!GmsaWorkerSchedule.Matches(new[] { boot }),
+            "boot-only trigger cannot replace recurring worker cycle");
+        Check(!GmsaWorkerSchedule.Matches(new[] { daily, daily }),
+            "duplicate daily triggers are rejected");
+        Check(!GmsaWorkerSchedule.Matches(new[] { daily, boot, boot }),
+            "unexpected extra triggers are rejected");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily, boot with { Enabled = false } }),
+            "disabled boot trigger is not accepted");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily with { Interval = "PT5M" }, boot }),
+            "unexpected retry interval is rejected");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily with { Duration = "PT12H" }, boot }),
+            "unexpected recurrence duration is rejected");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily with { DaysInterval = 2 }, boot }),
+            "daily recurrence cannot silently change to every other day");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily, boot with { Delay = "PT0S" } }),
+            "boot recovery cannot run before network services initialize");
+        Check(!GmsaWorkerSchedule.Matches(new[] {
+                daily, boot with { Delay = "not-ISO8601" } }),
+            "invalid boot delay fails closed");
+    }
+
+    private static void TestGmsaRebootRecovery()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-reboot-" + Guid.NewGuid().ToString("N"));
+        GmsaRepairConfig.TestRootOverride = root;
+        try
+        {
+            Directory.CreateDirectory(GmsaRepairConfig.QueueDirectory);
+            Directory.CreateDirectory(GmsaRepairConfig.StatusDirectory);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var config = new GmsaRepairConfig
+            {
+                GmsaAccount = @"EXAMPLE\gmsaLSCM$",
+                GmsaSid = BackgroundRepairIdentity.CurrentSid(),
+                Enabled = true, Domain = "example.com",
+                OuDn = "OU=Workstations,DC=example,DC=com",
+                GroupDn = "CN=LockPCs,OU=Groups,DC=example,DC=com",
+                FeedbackShare = @"\\fileserver\LockScreenReports$",
+                ExecutablePath = Path.Combine(root, "LockScreenCampaignManager.exe"),
+                InstalledUtc = now.AddDays(-1)
+            };
+            config.Validate();
+            const string campaign = "reboot-campaign-202611081400";
+            string gpo = Guid.NewGuid().ToString("D");
+            const string interruptedHost = "PCREBOOT.example.com";
+            const string queuedHost = "PCQUEUED.example.com";
+            const string submittedHost = "PCPENDING.example.com";
+            GmsaRepairQueue.EnqueueApprovedResults(config,
+                "dc01.example.com", gpo, campaign,
+                new Dictionary<string, string> {
+                    [interruptedHost] = "offline",
+                    [queuedHost] = "offline",
+                    [submittedHost] = "pending"
+                }, now.AddMinutes(-12), now.AddMinutes(-11));
+            var before = GmsaRepairQueue.All(config);
+            var interrupted = before.Single(x => x.ComputerFqdn == interruptedHost);
+            Check(GmsaRepairQueue.BeginAttempt(config, interrupted.Id,
+                    now.AddMinutes(-9)),
+                "gMSA persists Attempting before remote RPC registration");
+            var attempted = GmsaRepairQueue.All(config)
+                .Single(x => x.Id == interrupted.Id);
+            Check(attempted.State == "Attempting" && attempted.Attempts == 1 &&
+                attempted.SubmittedUtc.HasValue,
+                "the abrupt-shutdown simulation leaves an in-flight RPC in storage");
+
+            // Emulate process termination or Windows reboot: do not call
+            // FinishAttempt. A new worker cycle must NOT send another RPC.
+            int recovered = GmsaRepairQueue.RecoverInterruptedAttempts(config, now);
+            var after = GmsaRepairQueue.All(config);
+            var awaiting = after.Single(x => x.Id == interrupted.Id);
+            Check(recovered == 1 && awaiting.State == "AwaitingTask" &&
+                awaiting.Attempts == 1 && awaiting.SubmittedUtc == attempted.SubmittedUtc,
+                "reboot recovers unknown RPC as health-only AwaitingTask");
+            var recoveryTimeline = RepairHistoryJournal.ReadScope(GmsaRepairConfig.QueueDirectory,
+                "gMSA", config.Domain, "dc01.example.com", config.OuDn, config.GroupDn,
+                campaign, gpo);
+            Check(recoveryTimeline.Any(x => x.Action == "RpcStarted" &&
+                x.ComputerFqdn == interruptedHost) &&
+                recoveryTimeline.Any(x => x.Action == "RpcUncertain" &&
+                x.ComputerFqdn == interruptedHost),
+                "gMSA restart preserves persisted RPC-start and outcome-uncertain events");
+            Check(!awaiting.Due(now.AddMinutes(1)) &&
+                !GmsaRepairQueue.BeginAttempt(config, awaiting.Id, now.AddMinutes(1)),
+                "an interrupted RPC never gets a duplicate automatic retry");
+            Check(GmsaRepairQueue.RecoverInterruptedAttempts(config, now.AddMinutes(1)) == 0,
+                "reboot recovery is idempotent across scheduled cycles");
+            var unchanged = GmsaRepairQueue.All(config);
+            Check(unchanged.Single(x => x.ComputerFqdn == queuedHost).Due(now) &&
+                unchanged.Single(x => x.ComputerFqdn == submittedHost).State == "AwaitingTask",
+                "unsubmitted queued approvals remain retryable and submitted jobs remain pending");
+            var client = new ClientFeedbackRecord("PCREBOOT", campaign,
+                now.AddSeconds(15), "Active", "Healthy", "01.jpg",
+                true, true, true, 0, 0, "0.4.0");
+            Check(GmsaRepairQueue.CompleteHealth(config, awaiting.Id,
+                    client, now.AddMinutes(1)) &&
+                GmsaRepairQueue.All(config).All(x => x.Id != awaiting.Id),
+                "recovered RPC can close on fresh matching client health only");
+            var report = new GmsaRepairStatus {
+                LastRunUtc = now, RecoveredInterrupted = 1,
+                Summary = "Recovered interrupted RPC: 1; awaiting Client Health."
+            };
+            Check(GmsaRepairStatus.Classify(report, now, true).StartsWith("Needs attention"),
+                "recovery heartbeat never claims completed endpoint Repair");
+        }
+        finally
+        {
+            GmsaRepairConfig.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static void TestUniversalUpdaterAdapter()
+    {
+        var options = UniversalUpdaterWindow.PinnedOptions(UniversalUpdater.UpdateChannel.Prerelease);
+        options.Validate();
+        Check(options.Repository == "sgennadi/LockScreenCampaignManager" &&
+            options.InstalledVersion == AppVersion.Current &&
+            options.Assets.Count == 2,
+            "UniversalUpdater source and release asset rules are pinned to the manager");
+        Check(options.Assets.Any(x => x.Architecture == options.Architecture &&
+            x.SingleExecutableName == "LockScreenCampaignManager.exe" &&
+            x.Kind == UniversalUpdater.PackageKind.SingleExeZip),
+            "Update asset architecture and target EXE are exact");
+        Check(UniversalUpdater.SemanticVersion.Parse("0.4.0-preview.9") >
+            UniversalUpdater.SemanticVersion.Parse("0.4.0-preview.8"),
+            "Updater compares prerelease versions numerically");
+        Check(UniversalUpdater.SemanticVersion.Parse("0.4.0") >
+            UniversalUpdater.SemanticVersion.Parse("0.4.0-preview.9"),
+            "Stable release supersedes prerelease");
+        Check(!UniversalUpdater.ZipSafety.IsSafeRelativeEntry("../escape.exe") &&
+            !UniversalUpdater.ZipSafety.IsSafeRelativeEntry("C:/Program Files/update.exe"),
+            "Update ZIP manifest prevents traversal or absolute-path injection");
+        Check(!UniversalUpdater.UpdatePolicy.CanAutomaticallyInstall(
+            administratorAllowed: true, userEnabled: true,
+            trustedSignerConfigured: false, signatureVerified: false,
+            rollbackOrFailureHold: false, isRollback: false,
+            isPrerelease: true, prereleaseApproved: true),
+            "UniversalUpdater never treats GitHub hash alone as publisher signature");
+    }
+
+    private sealed class TestReleaseTransport(byte[] archive, string token,
+        string sha256) : System.Net.Http.HttpMessageHandler
+    {
+        internal int MetadataCount;
+        internal int AssetRequests;
+        internal int CdnRequests;
+
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+            System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var address = request.RequestUri ??
+                throw new InvalidOperationException("Missing mock request URI.");
+            System.Net.Http.HttpResponseMessage response;
+            if (address.Host == "api.github.com" &&
+                address.AbsolutePath.EndsWith("/releases/", StringComparison.Ordinal))
+            {
+                Check(request.Headers.Authorization?.Parameter == token &&
+                    request.Headers.Authorization.Scheme == "Bearer",
+                    "Private metadata token sent only to pinned GitHub API");
+                MetadataCount++;
+                const string tag = "v0.4.0-preview.10";
+                var body = new[] { new {
+                    tag_name = tag, draft = false, prerelease = true,
+                    html_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/tag/" + tag,
+                    body = "Offline private GitHub release fixture.",
+                    assets = new[] { new {
+                        id = 987654321L,
+                        name = "LockScreenCampaignManager-Update-win-" +
+                            (UniversalUpdater.UpdateOptions.CurrentWindowsArchitecture() == "win-x64" ?
+                                "x64.zip" : "x86.zip"),
+                        size = archive.LongLength, digest = "sha256:" + sha256,
+                        browser_download_url = "https://github.com/sgennadi/LockScreenCampaignManager/releases/download/" +
+                            tag + "/LockScreenCampaignManager-Update-" +
+                            UniversalUpdater.UpdateOptions.CurrentWindowsArchitecture() + ".zip"
+                    } }
+                } };
+                response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                    Content = new System.Net.Http.StringContent(
+                        System.Text.Json.JsonSerializer.Serialize(body))
+                };
+            }
+            else if (address.Host == "api.github.com" &&
+                address.AbsolutePath.EndsWith("/releases/assets/987654321", StringComparison.Ordinal))
+            {
+                Check(request.Headers.Authorization?.Parameter == token &&
+                    request.Headers.Authorization.Scheme == "Bearer" &&
+                    request.Headers.Accept.Any(x => x.MediaType == "application/octet-stream"),
+                    "Private release asset ID is requested from pinned API with bearer");
+                AssetRequests++;
+                response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Redirect);
+                response.Headers.Location = new Uri(
+                    "https://release-assets.githubusercontent.com/trusted-test-asset");
+            }
+            else if (address.Host == "release-assets.githubusercontent.com")
+            {
+                Check(request.Headers.Authorization is null,
+                    "Bearer must NEVER leak into the signed release CDN redirect");
+                CdnRequests++;
+                response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                    Content = new System.Net.Http.ByteArrayContent(archive)
+                };
+            }
+            else throw new InvalidOperationException("Unexpected request destination in updater test.");
+            response.RequestMessage = request;
+            return Task.FromResult(response);
+        }
+    }
+
+    private static async Task TestPrivateGitHubReleaseDownload()
+    {
+        const string token = "github_" + "pat_TestReadOnlySession_123456789";
+        Check(UniversalUpdater.GitHubCredentialScope.ValidateSessionToken(token) == token,
+            "Read-only token can exist in RAM without LocalAppData storage");
+        bool invalidRejected = false;
+        try { UniversalUpdater.GitHubCredentialScope.ValidateSessionToken("bad space"); }
+        catch (ArgumentException) { invalidRejected = true; }
+        Check(invalidRejected, "Invalid token content is rejected before any web request");
+
+        var options = UniversalUpdaterWindow.PinnedOptions(UniversalUpdater.UpdateChannel.Prerelease);
+        var assetUri = UniversalUpdater.GitHubCredentialScope.AssetApiUri(
+            options.Repository, 987654321);
+        Check(UniversalUpdater.GitHubCredentialScope.IsAssetEndpoint(
+            assetUri, options.Repository, 987654321) &&
+            !UniversalUpdater.GitHubCredentialScope.IsAssetEndpoint(
+                new Uri("https://example.invalid/repos/x/releases/assets/987654321"),
+                options.Repository, 987654321),
+            "Only the exact GitHub API asset endpoint may receive the session token");
+        bool refused = false;
+        using (var foreign = new System.Net.Http.HttpRequestMessage(
+            System.Net.Http.HttpMethod.Get,
+            new Uri("https://release-assets.githubusercontent.com/test")))
+        {
+            try { UniversalUpdater.GitHubCredentialScope.AttachIfAllowed(foreign, token, false); }
+            catch (InvalidDataException) { refused = true; }
+            Check(refused && foreign.Headers.Authorization is null,
+                "Attempted bearer forwarding to CDN is blocked.");
+        }
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-private-updater-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            byte[] fakeExe = new byte[256];
+            fakeExe[0] = (byte)'M'; fakeExe[1] = (byte)'Z';
+            fakeExe[0x3c] = 0x80;
+            fakeExe[0x80] = (byte)'P'; fakeExe[0x81] = (byte)'E';
+            ushort machine = options.Architecture == "win-x64" ? (ushort)0x8664 : (ushort)0x014c;
+            fakeExe[0x84] = (byte)(machine & 0xff);
+            fakeExe[0x85] = (byte)(machine >> 8);
+            byte[] archive;
+            using (var buffer = new MemoryStream())
+            {
+                using (var zip = new System.IO.Compression.ZipArchive(
+                    buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+                {
+                    var entry = zip.CreateEntry("LockScreenCampaignManager.exe");
+                    using var stream = entry.Open();
+                    stream.Write(fakeExe);
+                }
+                archive = buffer.ToArray();
+            }
+            string archiveDigest = Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(archive));
+            var configured = UniversalUpdaterWindow.PinnedOptions(
+                UniversalUpdater.UpdateChannel.Prerelease);
+            // The isolated staging directory is never the user's real updater state.
+            var isolated = new UniversalUpdater.UpdateOptions {
+                ProductId = configured.ProductId, Repository = configured.Repository,
+                InstalledVersion = configured.InstalledVersion,
+                Architecture = configured.Architecture, Channel = configured.Channel,
+                Assets = configured.Assets, StateDirectory = root,
+                MaxArchiveBytes = configured.MaxArchiveBytes,
+                MaxExpandedBytes = configured.MaxExpandedBytes
+            };
+            var transport = new TestReleaseTransport(archive, token, archiveDigest);
+            using var http = new System.Net.Http.HttpClient(transport, disposeHandler: true);
+            using var releaseClient = new UniversalUpdater.GitHubReleaseClient(http);
+            var release = await releaseClient.CheckAsync(
+                isolated, CancellationToken.None, token);
+            Check(release is not null && release.AssetId == 987654321,
+                "Signed GitHub release metadata includes a pinned numeric asset ID");
+            using var downloader = new UniversalUpdater.UpdateDownloader(http);
+            var staged = await downloader.StageAsync(isolated, release!,
+                cancellationToken: CancellationToken.None, sessionToken: token);
+            Check(transport.MetadataCount == 1 && transport.AssetRequests == 1 &&
+                transport.CdnRequests == 1 &&
+                staged.ExtractedExecutablePath is not null &&
+                File.Exists(staged.ExtractedExecutablePath) &&
+                staged.ArchiveSha256 == archiveDigest &&
+                staged.ExtractedExecutableSha256 ==
+                    Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(fakeExe)),
+                "Private release is staged with exact SHA-256 and PE checks, bearer only on API calls");
+            var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!);
+            Check(!signer.Trusted && signer.Code.StartsWith("0x", StringComparison.Ordinal),
+                "Unsigned mock EXE must not pass native WinVerifyTrust under either Windows architecture");
+            Check(!UniversalUpdater.UpdatePolicy.CanAutomaticallyInstall(
+                administratorAllowed: true, userEnabled: true,
+                trustedSignerConfigured: false, signatureVerified: false,
+                rollbackOrFailureHold: false, isRollback: false,
+                isPrerelease: true, prereleaseApproved: true),
+                "Hash-verified private asset must never become an unattended install");
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+            catch { }
+        }
+    }
+
+    private static void TestGmsaWorkerHeartbeat()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var empty = new GmsaRepairStatus();
+        Check(GmsaRepairStatus.Classify(empty, now, false) == "Not enabled",
+            "disabled worker does not claim an active heartbeat");
+        Check(GmsaRepairStatus.Classify(empty, now, true).StartsWith("Not verified"),
+            "registered task without execution does not claim worker success");
+        var scope = new GmsaRepairConfig {
+            Enabled = true, GmsaAccount = @"EXAMPLE\gmsaLSCM$",
+            GmsaSid = "S-1-5-18", Domain = "example.com",
+            OuDn = "OU=Workstations,DC=example,DC=com",
+            GroupDn = "CN=TargetPCs,OU=Groups,DC=example,DC=com",
+            FeedbackShare = @"\\fileserver\LockScreenReports$",
+            ExecutablePath = @"C:\ProgramData\LSCM\LockScreenCampaignManager.exe",
+            InstalledUtc = now.AddMinutes(-5)
+        };
+        var scoped = new GmsaRepairStatus {
+            LastRunUtc = now, ScopeFingerprint = GmsaDiagnosticCheck.Fingerprint(scope)
+        };
+        Check(scoped.BelongsTo(scope), "heartbeat matches installed gMSA scope");
+        Check(!empty.BelongsTo(scope), "legacy heartbeat never verifies the new scope");
+        scope.FeedbackShare = @"\\fileserver\OtherReports$";
+        Check(!scoped.BelongsTo(scope), "changed feedback share invalidates heartbeat");
+        scope.FeedbackShare = @"\\fileserver\LockScreenReports$";
+        scope.GmsaSid = "S-1-5-19";
+        Check(!scoped.BelongsTo(scope), "changed gMSA SID invalidates heartbeat");
+        var recent = new GmsaRepairStatus {
+            LastRunUtc = now.AddMinutes(-2), Summary = "OK. Checked: 0; RPC: 0."
+        };
+        Check(GmsaRepairStatus.Classify(recent, now, true).StartsWith("Heartbeat received"),
+            "fresh worker execution heartbeat is reported without claiming endpoint health");
+        var stale = new GmsaRepairStatus {
+            LastRunUtc = now.AddMinutes(-9), Summary = "OK. Checked: 0; RPC: 0."
+        };
+        Check(GmsaRepairStatus.Classify(stale, now, true).StartsWith("Overdue"),
+            "missed scheduled runs show overdue worker heartbeat");
+        var future = new GmsaRepairStatus {
+            LastRunUtc = now.AddMinutes(6), Summary = "OK."
+        };
+        Check(GmsaRepairStatus.Classify(future, now, true).StartsWith("Not verified"),
+            "invalid future worker timestamp is never marked healthy");
+        var degraded = new GmsaRepairStatus {
+            LastRunUtc = now, Summary = "SMB feedback root unavailable. No remote RPC attempted."
+        };
+        Check(GmsaRepairStatus.Classify(degraded, now, true).StartsWith("Needs attention"),
+            "missing SMB feedback is visible despite a recent worker heartbeat");
+        degraded.Summary = "Cycle failed: Access denied";
+        Check(GmsaRepairStatus.Classify(degraded, now, true).StartsWith("Needs attention"),
+            "worker exceptions are not presented as successful cycles");
+    }
+
+    private static void TestGmsaReadOnlyDiagnostic()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "lscm-gmsa-diagnostic-" + Guid.NewGuid().ToString("N"));
+        GmsaRepairConfig.TestRootOverride = root;
+        try
+        {
+            Directory.CreateDirectory(GmsaRepairConfig.StatusDirectory);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var ok = GmsaDiagnosticCheck.Probe("Protected queue",
+                () => { }, "Read-only access verified");
+            Check(ok.Passed && ok.Detail == "Read-only access verified",
+                "read-only check records a successful result");
+
+            var fail = GmsaDiagnosticCheck.Probe("SMB access",
+                () => throw new UnauthorizedAccessException(
+                    @"Access denied on \\fileserver\secret-share"));
+            Check(!fail.Passed && !fail.Detail.Contains("fileserver"),
+                "diagnostic failures do not expose private SMB locations");
+
+            var config = new GmsaRepairConfig {
+                GmsaAccount = @"EXAMPLE\gmsaLSCM$",
+                GmsaSid = BackgroundRepairIdentity.CurrentSid(),
+                Enabled = true, Domain = "example.com",
+                OuDn = "OU=Workstations,DC=example,DC=com",
+                GroupDn = "CN=TargetPCs,OU=Groups,DC=example,DC=com",
+                FeedbackShare = @"\\fileserver\LockScreenReports$",
+                ExecutablePath = Path.Combine(root, "LockScreenCampaignManager.exe"),
+                InstalledUtc = now.AddMinutes(-1)
+            };
+            config.Validate();
+            var report = new GmsaDiagnosticReport
+            {
+                StartedUtc = now.AddSeconds(-5),
+                CompletedUtc = now,
+                ScopeFingerprint = GmsaDiagnosticCheck.Fingerprint(config),
+                Checks = new List<GmsaDiagnosticItem> { ok, fail }
+            };
+            Check(GmsaDiagnosticCheck.BelongsTo(report, config),
+                "read-only gMSA diagnostic matches original protected scope");
+            var changedShare = new GmsaRepairConfig {
+                GmsaAccount = config.GmsaAccount, GmsaSid = config.GmsaSid,
+                Enabled = true, Domain = config.Domain, OuDn = config.OuDn,
+                GroupDn = config.GroupDn, FeedbackShare = @"\\fileserver\OtherReports$",
+                ExecutablePath = config.ExecutablePath, InstalledUtc = config.InstalledUtc
+            };
+            Check(!GmsaDiagnosticCheck.BelongsTo(report, changedShare),
+                "changed SMB share rejects stale gMSA PASS");
+            changedShare.FeedbackShare = config.FeedbackShare;
+            changedShare.GroupDn = "CN=OtherPCs,OU=Groups,DC=example,DC=com";
+            Check(!GmsaDiagnosticCheck.BelongsTo(report, changedShare),
+                "changed AD group rejects stale gMSA PASS");
+            changedShare.GroupDn = config.GroupDn;
+            changedShare.GmsaSid = "S-1-5-18";
+            Check(!GmsaDiagnosticCheck.BelongsTo(report, changedShare),
+                "changed gMSA SID rejects stale PASS");
+
+            Check(!report.Passed && report.Format().Contains("NEEDS ATTENTION"),
+                "diagnostic report does not claim success after a failed check");
+            report.Save();
+            var loaded = GmsaDiagnosticReport.Load();
+            Check(loaded is not null && loaded.Checks.Count == 2 &&
+                !loaded.Passed && loaded.Format().Contains("No Remote RPC"),
+                "protected read-only diagnostic report persists without remote tasks");
+            report.Checks.Remove(fail);
+            report.Save();
+            Check(GmsaDiagnosticReport.Load()?.Passed == true,
+                "all passing checks produce a successful read-only report");
+            report.ScopeFingerprint = "";
+            report.Save();
+            Check(GmsaDiagnosticReport.Load() is null,
+                "legacy unscoped diagnostic PASS is never accepted");
+            report.ScopeFingerprint = "invalid";
+            report.Save();
+            Check(GmsaDiagnosticReport.Load() is null,
+                "invalid gMSA diagnostic scope fingerprint is rejected");
+        }
+        finally
+        {
+            GmsaRepairConfig.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    private static void TestProductionReadiness()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        string fingerprint = new string('A', 64);
+        var complete = new ReadinessEvidence(
+            ConfigurationPresent: true, ScopeMatches: true,
+            WorkerEnabled: true, SchedulerVerified: true,
+            AccountVerified: true, HeartbeatFresh: true,
+            DiagnosticFresh: true, DiagnosticPassed: true,
+            FeedbackReadableByAdmin: true, QueueReadable: true,
+            TotalQueued: 3, UnconfirmedRpc: 0, RequiresAttention: 0);
+        var ready = GmsaProductionReadiness.Evaluate(complete, now, fingerprint);
+        Check(ready.Conclusion.StartsWith("READY FOR PILOT", StringComparison.Ordinal) &&
+            ready.Checks.All(x => x.Result == "Pass") &&
+            ready.Checks.Count == 11 &&
+            ready.ScopeFingerprint == fingerprint,
+            "Local readiness can only claim ready for pilot, not production acceptance");
+        Check(ready.ToDisplay().Contains("No changes to GPO", StringComparison.Ordinal) &&
+            ready.EndpointAcceptance.Contains("Not tested", StringComparison.Ordinal),
+            "Readiness explicitly does not claim end-client verification");
+
+        var queueWarning = complete with { UnconfirmedRpc = 2, RequiresAttention = 1 };
+        var needsReview = GmsaProductionReadiness.Evaluate(queueWarning, now, fingerprint);
+        Check(needsReview.Conclusion.StartsWith("PILOT NEEDS REVIEW", StringComparison.Ordinal) &&
+            needsReview.Checks.Count(x => x.Result == "Warning") == 2,
+            "Unconfirmed RPC and review items produce warnings, not permission for retry");
+
+        var missingDiagnostic = complete with { DiagnosticFresh = false };
+        var blocked = GmsaProductionReadiness.Evaluate(missingDiagnostic, now, fingerprint);
+        Check(blocked.Conclusion.StartsWith("NOT READY", StringComparison.Ordinal) &&
+            blocked.Checks.Single(x => x.Name == "Read-only gMSA test").Result == "Blocked",
+            "Expired or missing gMSA diagnostic blocks readiness");
+        var disabled = complete with { WorkerEnabled = false, SchedulerVerified = false,
+            HeartbeatFresh = false };
+        var off = GmsaProductionReadiness.Evaluate(disabled, now, fingerprint);
+        Check(off.Conclusion.StartsWith("NOT READY", StringComparison.Ordinal) &&
+            off.Checks.Any(x => x.Name == "Worker enabled" && x.Result == "Blocked"),
+            "A disabled worker cannot pass the production readiness assessment");
+
+        string json = blocked.ToJson();
+        Check(json.Contains("lscm-readiness/v1", StringComparison.Ordinal) &&
+            json.Contains(AppVersion.Current, StringComparison.Ordinal) &&
+            !json.Contains(@"\\server\", StringComparison.Ordinal) &&
+            !json.Contains("OU=Clients", StringComparison.Ordinal) &&
+            !json.Contains("S-1-5", StringComparison.Ordinal),
+            "Safe readiness JSON contains status codes but no AD scope or secrets");
+        Check(GmsaProductionReadiness.Evaluate(complete, now, "bad").ScopeFingerprint == "",
+            "Malformed installation fingerprint is not exported");
+    }
+
+    private static void TestGmsaQueue()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "lscm-gmsa-" + Guid.NewGuid().ToString("N"));
+        GmsaRepairConfig.TestRootOverride = root;
+        try
+        {
+            Directory.CreateDirectory(GmsaRepairConfig.QueueDirectory);
+            Directory.CreateDirectory(GmsaRepairConfig.StatusDirectory);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-3);
+            var config = new GmsaRepairConfig
+            {
+                GmsaAccount = @"EXAMPLE\gmsaLSCM$",
+                GmsaSid = BackgroundRepairIdentity.CurrentSid(),
+                Enabled = true, Domain = "example.com",
+                OuDn = "OU=Test,DC=example,DC=com",
+                GroupDn = "CN=LockPCs,OU=Groups,DC=example,DC=com",
+                FeedbackShare = @"\\fileserver\LockScreenReports$",
+                ExecutablePath = Path.Combine(root, "LockScreenCampaignManager.exe"),
+                InstalledUtc = now.AddMinutes(-1)
+            };
+            config.Validate();
+            // Exact SAM name: a newline or extra suffix must fail validation.
+            foreach (string badName in new[]
+            {
+                "EXAMPLE\\gmsaLSCM$\nFake",
+                "EXAMPLE\\gmsaLSCM$\r",
+                "EXAMPLE\\gmsaLSCM$$",
+                "EXAMPLE\\gmsaLSCM$ OTHER"
+            })
+            {
+                config.GmsaAccount = badName;
+                bool invalid = false;
+                try { config.Validate(); }
+                catch (InvalidDataException) { invalid = true; }
+                Check(invalid, "malformed gMSA account identity is rejected in full");
+            }
+            config.GmsaAccount = @"EXAMPLE\gmsaLSCM$";
+            config.Validate();
+            Check(!config.ScopeMatches("other.example", config.OuDn, config.GroupDn),
+                "gMSA scope never extends to other domains");
+            string gpo = Guid.NewGuid().ToString("D");
+            const string campaign = "test-campaign-202611081400";
+            var response = new Dictionary<string, string>
+            {
+                ["PC001.example.com"] = "offline",
+                ["PC002.example.com"] = "success",
+                ["PC003.example.com"] = "pending",
+                ["PC004.example.com"] = "failed"
+            };
+            var counts = GmsaRepairQueue.EnqueueApprovedResults(
+                config, "dc01.example.com", gpo, campaign,
+                response, now, now.AddMinutes(1));
+            Check(counts == (1, 1, 1, 1),
+                "gMSA tracks all four approved initial remote outcomes");
+            var initialHistory = RepairHistoryJournal.ReadScope(GmsaRepairConfig.QueueDirectory,
+                "gMSA", config.Domain, "dc01.example.com", config.OuDn, config.GroupDn,
+                campaign, gpo);
+            Check(initialHistory.Count == 4 && initialHistory.All(x => x.Source == "gMSA"),
+                "gMSA persists four initial Repair history events separately from queue");
+            var rows = GmsaRepairQueue.All(config);
+            Check(rows.Count == 4 && rows.All(x => x.BackgroundAllowed &&
+                x.ApprovalSid == config.GmsaSid),
+                "protected queue persists explicit per-host approval SID");
+            var offline = rows.Single(x => x.ComputerFqdn.StartsWith("PC001"));
+            var healthy = new ClientFeedbackRecord("PC001", campaign,
+                now.AddMinutes(2), "Active", "Healthy", "01.jpg",
+                true, true, true, 0, 0, "0.4.0");
+            Check(!GmsaRepairQueue.CompleteHealth(config, offline.Id,
+                    healthy with { LastSeenUtc = now.AddMinutes(-1) }, now.AddMinutes(3)),
+                "pre-approval feedback cannot close a gMSA request");
+            Check(!GmsaRepairQueue.CompleteHealth(config, offline.Id,
+                    healthy with { CampaignId = "other-campaign" }, now.AddMinutes(3)),
+                "other campaign feedback is ignored");
+            Check(GmsaRepairQueue.CompleteHealth(config, offline.Id,
+                    healthy, now.AddMinutes(3)),
+                "locally self-healed PC suppresses gMSA RPC");
+            Check(RepairHistoryJournal.ReadScope(GmsaRepairConfig.QueueDirectory,
+                "gMSA", config.Domain, "dc01.example.com", config.OuDn, config.GroupDn,
+                campaign, gpo).Any(x => x.Action == "HealthyConfirmed" &&
+                    x.ComputerFqdn == offline.ComputerFqdn),
+                "gMSA confirmed healthy repair remains visible after queue removal");
+            var pending = GmsaRepairQueue.All(config).Single(x =>
+                x.ComputerFqdn.StartsWith("PC003"));
+            Check(!pending.Due(now.AddHours(1)),
+                "unknown remote task never becomes an automatic RPC retry");
+            bool blocked = false;
+            try
+            {
+                GmsaRepairQueue.ReserveApproved(config, config.Domain, gpo, campaign,
+                    new[] { pending.ComputerFqdn }, config.OuDn, config.GroupDn);
+            }
+            catch (InvalidOperationException) { blocked = true; }
+            Check(blocked, "new admin Repair cannot overlap an ambiguous gMSA task");
+
+            string extra = "PC005.example.com";
+            var offlineOnly = GmsaRepairQueue.EnqueueApprovedResults(config,
+                "dc01.example.com", gpo, campaign,
+                new Dictionary<string, string> { [extra] = "offline" },
+                now, now.AddMinutes(1));
+            Check(offlineOnly.Offline == 1, "additional offline gMSA approval recorded");
+            var candidate = GmsaRepairQueue.All(config).Single(x => x.ComputerFqdn == extra);
+            Check(GmsaRepairQueue.BeginAttempt(config, candidate.Id, now.AddMinutes(2)),
+                "gMSA persists Attempting before any network RPC");
+            Check(!GmsaRepairQueue.BeginAttempt(config, candidate.Id, now.AddMinutes(2)),
+                "a second process cannot begin a duplicate RPC attempt");
+            GmsaRepairQueue.FinishAttempt(config, candidate.Id, "offline", now.AddMinutes(3));
+            var retry = GmsaRepairQueue.All(config).Single(x => x.Id == candidate.Id);
+            Check(retry.State == "Queued" && retry.Attempts == 1 && retry.SubmittedUtc is null,
+                "only safe pre-registration offline RPC remains retryable");
+            GmsaRepairQueue.ReserveApproved(config, config.Domain, gpo, campaign,
+                new[] { extra }, config.OuDn, config.GroupDn);
+            var suspended = GmsaRepairQueue.All(config).Single(x => x.Id == candidate.Id);
+            Check(suspended.State == "NeedsAttention" &&
+                !GmsaRepairQueue.BeginAttempt(config, suspended.Id, now.AddMinutes(4)),
+                "newly approved manual Repair atomically revokes older gMSA RPC");
+            bool rejected = false;
+            try
+            {
+                GmsaRepairQueue.EnqueueApprovedResults(config, "dc01.example.com", gpo, campaign,
+                    new Dictionary<string, string> { ["PC006.example.com"] = "mystery" }, now,
+                    now.AddMinutes(1));
+            }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "unknown remote result is rejected before any queue write");
+
+            // The selected RPC target may be beyond the 20 reports scanned in
+            // this cycle. Its telemetry MUST be read again immediately before
+            // registration, independently of the earlier batch.
+            string late = "PC006.example.com";
+            GmsaRepairQueue.EnqueueApprovedResults(config, "dc01.example.com",
+                gpo, campaign, new Dictionary<string, string> { [late] = "offline" },
+                now, now.AddMinutes(1));
+            var lateItem = GmsaRepairQueue.All(config).Single(x => x.ComputerFqdn == late);
+            int readCalls = 0;
+            var beforeRpc = new GmsaRepairStatus();
+            var newHealthy = healthy with { Computer = "PC006", LastSeenUtc = now.AddMinutes(2) };
+            var decision = GmsaRepairWorker.CheckBeforeRpc(config, lateItem,
+                beforeRpc, () => { readCalls++; return newHealthy; }, now.AddMinutes(3));
+            Check(decision == GmsaPreRpcDecision.ClientAlreadyHealthy &&
+                readCalls == 1 && beforeRpc.HealthyConfirmed == 1 &&
+                GmsaRepairQueue.All(config).All(x => x.Id != lateItem.Id),
+                "last-moment healthy feedback cancels an otherwise due gMSA RPC");
+
+            string missing = "PC007.example.com";
+            GmsaRepairQueue.EnqueueApprovedResults(config, "dc01.example.com",
+                gpo, campaign, new Dictionary<string, string> { [missing] = "offline" },
+                now, now.AddMinutes(1));
+            var missingItem = GmsaRepairQueue.All(config).Single(x => x.ComputerFqdn == missing);
+            var nullDecision = GmsaRepairWorker.CheckBeforeRpc(config, missingItem,
+                new GmsaRepairStatus(), () => null, now.AddMinutes(3));
+            Check(nullDecision == GmsaPreRpcDecision.Proceed &&
+                GmsaRepairQueue.All(config).Any(x => x.Id == missingItem.Id &&
+                    x.State == "Queued"),
+                "missing per-PC feedback alone does not falsely confirm health");
+
+            string corrupt = "PC008.example.com";
+            GmsaRepairQueue.EnqueueApprovedResults(config, "dc01.example.com",
+                gpo, campaign, new Dictionary<string, string> { [corrupt] = "offline" },
+                now, now.AddMinutes(1));
+            var corruptItem = GmsaRepairQueue.All(config).Single(x => x.ComputerFqdn == corrupt);
+            var corruptStatus = new GmsaRepairStatus();
+            var corruptDecision = GmsaRepairWorker.CheckBeforeRpc(config, corruptItem,
+                corruptStatus,
+                () => throw new InvalidDataException("Malformed client health report"),
+                now.AddMinutes(3));
+            Check(corruptDecision == GmsaPreRpcDecision.NeedsManualReview &&
+                GmsaRepairQueue.All(config).Any(x => x.Id == corruptItem.Id &&
+                    x.State == "NeedsAttention") &&
+                !GmsaRepairQueue.BeginAttempt(config, corruptItem.Id, now.AddMinutes(4)),
+                "malformed feedback cannot authorize a background RPC");
+
+            string denied = "PC009.example.com";
+            GmsaRepairQueue.EnqueueApprovedResults(config, "dc01.example.com",
+                gpo, campaign, new Dictionary<string, string> { [denied] = "offline" },
+                now, now.AddMinutes(1));
+            var deniedItem = GmsaRepairQueue.All(config).Single(x => x.ComputerFqdn == denied);
+            var deniedStatus = new GmsaRepairStatus();
+            var deniedDecision = GmsaRepairWorker.CheckBeforeRpc(config, deniedItem,
+                deniedStatus,
+                () => throw new UnauthorizedAccessException("Access denied to SMB report"),
+                now.AddMinutes(3));
+            Check(deniedDecision == GmsaPreRpcDecision.PauseForTelemetry &&
+                GmsaRepairQueue.All(config).Any(x => x.Id == deniedItem.Id &&
+                    x.State == "Queued") &&
+                deniedStatus.Summary.StartsWith("Client feedback SMB unavailable"),
+                "temporary SMB access denial pauses RPC without consuming authorization");
+
+            var status = new GmsaRepairStatus { LastRunUtc = DateTimeOffset.UtcNow,
+                RpcAttempts = 1, Summary = "Test only" };
+            status.Save();
+            Check(GmsaRepairStatus.Load().RpcAttempts == 1,
+                "gMSA worker status survives restart");
+
+            // Disabled installations remain inspectable, never executable.
+            config.Enabled = false;
+            File.WriteAllText(GmsaRepairConfig.ConfigPath,
+                System.Text.Json.JsonSerializer.Serialize(config,
+                    new System.Text.Json.JsonSerializerOptions(
+                        System.Text.Json.JsonSerializerDefaults.Web)));
+            var disabled = GmsaRepairConfig.TryReadForInspection();
+            Check(disabled is not null && !disabled.Enabled,
+                "disabled installation is inspectable without changing its state");
+            Check(GmsaRepairConfig.TryLoad() is null,
+                "disabled config never authorizes the unattended worker");
+        }
+        finally
+        {
+            GmsaRepairConfig.TestRootOverride = null;
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    private static void Check(bool ok, string message)
+    {
+        if (!ok) throw new InvalidOperationException("Self-test failed: " + message);
+    }
+}

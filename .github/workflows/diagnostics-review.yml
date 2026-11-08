@@ -1,0 +1,53 @@
+name: Review published diagnostic Issues
+
+on:
+  # Verify this read-only review workflow on main whenever its implementation
+  # changes, without publishing any client diagnostics or GitHub Issues.
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnostics-review.yml'
+      - 'tools/diagnostics_issue_review.py'
+      - 'tools/test_diagnostics_issue_review.py'
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  issues:
+    types: [opened, edited, reopened, labeled]
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  review:
+    # No write permissions: cannot post Issues, change code, or act on PCs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Test offline parser on malicious and duplicate inputs
+        run: python tools/test_diagnostics_issue_review.py
+
+      - name: Read existing Issues and publish sanitized trend summary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/diagnostics_issue_review.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --output diagnostics-review.json
+
+      - name: Upload sanitized aggregate for administrator review
+        uses: actions/upload-artifact@v7
+        with:
+          name: LSCM-Diagnostics-Review
+          path: diagnostics-review.json
+          if-no-files-found: error
+          retention-days: 14

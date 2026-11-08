@@ -1,0 +1,126 @@
+name: Offline AD + Windows 11 Lab Kit (no runner)
+
+# GitHub only validates and PACKAGES files. The domain test must be started
+# manually on an authorized Windows workstation inside the domain.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-offline-lab:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Verify package safety contracts and Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          python tools/test_offline_lab_kit_contracts.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $scripts = @(
+            'tools/run_lab_local.ps1',
+            'tools/lab_ad_integration.ps1',
+            'tools/lab_win11_probe.ps1',
+            'src/LockScreenCampaignManager/Assets/LockScreen-Agent.ps1',
+            'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
+            'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
+            'src/LockScreenCampaignManager/Assets/Gpo-ConflictScan.ps1'
+          )
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $script, [ref]$tokens, [ref]$parseErrors)
+            if (@($parseErrors).Count -ne 0) {
+              foreach ($err in @($parseErrors)) {
+                Write-Host ("{0} line {1}: {2}" -f $script,
+                  $err.Extent.StartLineNumber, $err.Message)
+              }
+              throw "Invalid Windows PowerShell 5.1 lab kit script"
+            }
+          }
+          $config = Get-Content tools/lab.config.sample.json -Raw | ConvertFrom-Json
+          if ($config.domain -ne 'example.com' -or
+              $config.clients.Count -ne 1 -or
+              $config.ouDn -notlike 'OU=LSCM-CI,*') {
+            throw 'Lab configuration template must use non-production placeholders'
+          }
+          Write-Host 'PASS: offline kit safety checks; zero domain connections attempted.'
+
+      - name: Assemble and verify downloadable offline ZIP
+        shell: pwsh
+        run: |
+          $root = 'dist/LSCM-Offline-Lab'
+          $assets = Join-Path $root 'src/LockScreenCampaignManager/Assets'
+          $tools = Join-Path $root 'tools'
+          New-Item -Path $tools,$assets -ItemType Directory -Force | Out-Null
+          Copy-Item 'tools/lab.config.sample.json' (Join-Path $root 'lab.config.sample.json')
+          Copy-Item 'tools/Run-Preflight.cmd','tools/Run-Full-Lab.cmd' $root
+          Copy-Item 'docs/OFFLINE-AD-WIN11-LAB.md' (Join-Path $root 'README.md')
+          foreach ($name in @('run_lab_local.ps1','lab_ad_integration.ps1','lab_win11_probe.ps1')) {
+            Copy-Item ("tools/"+$name) $tools
+          }
+          foreach ($name in @('LockScreen-Agent.ps1','GPO-Deploy.ps1',
+              'Gpo-Lifecycle.ps1','Gpo-ConflictScan.ps1')) {
+            Copy-Item ("src/LockScreenCampaignManager/Assets/"+$name) $assets
+          }
+          $version = [regex]::Match(
+            (Get-Content 'src/LockScreenCampaignManager/LockScreenCampaignManager.csproj' -Raw),
+            '<Version>([^<]+)</Version>').Groups[1].Value
+          if ($version -notmatch '^\d+\.\d+\.\d+-preview\.\d+$') {
+            throw 'Application preview version is missing.'
+          }
+          $zip = "dist/LSCM-Offline-AD-Win11-Test-Kit-$version.zip"
+          Compress-Archive -Path "$root/*" -DestinationPath $zip
+          $verify = Join-Path $env:RUNNER_TEMP 'LSCM-kit-verify'
+          Expand-Archive -LiteralPath $zip -DestinationPath $verify
+          foreach ($path in @('README.md','Run-Preflight.cmd','Run-Full-Lab.cmd',
+              'lab.config.sample.json','tools/run_lab_local.ps1',
+              'tools/lab_ad_integration.ps1','tools/lab_win11_probe.ps1',
+              'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
+              'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
+              'src/LockScreenCampaignManager/Assets/Gpo-ConflictScan.ps1',
+              'src/LockScreenCampaignManager/Assets/LockScreen-Agent.ps1')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $verify $path) -PathType Leaf)) {
+              throw "Incomplete offline kit: $path"
+            }
+          }
+          if (Get-ChildItem $verify -File -Recurse | Where-Object {
+              $_.Name -match '(?i)(\.pfx$|\.key$|secret|password|credentials|token)'
+            }) {
+            throw 'Unexpected credential-like file included in offline kit.'
+          }
+          $sha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          Write-Host "PASS: $zip (SHA256 $sha)"
+          Write-Host "Local launch: copy lab.config.sample.json to lab.config.json and open Run-Preflight.cmd."
+
+      - name: Upload offline kit for local download
+        id: upload_offline_kit
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: LSCM-Offline-AD-Win11-Lab-Kit
+          path: dist/LSCM-Offline-AD-Win11-Test-Kit-*.zip
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Report offline-kit artifact upload problem
+        if: always() && steps.upload_offline_kit.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Warning 'Offline lab kit tested and packaged but GitHub artifact upload failed. Check Actions artifact quota.'
+          'Offline lab kit PASS; artifact upload FAILED. Free old Actions storage or increase quota and rerun this workflow.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

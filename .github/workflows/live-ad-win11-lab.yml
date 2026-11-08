@@ -1,0 +1,86 @@
+name: Live AD + Windows 11 Lab (manual)
+
+# Intentionally NO push, pull_request, cron or automatic trigger.
+# Microsoft-hosted GitHub runners have no access to a private AD.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preflight is read-only for AD/GPO; Full creates a disposable test GPO, reboots lab PCs and cleans up"
+        required: true
+        type: choice
+        default: preflight
+        options:
+          - preflight
+          - full
+      confirmation:
+        description: "Enter EXACTLY: I_APPROVE_AD_LAB_TEST"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lscm-live-ad-lab
+  cancel-in-progress: false
+
+jobs:
+  run-lab:
+    name: Dedicated controller + isolated Windows 11 clients
+    if: ${{ github.ref == 'refs/heads/main' }}
+    environment: ad-lab
+    runs-on: [self-hosted, Windows, X64, lscm-ad-lab]
+    timeout-minutes: 90
+    env:
+      LSCM_LAB_DOMAIN: ${{ vars.LSCM_LAB_DOMAIN }}
+      LSCM_LAB_DC: ${{ vars.LSCM_LAB_DC }}
+      LSCM_LAB_OU_DN: ${{ vars.LSCM_LAB_OU_DN }}
+      LSCM_LAB_GROUP_DN: ${{ vars.LSCM_LAB_GROUP_DN }}
+      LSCM_LAB_CLIENTS: ${{ vars.LSCM_LAB_CLIENTS }}
+      LSCM_APPROVAL: ${{ inputs.confirmation }}
+      LSCM_TEST_MODE: ${{ inputs.mode }}
+      LSCM_GH_RUN_ID: ${{ github.run_id }}
+      LSCM_GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+    steps:
+      - name: Checkout approved main branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Refuse missing lab config and unapproved mode
+        shell: powershell
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Main-only workflow.' }
+          if ($env:LSCM_APPROVAL -cne 'I_APPROVE_AD_LAB_TEST') { throw 'Manual approval phrase does not match.' }
+          foreach ($key in @('LSCM_LAB_DOMAIN','LSCM_LAB_DC','LSCM_LAB_OU_DN','LSCM_LAB_GROUP_DN','LSCM_LAB_CLIENTS')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) {
+              throw ("Missing GitHub environment variable: "+$key)
+            }
+          }
+          if ($env:LSCM_TEST_MODE -notin @('preflight','full')) { throw 'Invalid test mode.' }
+          $tokens=$null;$parseErrors=$null
+          foreach ($script in @('tools/lab_win11_probe.ps1','tools/lab_ad_integration.ps1')) {
+            [void][Management.Automation.Language.Parser]::ParseFile($script,[ref]$tokens,[ref]$parseErrors)
+            if (@($parseErrors).Count -gt 0) { throw ("Invalid Windows PowerShell 5.1 syntax: "+$script) }
+          }
+
+      - name: Live DC and Windows 11 isolated-lab integration
+        shell: powershell
+        run: |
+          $mode=if ($env:LSCM_TEST_MODE -eq 'full') {'Full'} else {'Preflight'}
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/lab_ad_integration.ps1 `
+            -Mode $mode -Domain $env:LSCM_LAB_DOMAIN -Dc $env:LSCM_LAB_DC `
+            -OuDn $env:LSCM_LAB_OU_DN -GroupDn $env:LSCM_LAB_GROUP_DN `
+            -Clients $env:LSCM_LAB_CLIENTS -RunId $env:LSCM_GH_RUN_ID -Attempt ([int]$env:LSCM_GH_RUN_ATTEMPT) `
+            -ReportDirectory "$env:RUNNER_TEMP\LSCM-Live-Lab-Report"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload private lab verification report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lscm-live-ad-lab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}\LSCM-Live-Lab-Report\live-ad-lab.json
+          if-no-files-found: warn
+          retention-days: 7

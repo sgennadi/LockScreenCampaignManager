@@ -1,0 +1,153 @@
+using System.Diagnostics;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace LockScreenCampaignManager;
+
+/// <summary>Browser-only issue flow for a private repository. No tokens or automatic upload.</summary>
+internal static class ManualGitHubIssueHelp
+{
+    internal const string Repository = "sgennadi/LockScreenCampaignManager";
+    internal const string IssueUrl = "https://github.com/" + Repository + "/issues/new";
+    internal const string SignInUrl =
+        "https://github.com/login?return_to=%2Fsgennadi%2FLockScreenCampaignManager%2Fissues%2Fnew";
+    internal const string Explanation =
+        "No diagnostics are sent by this button. The report is copied to the clipboard only.\n\n" +
+        "This GitHub repository is PRIVATE. Sign in to GitHub in the same browser profile " +
+        "with an account that has access to it. A 404 can mean you are signed out or " +
+        "your account lacks access.\n\n" +
+        "YES: Copy report and open the New Issue form.\n" +
+        "NO: Copy report and open GitHub Sign in first.\n" +
+        "CANCEL: Stay here.\n\n" +
+        "You must paste, review, and manually submit the Issue. The local report " +
+        "stays pending; this application cannot confirm delivery.";
+}
+
+/// <summary>UniversalDiagnostics v1 review / opt-in capture. No background upload.</summary>
+internal static class UiErrorDialog
+{
+    public static void Show(IWin32Window? owner, string operation, Exception error)
+    {
+        AppLog.Write(error, operation);
+        using var form = new Form { Text = "Diagnostics — LockScreen Campaign Manager",
+            StartPosition = FormStartPosition.CenterParent, AutoScaleMode = AutoScaleMode.Dpi,
+            Size = new Size(830, 590), MinimumSize = new Size(600, 440),
+            Font = new Font("Segoe UI", 9.5f) };
+        string payload = UniversalDiagnosticsEmbedded.MakePayload(operation, error);
+        var panel = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14),
+            RowCount = 3, ColumnCount = 1 };
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 75));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 75));
+        panel.Controls.Add(new Label { Dock = DockStyle.Fill,
+            Text = "Error: " + UniversalDiagnosticsEmbedded.Clean(error.GetType().Name) + "\n" +
+                "No reports are sent automatically. Review the sanitized data." }, 0, 0);
+        var detail = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+            ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9f),
+            Text = UniversalDiagnosticsEmbedded.Preview(payload) };
+        panel.Controls.Add(detail, 0, 1);
+        var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
+        Button B(string text, Action act, int width)
+        {
+            var b = new Button { Text = text, Width = width, Height = 42, Margin = new Padding(0, 4, 10, 0) };
+            b.Click += (_, _) => act(); return b;
+        }
+        footer.Controls.Add(B("Save locally", () => {
+            try {
+                var receipt = UniversalDiagnosticsEmbedded.CaptureReviewed(detail.Text);
+                MessageBox.Show(form, "Report saved with pending status:\n" + receipt.Path +
+                    "\nNothing was sent to GitHub.");
+            } catch (Exception e) { MessageBox.Show(form, "Save error: " + UniversalDiagnosticsEmbedded.Clean(e.Message)); }
+        }, 180));
+        footer.Controls.Add(B("Copy", () => Clipboard.SetText(detail.Text), 115));
+        footer.Controls.Add(B("GitHub Issue (manual)", () => {
+            var choice = MessageBox.Show(form, ManualGitHubIssueHelp.Explanation,
+                "Manual GitHub Issue — private repository", MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
+            if (choice is not (DialogResult.Yes or DialogResult.No)) return;
+            try
+            {
+                Clipboard.SetText(detail.Text);
+                // Browser session, not the app, owns GitHub authentication.
+                string url = choice == DialogResult.No
+                    ? ManualGitHubIssueHelp.SignInUrl : ManualGitHubIssueHelp.IssueUrl;
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(form,
+                    "Cannot open the browser or copy the report. Nothing was delivered.\n" +
+                    UniversalDiagnosticsEmbedded.Clean(ex.Message),
+                    "GitHub Issue not opened", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }, 190));
+        footer.Controls.Add(B("Close", form.Close, 100));
+        panel.Controls.Add(footer, 0, 2);
+        form.Controls.Add(panel);
+        UiStyle.Apply(form);
+        if (owner is null) form.ShowDialog(); else form.ShowDialog(owner);
+    }
+}
+
+internal sealed class DiagnosticsWindow : Form
+{
+    private readonly ListBox _files = new();
+    private readonly TextBox _detail = new();
+    public DiagnosticsWindow()
+    {
+        Text = "UniversalDiagnostics — local reports";
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Font = new Font("Segoe UI", 9.5f);
+        StartPosition = FormStartPosition.CenterParent;
+        Size = new Size(900, 610);
+        MinimumSize = new Size(650, 430);
+        var panel = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
+        Shown += (_, _) => {
+            if (panel.Width > 530)
+            {
+                panel.Panel1MinSize = 200;
+                panel.Panel2MinSize = 250;
+                panel.SplitterDistance = Math.Clamp(panel.Width / 3, panel.Panel1MinSize,
+                    panel.Width - panel.Panel2MinSize - panel.SplitterWidth);
+            }
+        };
+        _files.Dock = DockStyle.Fill; _files.IntegralHeight = false;
+        _detail.Dock = DockStyle.Fill; _detail.Multiline = true; _detail.ScrollBars = ScrollBars.Both;
+        _detail.WordWrap = false; _detail.ReadOnly = true; _detail.Font = new Font("Consolas", 9.5f);
+        _files.SelectedIndexChanged += (_, _) => {
+            if (_files.SelectedItem is string path && File.Exists(path)) _detail.Text = File.ReadAllText(path);
+        };
+        panel.Panel1.Controls.Add(_files); panel.Panel2.Controls.Add(_detail);
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.Controls.Add(panel, 0, 0);
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true };
+        void Add(string title, Action act)
+        {
+            var b = new Button { Text = title, Width = 148, Height = 38 };
+            b.Click += (_, _) => act(); buttons.Controls.Add(b);
+        }
+        Add("Refresh", Reload);
+        Add("Error trends", () => {
+            using var trends = new DiagnosticsTrendsWindow();
+            trends.ShowDialog(this);
+        });
+        Add("Copy", () => { if (!string.IsNullOrEmpty(_detail.Text)) Clipboard.SetText(_detail.Text); });
+        Add("Open folder", () => {
+            string path = UniversalDiagnosticsEmbedded.QueueDirectory(); Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+        });
+        Add("Close", Close);
+        layout.Controls.Add(buttons, 0, 1);
+        Controls.Add(layout);
+        Reload(); UiStyle.Apply(this);
+        UiWindowPlacement.Attach(this, "diagnostics");
+    }
+    private void Reload()
+    {
+        _files.Items.Clear();
+        foreach (string path in UniversalDiagnosticsEmbedded.GetReports()) _files.Items.Add(path);
+        if (_files.Items.Count > 0) _files.SelectedIndex = 0;
+    }
+}
