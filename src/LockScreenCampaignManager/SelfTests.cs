@@ -36,6 +36,7 @@ internal static class SelfTests
         TestNativeGpoConflictScanContracts();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
+        TestNativeGpoLifecyclePreviewContracts();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -340,6 +341,60 @@ StartExecutePSFirst=true
               !NativeGpoLifecycleList.IsManagedStartup(
                 ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
             "Native lifecycle excludes foreign or multi-script GPOs");
+    }
+
+    private static void TestNativeGpoLifecyclePreviewContracts()
+    {
+        string gpoDn = NativeGpoLifecycleList.PolicyDn(
+            Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"), "DC=example,DC=com");
+        string ou = "OU=Clients,DC=example,DC=com";
+        string links = "[LDAP://" + gpoDn + ";0]";
+        string disable = NativeGpoLifecyclePreview.LegacyPlanHash(
+            "example.com", "dc01.example.com", gpoDn, ou, links,
+            42, 0, new string('A', 64), "Disable", "", "");
+        Check(disable == "59909b422c6b7158ab5d0a54ebc569243d70d5b4f8025930271f4e5d929c69e2",
+            "Native GPO Lifecycle Preview matches legacy PowerShell Plan digest");
+        string reuse = NativeGpoLifecyclePreview.LegacyPlanHash(
+            "example.com", "dc01.example.com", gpoDn, ou, links, 42, 0,
+            new string('A', 64), "Reuse", "new_campaign",
+            new string('B', 64) + ":" + new string('C', 64));
+        Check(reuse == "a84a855068f2db247778dee5515b53913d801e9c03da8f52fb173df8ed89e981",
+            "Native GPO Lifecycle Reuse includes exact package hashes");
+        Check(disable != NativeGpoLifecyclePreview.LegacyPlanHash(
+                "example.com", "dc02.example.com", gpoDn, ou, links,
+                42, 0, new string('A', 64), "Disable", "", "") &&
+            disable != NativeGpoLifecyclePreview.LegacyPlanHash(
+                "example.com", "dc01.example.com", gpoDn, ou, links + "!",
+                42, 0, new string('A', 64), "Disable", "", "") &&
+            disable != NativeGpoLifecyclePreview.LegacyPlanHash(
+                "example.com", "dc01.example.com", gpoDn, ou, links,
+                43, 0, new string('A', 64), "Disable", "", ""),
+            "Native preview digest binds DC, OU raw link state and GPO version");
+        NativeGpoLifecyclePreview.CheckAction("Disable", true, 1);
+        NativeGpoLifecyclePreview.CheckAction("Unlink", true, 1);
+        NativeGpoLifecyclePreview.CheckAction("Relink", false, 0);
+        NativeGpoLifecyclePreview.CheckAction("Delete", false, 0);
+        NativeGpoLifecyclePreview.CheckAction("Reuse", false, 1);
+        var refused = new (string Action, bool Linked, int Count)[] {
+            ("Disable", false, 0),
+            ("Enable", false, 0),
+            ("Unlink", false, 0),
+            ("Relink", true, 1),
+            ("Delete", false, 1),
+            ("Unexpected", false, 0)
+        };
+        foreach (var example in refused)
+        {
+            bool denied = false;
+            try
+            {
+                NativeGpoLifecyclePreview.CheckAction(
+                    example.Action, example.Linked, example.Count);
+            }
+            catch (ArgumentException) { denied = true; }
+            catch (InvalidOperationException) { denied = true; }
+            Check(denied, "Native lifecycle preview refuses unsafe link changes");
+        }
     }
 
     private static void TestNativeGpoConflictScanContracts()
