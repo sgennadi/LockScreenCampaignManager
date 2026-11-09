@@ -60,6 +60,16 @@ internal static class NativeGpoDeploymentApply
             string id = Required(plan, "campaignId");
             string targetPath = Required(plan, "sysvolOnDc");
             string clientScript = Required(plan, "clientScriptPath");
+            CampaignClientType clientType = NativeGpoDeploymentPlan.ParseClientType(
+                Required(plan, "clientType"));
+            if (NativeGpoDeploymentPlan.ParseClientType(Get(args, "clientType")) != clientType)
+                throw new InvalidOperationException("Client type changed after preflight.");
+            // Defense in depth: callers cannot bypass the UI and deploy an
+            // unvalidated native client through the operation dispatcher.
+            if (clientType == CampaignClientType.Executable &&
+                !NativeClientAgent.CanDeployNativeClient)
+                throw new NotSupportedException(
+                    "Native EXE GPO deployment requires an explicit isolated-lab opt-in.");
             int imageCount = plan.GetProperty("imageCount").GetInt32();
             if (!NativeSysvolStorage.ValidCampaignId(id) ||
                 imageCount is < 1 or > 30)
@@ -98,6 +108,11 @@ internal static class NativeGpoDeploymentApply
                     out long groupType) || (groupType & 0x80000000L) == 0)
                 throw new InvalidDataException("Selected group is not security-enabled.");
             _ = One(ldap, ouDn, "(objectClass=organizationalUnit)", "distinguishedName");
+            bool labCanary = clientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction;
+            if (labCanary)
+                ValidateLabCanaryGroup(ldap, groupDn, ouDn,
+                    plan.GetProperty("directGroupMembers").GetInt32());
             var currentGpos = NativeGpoLifecycleList.SearchPaged(ldap,
                 "CN=Policies,CN=System," + baseDn,
                 "(objectClass=groupPolicyContainer)", 2500,
@@ -137,7 +152,12 @@ internal static class NativeGpoDeploymentApply
 
                 RestrictApplyToGroup(ldap, gpoDn, selectedSid);
                 RegisterStartup(ldap, gpoDn, actualDc, domain,
-                    created.Value, clientScript);
+                    created.Value, clientScript, clientType);
+                // Membership can drift while files and GPO are being staged.
+                // Check once more immediately before linking into the OU.
+                if (labCanary)
+                    ValidateLabCanaryGroup(ldap, groupDn, ouDn,
+                        plan.GetProperty("directGroupMembers").GetInt32());
                 LinkNewGpo(ldap, ouDn, gpoDn);
                 linked = true;
                 return JsonSerializer.SerializeToElement(new
@@ -153,6 +173,9 @@ internal static class NativeGpoDeploymentApply
                         imageCount, imageBytes = plan.GetProperty("imageBytes").GetInt64(),
                         sysvolOnDc = targetPath,
                         clientScriptPath = clientScript,
+                        clientType = clientType.ToString(),
+                        gpoMethod = clientType == CampaignClientType.Executable
+                            ? "ClassicStartupExe" : "PowerShellStartup",
                         operation = mode, rsatRequired = false,
                         nativeEngine = "C# LDAP + Windows GPO COM + SMB",
                         dcUtc = Required(plan, "dcUtc"),
@@ -205,12 +228,19 @@ internal static class NativeGpoDeploymentApply
     {
         if (!Path.IsPathFullyQualified(source) || !Directory.Exists(source))
             throw new DirectoryNotFoundException("Source campaign package is missing.");
-        foreach (string name in new[] { "campaign.json", "LockScreen-Agent.ps1" })
-            CopyAndVerify(Path.Combine(source, name), Path.Combine(destination, name),
-                name == "campaign.json" ? 1_048_576 : 5 * 1_048_576);
+        CopyAndVerify(Path.Combine(source, "campaign.json"),
+            Path.Combine(destination, "campaign.json"), 1_048_576);
         using var cfg = JsonDocument.Parse(File.ReadAllBytes(
             Path.Combine(source, "campaign.json")),
             new JsonDocumentOptions { MaxDepth = 12 });
+        var clientType = NativeGpoDeploymentPlan.ParseClientType(
+            cfg.RootElement.TryGetProperty("clientType", out var kind) &&
+            kind.ValueKind == JsonValueKind.String ? kind.GetString() ?? "" : "");
+        string agentName = clientType == CampaignClientType.Executable
+            ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
+        CopyAndVerify(Path.Combine(source, agentName),
+            Path.Combine(destination, agentName),
+            clientType == CampaignClientType.Executable ? 250L * 1_048_576 : 5 * 1_048_576);
         var slides = cfg.RootElement.GetProperty("slides");
         if (slides.ValueKind != JsonValueKind.Array || slides.GetArrayLength() is < 1 or > 30)
             throw new InvalidDataException("Source campaign slide count is invalid.");
@@ -228,7 +258,7 @@ internal static class NativeGpoDeploymentApply
                 throw new InvalidDataException("Staged image SHA-256 mismatches manifest.");
         }
         // Recheck the source and copy as a matched pair before commit.
-        foreach (var file in new[] { "campaign.json", "LockScreen-Agent.ps1" })
+        foreach (var file in new[] { "campaign.json", agentName })
             if (!Sha256(Path.Combine(source, file)).Equals(
                     Sha256(Path.Combine(destination, file)), StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Source package changed during staging.");
@@ -348,7 +378,8 @@ internal static class NativeGpoDeploymentApply
     }
 
     private static void RegisterStartup(LdapConnection ldap, string gpoDn,
-        string dc, string domain, Guid gpoId, string clientScript)
+        string dc, string domain, Guid gpoId, string clientScript,
+        CampaignClientType clientType)
     {
         string sysvol = @"\\" + dc + @"\SYSVOL\" + domain +
             @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
@@ -357,12 +388,35 @@ internal static class NativeGpoDeploymentApply
             throw new FileNotFoundException("New GPO GPT is missing from selected DC.", gpt);
         string scripts = Path.Combine(sysvol, "Machine", "Scripts");
         Directory.CreateDirectory(scripts);
-        string ini = Path.Combine(scripts, "psscripts.ini");
-        if (File.Exists(ini))
-            throw new InvalidDataException("New GPO already contains a startup script.");
-        string text = "[ScriptsConfig]\r\nStartExecutePSFirst=true\r\n" +
-            "[Startup]\r\n0CmdLine=" + clientScript +
-            "\r\n0Parameters=-Mode Install\r\n";
+        // Independent GPO startup registrations:
+        // PS1 uses PowerShell Startup Scripts (psscripts.ini).
+        // EXE uses classic Startup Scripts (scripts.ini; direct EXE).
+        string ini = Path.Combine(scripts, clientType == CampaignClientType.Executable
+            ? "scripts.ini" : "psscripts.ini");
+        if (File.Exists(ini) ||
+            File.Exists(Path.Combine(scripts, clientType == CampaignClientType.Executable
+                ? "psscripts.ini" : "scripts.ini")))
+            throw new InvalidDataException("New GPO already has startup metadata.");
+        string text;
+        if (clientType == CampaignClientType.PowerShell)
+        {
+            text = "[ScriptsConfig]\r\nStartExecutePSFirst=true\r\n" +
+                "[Startup]\r\n0CmdLine=" + clientScript +
+                "\r\n0Parameters=-Mode Install\r\n";
+        }
+        else if (clientType == CampaignClientType.Executable)
+        {
+            // MS-GPSCR 2.2.2 permits a full UNC executable as 0CmdLine,
+            // with 0Parameters passed to the executable. This uses NO
+            // PowerShell and NO intermediate CMD/BAT launcher.
+            if (!clientScript.EndsWith(@"\LockScreen-Agent.exe",
+                    StringComparison.OrdinalIgnoreCase) ||
+                clientScript.Length >= 260)
+                throw new InvalidDataException("Native EXE startup path violates GPO limits.");
+            text = "[Startup]\r\n0CmdLine=" + clientScript +
+                "\r\n0Parameters=--client-agent Install\r\n";
+        }
+        else throw new NotSupportedException("Unsupported client type.");
         File.WriteAllText(ini, text, new UnicodeEncoding(false, true));
         var gptText = File.ReadAllText(gpt, Encoding.ASCII);
         if (!GptZero.IsMatch(gptText))
@@ -423,6 +477,42 @@ internal static class NativeGpoDeploymentApply
                     "(objectClass=organizationalUnit)", "gPLink"), "gPLink"),
                 StringComparison.Ordinal))
             throw new IOException("New OU GPO link could not be verified.");
+    }
+
+    private static void ValidateLabCanaryGroup(LdapConnection ldap,
+        string groupDn, string targetOuDn, int expectedDirectMembers)
+    {
+        // This temporary, explicitly opted-in deployment method is only
+        // suitable for a few directly listed test computers. Reject any
+        // nested group, out-of-OU computer, or size drift. This is not proof
+        // of the full effective token, so it never enables production mode.
+        if (expectedDirectMembers is < 0 or > 5)
+            throw new InvalidOperationException(
+                "EXE lab canary accepts no more than 5 directly assigned computers.");
+        var group = One(ldap, groupDn, "(objectClass=group)",
+            "sAMAccountName", "member");
+        string sam = NativeAdDiscovery.Attr(group, "sAMAccountName");
+        if (sam.Equals("Domain Computers", StringComparison.OrdinalIgnoreCase) ||
+            sam.Equals("Authenticated Users", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "EXE lab canary refuses broad built-in computer groups.");
+        int actual = NativeGpoDeploymentPlan.CountDirectMembers(group);
+        if (actual != expectedDirectMembers)
+            throw new InvalidOperationException(
+                "Lab canary group membership changed after Preview.");
+        if (!group.Attributes.Contains("member")) return;
+        foreach (object value in group.Attributes["member"]!)
+        {
+            string memberDn = Convert.ToString(value,
+                CultureInfo.InvariantCulture) ?? "";
+            if (!memberDn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase) ||
+                memberDn.Length > 2048 ||
+                !NativeGpoConflictScan.Inside(memberDn, targetOuDn))
+                throw new InvalidOperationException(
+                    "EXE lab canary group contains an out-of-scope object.");
+            _ = One(ldap, memberDn, "(objectClass=computer)",
+                "distinguishedName");
+        }
     }
 
     private static SearchResultEntry One(LdapConnection ldap,

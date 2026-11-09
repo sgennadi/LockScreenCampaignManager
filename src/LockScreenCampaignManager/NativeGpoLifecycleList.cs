@@ -42,7 +42,8 @@ internal static class NativeGpoLifecycleList
     private sealed record LinkInfo(
         string ou, int flags, bool enabled, bool enforced,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? type);
-    internal sealed record ManagedInfo(string campaignId, string end, string timeZone);
+    internal sealed record ManagedInfo(string campaignId, string end, string timeZone,
+        CampaignClientType clientType);
     private sealed record PolicyResult(
         string id, string name, string campaignId, string end,
         string timeZone, LinkInfo[] links, int linkCount, int gpoFlags);
@@ -273,24 +274,71 @@ internal static class NativeGpoLifecycleList
         return true;
     }
 
+    /// <summary>
+    /// Strict signature for managed classic Startup Scripts: no PowerShell,
+    /// additional script commands, parameters, or arbitrary startup EXE.
+    /// </summary>
+    internal static bool IsManagedExecutableStartup(string startup,
+        string domain, out string campaignId)
+    {
+        campaignId = "";
+        if (startup.Length > 1_048_576) return false;
+        var pathMatch = Regex.Match(startup,
+            @"(?im)^0CmdLine=(?<file>\\\\[^\r\n]+\\LockScreenCampaigns\\(?<id>[a-z0-9_-]+)\\LockScreen-Agent\.exe)\s*$",
+            RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        if (!pathMatch.Success) return false;
+        string proposed = pathMatch.Groups["id"].Value;
+        if (!NativeSysvolStorage.ValidCampaignId(proposed)) return false;
+        string exe = @"\\" + domain + @"\SYSVOL\" + domain +
+            @"\scripts\LockScreenCampaigns\" + proposed +
+            @"\LockScreen-Agent.exe";
+        string expected = "[Startup]\r\n0CmdLine=" + exe +
+            "\r\n0Parameters=--client-agent Install\r\n";
+        if (!startup.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            return false;
+        campaignId = proposed;
+        return true;
+    }
+
+    private static bool ExistsStrict(string path)
+    {
+        try { _ = File.GetAttributes(path); return true; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        // Network failure, ACL denial, malformed paths and IO errors
+        // propagate rather than erasing a managed-policy audit result.
+    }
+
     internal static ManagedInfo? ReadManagedGpo(string dc, string domain, Guid id)
     {
         string policyDir = @"\\" + dc + @"\SYSVOL\" + domain + @"\Policies\{" +
             id.ToString("D").ToUpperInvariant() + "}";
-        string ini = Path.Combine(policyDir, "Machine", "Scripts", "psscripts.ini");
-        FileAttributes attr;
-        try { attr = File.GetAttributes(ini); }
-        catch (FileNotFoundException) { return null; }
-        catch (DirectoryNotFoundException) { return null; }
-        // An inaccessible SYSVOL path must not be interpreted as a clean
-        // unmanaged GPO. Network errors and ACL denials are propagated.
+        string scripts = Path.Combine(policyDir, "Machine", "Scripts");
+        string psIni = Path.Combine(scripts, "psscripts.ini");
+        string classicIni = Path.Combine(scripts, "scripts.ini");
+        // File.Exists silently returns false for access denied, broken SMB
+        // and several IO failures. Those must NEVER become evidence that a
+        // selected GPO lacks a startup method.
+        bool hasPowerShell = ExistsStrict(psIni);
+        bool hasClassic = ExistsStrict(classicIni);
+        if (!hasPowerShell && !hasClassic) return null;
+        if (hasPowerShell && hasClassic)
+            return null; // Mixed startup methods are not a managed signature.
+        string ini = hasPowerShell ? psIni : classicIni;
+        bool executable = hasClassic;
+        FileAttributes attr = File.GetAttributes(ini);
         if ((attr & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
             throw new InvalidDataException("A GPO script file is unsafe.");
-        var info = new FileInfo(ini);
-        if (info.Length > 1_048_576)
-            throw new InvalidDataException("A GPO startup script list exceeds audit size limits.");
+        if (new FileInfo(ini).Length > 1_048_576)
+            throw new InvalidDataException("GPO startup list exceeds audit limits.");
         string startup = File.ReadAllText(ini, Encoding.Unicode);
-        if (!IsManagedStartup(startup, domain, out string campaignId))
+        string campaignId;
+        if (!executable)
+        {
+            if (!IsManagedStartup(startup, domain, out campaignId))
+                return null;
+        }
+        else if (!IsManagedExecutableStartup(startup, domain, out campaignId))
             return null;
 
         string root = @"\\" + dc + @"\SYSVOL\" + domain +
@@ -310,11 +358,16 @@ internal static class NativeGpoLifecycleList
                 campaignId, StringComparison.Ordinal))
             throw new InvalidDataException(
                 "Managed GPO campaign identity has diverged from SYSVOL.");
+        CampaignClientType kind = NativeGpoDeploymentPlan.ParseClientType(
+            manifest.TryGetProperty("clientType", out var modeField) &&
+            modeField.ValueKind == JsonValueKind.String ? modeField.GetString() ?? "" : "");
+        if ((kind == CampaignClientType.Executable) != executable)
+            throw new InvalidDataException("GPO startup method differs from campaign manifest.");
         string end = manifest.GetProperty("endLocal").GetString() ?? "";
         string zone = manifest.GetProperty("timeZoneId").GetString() ?? "";
         if (end.Length == 0 || zone.Length == 0)
             throw new InvalidDataException("Managed GPO campaign schedule is incomplete.");
-        return new ManagedInfo(campaignId, end, zone);
+        return new ManagedInfo(campaignId, end, zone, kind);
     }
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

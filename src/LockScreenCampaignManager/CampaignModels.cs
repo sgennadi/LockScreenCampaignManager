@@ -13,11 +13,20 @@ public enum CampaignScheduleMode
     EveryInterval
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum CampaignClientType
+{
+    PowerShell = 0,
+    Executable = 1
+}
+
 public sealed class CampaignProject
 {
     public string Name { get; set; } = "Lock Screen Campaign";
     // Local editing context only; never exported to the endpoint campaign.json.
     public string CompanyProfileId { get; set; } = string.Empty;
+    // Existing projects remain PowerShell by default; chosen in Deploy.
+    public CampaignClientType ClientType { get; set; } = CampaignClientType.PowerShell;
     public DateTime StartLocal { get; set; } = DateTime.Today.AddDays(1).AddHours(14);
     public int LastImageHours { get; set; } = 24;
     public string TimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
@@ -45,6 +54,9 @@ public sealed class CampaignConfig
     public string TimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
     public string EndLocal { get; set; } = string.Empty;
     public string AgentSha256 { get; set; } = string.Empty;
+    // Keep schema-1 PS1 manifests byte-compatible by omitting the default.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public CampaignClientType ClientType { get; set; } = CampaignClientType.PowerShell;
     // False for existing manifests. Stable per-device shuffle of which verified
     // image belongs to each scheduled slot; never changes scheduled times.
     public bool RandomizePerDevice { get; set; } = false;

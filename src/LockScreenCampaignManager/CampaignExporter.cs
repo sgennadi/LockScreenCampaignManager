@@ -16,7 +16,8 @@ public static class CampaignExporter
         WriteIndented = true
     };
 
-    public static string Export(CampaignProject project, string destinationParent)
+    public static string Export(CampaignProject project, string destinationParent,
+        bool forReadOnlyPreview = false)
     {
         CampaignSchedule.Validate(project, requireImages: true);
         if (!Directory.Exists(destinationParent)) Directory.CreateDirectory(destinationParent);
@@ -35,6 +36,7 @@ public static class CampaignExporter
             {
                 CampaignId = id,
                 Name = project.Name.Trim(),
+                ClientType = project.ClientType,
                 TimeZoneId = project.TimeZoneId,
                 RandomizePerDevice = project.RandomizePerDevice,
                 EndLocal = CampaignSchedule.Format(CampaignSchedule.End(project))
@@ -58,16 +60,46 @@ public static class CampaignExporter
                 });
             }
 
-            // Export the immutable agent first, then include its SHA-256 in the signed-by-hash manifest.
-            // A new CampaignID is required for any source modification after first deployment.
-            string agentFile = Path.Combine(temp, "LockScreen-Agent.ps1");
-            using (var resource = typeof(CampaignExporter).Assembly.GetManifestResourceStream(
-                       "LockScreenCampaignManager.Agent.ps1")
-                    ?? throw new InvalidOperationException("Embedded PowerShell engine is missing."))
-            using (var destination = File.Create(agentFile))
+            // Each campaign freezes the selected agent binary/script.
+            // Never replace that source in SYSVOL after deployment.
+            string agentFile = Path.Combine(temp,
+                project.ClientType == CampaignClientType.Executable
+                    ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1");
+            if (project.ClientType == CampaignClientType.Executable)
+            {
+                // Do not publish a non-functional EXE startup path. Enable
+                // only once native Install/Apply/Repair/Cleanup and health
+                // checks pass the dedicated endpoint test suite.
+                if (!NativeClientAgent.CanDeployNativeClient && !forReadOnlyPreview)
+                    throw new NotSupportedException(
+                        "Native EXE production deployment is disabled until real Windows client canary tests pass.");
+                // The portable manager contains the independent, headless
+                // --client-agent entrypoint; a pinned copy becomes the client.
+                string source = Environment.ProcessPath ?? "";
+                if (!Path.GetFileName(source).Equals("LockScreenCampaignManager.exe",
+                        StringComparison.OrdinalIgnoreCase) || !File.Exists(source))
+                    throw new InvalidOperationException(
+                        "Native EXE campaigns require the published portable manager executable.");
+                var sourceInfo = new FileInfo(source);
+                if (sourceInfo.Length is < 100_000 or > 250_000_000)
+                    throw new InvalidDataException("Native client source executable size is invalid.");
+                File.Copy(source, agentFile, overwrite: false);
+            }
+            else if (project.ClientType == CampaignClientType.PowerShell)
+            {
+                using var resource = typeof(CampaignExporter).Assembly.GetManifestResourceStream(
+                    "LockScreenCampaignManager.Agent.ps1") ??
+                    throw new InvalidOperationException("Embedded PowerShell client is missing.");
+                using var destination = File.Create(agentFile);
                 resource.CopyTo(destination);
-            config.AgentSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(agentFile)))
-                .ToLowerInvariant();
+            }
+            else throw new InvalidOperationException("Unsupported client execution method.");
+            // Native portable clients may be hundreds of megabytes. Hash
+            // through a stream so preview does not allocate the entire EXE.
+            using (var readAgent = new FileStream(agentFile, FileMode.Open,
+                FileAccess.Read, FileShare.Read))
+                config.AgentSha256 = Convert.ToHexString(
+                    SHA256.HashData(readAgent)).ToLowerInvariant();
             string json = JsonSerializer.Serialize(config, JsonOptions);
             File.WriteAllText(Path.Combine(temp, "campaign.json"), json + Environment.NewLine, new UTF8Encoding(false));
 
@@ -156,13 +188,26 @@ public static class CampaignExporter
         sb.AppendLine("1. Replace ad.example.com below with your own AD DNS domain name.");
         sb.AppendLine("   Copy the entire campaign folder into SYSVOL:");
         sb.AppendLine(@"   \\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" + campaign.CampaignId);
-        sb.AppendLine("   Important: keep campaign.json, images/ and LockScreen-Agent.ps1 together.");
+        string agentName = campaign.ClientType == CampaignClientType.Executable
+            ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
+        sb.AppendLine("   Important: keep campaign.json, images/ and " + agentName + " together.");
         sb.AppendLine();
         sb.AppendLine("2. Configure GPO on the selected AD domain (or use AD / GPO Deploy):");
-        sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > PowerShell Scripts");
-        sb.AppendLine("   Script Name:");
-        sb.AppendLine(@"   \\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.ps1");
-        sb.AppendLine("   Script Parameters: -Mode Install");
+        if (campaign.ClientType == CampaignClientType.PowerShell)
+        {
+            sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > PowerShell Scripts");
+            sb.AppendLine("   Script Name:");
+            sb.AppendLine(@"   \\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.ps1");
+            sb.AppendLine("   Script Parameters: -Mode Install");
+        }
+        else
+        {
+            sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > Scripts");
+            sb.AppendLine("   Method: classic Startup Scripts (scripts.ini), direct EXE.");
+            sb.AppendLine("   Script: \\\\ad.example.com\\SYSVOL\\ad.example.com\\scripts\\LockScreenCampaigns\\" + campaign.CampaignId + "\\LockScreen-Agent.exe");
+            sb.AppendLine("   Script parameters: --client-agent Install");
+            sb.AppendLine("   No PowerShell or intermediate CMD launcher is required.");
+        }
         sb.AppendLine("   Endpoints must receive the GPO and complete Startup before the campaign begins.");
         sb.AppendLine();
         sb.AppendLine("3. At startup, the agent copies images to the local drive and creates");
@@ -171,7 +216,10 @@ public static class CampaignExporter
         sb.AppendLine();
         sb.AppendLine("4. Endpoint verification (elevated PowerShell):");
         sb.AppendLine(@"   Get-ScheduledTask -TaskName 'LockScreen-LS-" + campaign.CampaignId + "'");
-        sb.AppendLine(@"   & 'C:\ProgramData\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.ps1' -Mode Status");
+        if (campaign.ClientType == CampaignClientType.Executable)
+            sb.AppendLine(@"   & 'C:\ProgramData\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.exe' --client-agent Status");
+        else
+            sb.AppendLine(@"   & 'C:\ProgramData\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.ps1' -Mode Status");
         sb.AppendLine();
         sb.AppendLine("5. At completion, local images, script and task are removed,");
         sb.AppendLine("   and original registry settings are restored unless another policy replaced them.");
