@@ -105,6 +105,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('RPC TCP/135', live)
         self.assertIn('Agent Management / GPO...', read("DomainDeploymentForm.cs"))
         self.assertIn('Agent Management / Live...', read("MainForm.cs"))
+        self.assertIn('Agent Management - read-only desktop layout', read("UiLayoutSmokeTests.cs"))
         self.assertIn('console.OpenAgentManagementInitially()', read("MainForm.cs"))
         self.assertIn('if (_company is null ||', read("MainForm.cs"))
         self.assertIn('NativeImmediateActions.Execute(mode, request, credentials)', read("DomainPowerShellRunner.cs"))
