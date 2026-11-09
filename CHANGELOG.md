@@ -1,3 +1,11 @@
+## 0.4.0-preview.66 — Agent Management and live RPC reachability (2026-11-09)
+- Consolidate existing secured Push / Repair / Report / Cleanup actions in the renamed Agent Management / Live tab, with AD-scoped computer list and search.
+- Add bounded asynchronous TCP/135 reachability checks for verified OU + computer-group hosts, auto-run on opening the tab, optional 60-second refresh, and reachable-only filter / select up to 25.
+- Show checked time and explicit Unknown vs RPC-reachable status. Endpoint mapper reachability does not prove Task Scheduler access, an agent heartbeat, or actual lock-screen image; use Report and Client Health for verification.
+- Expose Agent Management / GPO Operations from the final Deployment Wizard page rather than Advanced mode only. Preserve Preview, full GPO GUID confirmation and fresh native OU/group revalidation before any remote task.
+- PS1 remains the production agent. The EXE implementation stays gated in the separate laboratory PR; arbitrary remote EXE execution is deliberately unsupported.
+- No live AD or real client RPC was tested in hosted CI.
+
 ## 0.4.0-preview.65 — Shared two-step AD user search and sign-in Wizard (2026-11-09)
 - The startup AD Connection Wizard and the AD / GPO Deployment window now open the same two-step alternate-account Wizard: (1) live typeahead AD search by display name, username, account name, email or UPN, with a result list and exact-DN tooltips; (2) password entry after choosing the account, with Back to revise the choice.
 - Native C# LDAP lookup starts after the first character (debounced, capped at 75 matches, signed/sealed Windows account binding, no PowerShell). Stale search replies cannot replace later results. An explicitly chosen manual login remains available when Windows-domain read access is unavailable.
