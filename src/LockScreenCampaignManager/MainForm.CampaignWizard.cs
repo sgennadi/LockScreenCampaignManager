@@ -1042,6 +1042,76 @@ public sealed partial class MainForm
                     }
                     catch (Exception ex) { UiErrorDialog.Show(this, "Export JPG Screen Saver", ex); }
                 }, 222, true);
+            if (_owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+                Action(actions, "Install local JPG pilot...", () =>
+                {
+                    using var select = new FolderBrowserDialog
+                    {
+                        Description = "Choose an exported PhotoScreenSaver.scr pilot package folder"
+                    };
+                    if (select.ShowDialog(this) != DialogResult.OK) return;
+                    var timeout = _owner._project.ScreenSaver.IdleSeconds;
+                    var secured = _owner._project.ScreenSaver.PasswordOnResume;
+                    if (MessageBox.Show(this,
+                        "Install a JPG screen saver for THIS Windows user only?\r\n\r\n" +
+                        "Folder: " + select.SelectedPath + "\r\n" +
+                        "Windows idle timeout: " + timeout + " seconds\r\n" +
+                        "Require sign-in on resume: " + (secured ? "Yes" : "No") +
+                        "\r\n\r\nThe installer will back up the four current HKCU " +
+                        "Desktop screen saver values and copy verified JPGs and .scr " +
+                        "to a local pilot folder. No AD/GPO settings are changed. " +
+                        "If a policy already manages these values, installation will be refused.\r\n\r\n" +
+                        "Continue with this TEST USER?",
+                        "Confirm local JPG pilot installation",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    try
+                    {
+                        string scr = PhotoSaverLocalPilot.Install(select.SelectedPath,
+                            timeout, secured);
+                        status.Text = "JPG Screen Saver installed for current user only. " +
+                            "Test automatic idle activation on the desktop.";
+                        MessageBox.Show(this,
+                            "Current-user JPG Screen Saver pilot installed:\r\n" + scr +
+                            "\r\n\r\nTest Windows automatic idle activation and sign-in on resume. " +
+                            "The Remove local JPG pilot button restores your original settings.",
+                            "Local JPG pilot installed", MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        UiErrorDialog.Show(this, "Install local JPG Screen Saver pilot", ex);
+                    }
+                }, 220, true);
+            if (PhotoSaverLocalPilot.HasPilot)
+                Action(actions, "Remove local JPG pilot...", () =>
+                {
+                    if (MessageBox.Show(this,
+                        "Restore your previous current-user Screen Saver values " +
+                        "and delete the local JPG pilot package?\r\n\r\n" +
+                        "If Windows or Group Policy changed the settings, removal will " +
+                        "refuse an unsafe automatic restore.",
+                        "Confirm local JPG pilot removal",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    try
+                    {
+                        if (PhotoSaverLocalPilot.Remove())
+                        {
+                            status.Text = "Previous current-user Screen Saver settings restored.";
+                            MessageBox.Show(this,
+                                "Previous Windows Screen Saver settings restored.",
+                                "Local JPG pilot removed", MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                            RenderPage();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        UiErrorDialog.Show(this, "Remove local JPG Screen Saver pilot", ex);
+                    }
+                }, 230, true);
             Action(actions, "Validate campaign", () =>
                 _owner.ValidateCurrent(), 180);
             Action(actions, "Save project...", () =>
