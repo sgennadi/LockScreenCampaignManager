@@ -182,7 +182,9 @@ internal sealed class DomainDeploymentForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+        // Two status banners and the client/GPO-method selector must retain
+        // independent height at 100%-200% scaling.
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
         Controls.Add(layout);
