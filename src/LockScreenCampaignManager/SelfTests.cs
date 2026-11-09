@@ -260,6 +260,41 @@ internal static class SelfTests
                 Path.GetFileName(paths[0]) == "01.jpg" &&
                 File.Exists(Path.Combine(package, "PhotoScreenSaver.scr")),
                 "JPG slideshow exports hash-verified standalone SCR + normalized JPEG package.");
+            string labKit = PhotoSaverGpoPilotKit.Export(project, package, root);
+            string labScript = File.ReadAllText(Path.Combine(labKit,
+                "PhotoSaver-StartupInstall.ps1"));
+            string labPackage = Path.Combine(labKit,
+                "JPG-ScreenSaver-" + CampaignSchedule.BuildId(project));
+            var labVerified = PhotoJpegSaver.Verify(labPackage, true);
+            Check(labVerified.Images.Length == 1 && labVerified.IntervalSeconds == 10 &&
+                File.Exists(Path.Combine(labKit, "LAB-GPO-INSTRUCTIONS.txt")) &&
+                labScript.Contains("$campaignId = '" +
+                    CampaignSchedule.BuildId(project) + "'", StringComparison.Ordinal) &&
+                labScript.Contains("$slideSeconds = [int]'10'", StringComparison.Ordinal) &&
+                !labScript.Contains("__LSCM_", StringComparison.Ordinal) &&
+                labScript.Contains("C:\\ProgramData\\LSCM-PhotoSaver", StringComparison.Ordinal) &&
+                !labScript.Contains("Set-ItemProperty", StringComparison.OrdinalIgnoreCase) &&
+                labScript.Contains(Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(
+                        File.ReadAllBytes(Path.Combine(package, "slideshow.json")))),
+                    StringComparison.OrdinalIgnoreCase),
+                "JPG GPO lab kit generated pinned SHA256 startup and verified offline package.");
+            bool duplicateKitBlocked = false;
+            try { _ = PhotoSaverGpoPilotKit.Export(project, package, root); }
+            catch (IOException) { duplicateKitBlocked = true; }
+            Check(duplicateKitBlocked, "JPG GPO pilot never overwrites an existing kit.");
+            bool badKitHashBlocked = false;
+            try
+            {
+                _ = PhotoSaverGpoPilotKit.RenderStartupScript(
+                    PhotoSaverGpoPilotKit.LoadTemplate(),
+                    CampaignSchedule.BuildId(project),
+                    "JPG-ScreenSaver-" + CampaignSchedule.BuildId(project),
+                    "invalid-hash", new string('a', 64), 10);
+            }
+            catch (InvalidDataException) { badKitHashBlocked = true; }
+            Check(badKitHashBlocked, "JPG GPO startup template rejects invalid digest evidence.");
+
             using (var child = System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo {
                     FileName = Path.Combine(package, "PhotoScreenSaver.scr"),

@@ -1044,6 +1044,91 @@ public sealed partial class MainForm
                 }, 222, true);
             if (_owner._project.ScreenSaver.UseJpegSlideshow &&
                 _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+                Action(actions, "Export GPO lab kit...", () =>
+                {
+                    using var selected = new FolderBrowserDialog
+                    {
+                        Description = "Choose this campaign's previously exported JPG-ScreenSaver package"
+                    };
+                    if (selected.ShowDialog(this) != DialogResult.OK) return;
+                    if (MessageBox.Show(this,
+                        "Prepare a MANUAL Computer GPO Startup LAB kit for testing?\r\n\r\n" +
+                        "It will contain a pinned PS1 installer, standalone JPG .scr, " +
+                        "hash manifest and the original pictures.\r\n" +
+                        "The kit will NOT create, link, or modify AD/GPO/SYSVOL. " +
+                        "It will NOT enable a User GPO or change local registry settings.\r\n\r\n" +
+                        "Only manually deploy to a dedicated pilot computer group after " +
+                        "testing the .scr on an authorized Windows desktop.\r\n\r\n" +
+                        "Create test kit beside the selected JPG package?",
+                        "Confirm read-only JPG GPO lab export",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    try
+                    {
+                        _owner.ReadControls();
+                        string parent = Path.GetDirectoryName(
+                            Path.GetFullPath(selected.SelectedPath)) ??
+                            throw new InvalidDataException("Invalid JPG Screen Saver folder.");
+                        string exported = PhotoSaverGpoPilotKit.Export(_owner._project,
+                            selected.SelectedPath, parent);
+                        MessageBox.Show(this,
+                            "JPG GPO LAB kit exported locally:\r\n" + exported +
+                            "\r\n\r\nOpen LAB-GPO-INSTRUCTIONS.txt. " +
+                            "No Active Directory, GPO or client settings were changed.",
+                            "JPG GPO lab kit ready",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        status.Text = "Read-only Computer Startup GPO pilot kit exported. " +
+                            "User GPO activation remains blocked.";
+                    }
+                    catch (Exception ex)
+                    {
+                        UiErrorDialog.Show(this, "Export JPG GPO lab kit", ex);
+                    }
+                }, 210, true);
+            if (_owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+                Action(actions, "Export GPO lab kit...", () =>
+                {
+                    if (MessageBox.Show(this,
+                        "Export a MANUAL, computer-only GPO LAB kit?\r\n\r\n" +
+                        "It contains a pinned JPG .scr package and a LocalSystem " +
+                        "PowerShell Startup installer for test computers. " +
+                        "It does NOT create GPOs, install on clients, " +
+                        "configure user Screen Saver policies, or copy anything " +
+                        "to SYSVOL. Choose an exported JPG .scr folder first.\r\n\r\n" +
+                        "Continue?",
+                        "JPG Screen Saver — manual GPO lab kit",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    using var source = new FolderBrowserDialog {
+                        Description = "Select the existing JPG-ScreenSaver campaign package"
+                    };
+                    if (source.ShowDialog(this) != DialogResult.OK) return;
+                    using var destination = new FolderBrowserDialog {
+                        Description = "Choose an EXISTING local folder for the NEW GPO LAB kit"
+                    };
+                    if (destination.ShowDialog(this) != DialogResult.OK) return;
+                    try
+                    {
+                        _owner.ReadControls();
+                        string exported = PhotoSaverGpoPilotKit.Export(
+                            _owner._project, source.SelectedPath, destination.SelectedPath);
+                        MessageBox.Show(this,
+                            "Read-only GPO LAB kit exported locally:\r\n" + exported +
+                            "\r\n\r\nRead LAB-GPO-INSTRUCTIONS.txt before using GPMC. " +
+                            "No Group Policy, Active Directory or SYSVOL was changed. " +
+                            "User Screen Saver GPO activation is NOT part of this pilot.",
+                            "JPG GPO lab kit ready", MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                        status.Text = "Manual GPO lab kit exported; no AD or client changes.";
+                    }
+                    catch (Exception ex)
+                    {
+                        UiErrorDialog.Show(this, "Export JPG GPO lab kit", ex);
+                    }
+                }, 215, true);
+            if (_owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
                 Action(actions, "Install local JPG pilot...", () =>
                 {
                     using var select = new FolderBrowserDialog

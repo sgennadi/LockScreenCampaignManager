@@ -35,6 +35,14 @@ This is only for an authorized test profile with no managed Screen Saver GPO. Th
 
 Select **Remove local JPG pilot...** on the Save Wizard page to restore the saved HKCU values. The removal checks that all four settings still match what the pilot installed. If the operator or Group Policy has modified a setting since installation, it refuses an automatic overwrite; inspect settings and make changes manually rather than forcing a stale backup. Removal of the local files is also stopped if rollback cannot be verified. The local test install is **not** a supported production installation, and there is still **no automatic domain GPO delivery** for JPG .scr files.
 
+## Manual computer GPO Startup lab kit (preview.82)
+
+After exporting the JPG .scr package, choose **Export GPO lab kit...** from the Campaign Wizard Save page, select the exported `JPG-ScreenSaver-<campaign-id>` folder and approve the **default-No** confirmation. The manager creates a separate sibling `JPG-GPO-Lab-Kit-<campaign-id>` containing the same checked photo package, `PhotoSaver-StartupInstall.ps1` and `LAB-GPO-INSTRUCTIONS.txt`. The startup script is pinned to SHA-256 of the SCR and slideshow manifest and verifies individual JPG hashes. Existing destination folders are not overwritten.
+
+The kit does **not** automatically create or link a GPO. Use GPMC to scope a new **TEST Computer Startup GPO** to a handful of pilot computers in the chosen computer OU/group, and stage the script together with its photo package in the GPO's startup script folder. At computer startup, LocalSystem can copy the verified content into a restricted local `C:\ProgramData\LSCM-PhotoSaver\<campaign-id>` folder. Run the script in **Verify** mode to inspect the existing installation without modifying computer/user registry settings.
+
+A computer Startup GPO installs files, *not* a User Configuration screen saver policy. Do not enable `SCRNSAVE.EXE` user policy until pilot desktops have the appropriate local files and all target OU/security/WMI/site conditions are verified. Windows PowerShell 5.1 is used in this **lab-only installer**; it is not part of the Manager's native C# GPO operations or a mandatory client-agent mode. Automatic JPG User GPO delivery remains blocked.
+
 ## Critical rollout limitation
 
 **Automatic JPG User GPO deployment is not enabled** in this preview. The Group Assignments preflight explicitly rejects it. User GPO deployment must first have an approved, integrity-checked installer or file delivery strategy that doesn't run unsigned/large executables directly from SYSVOL or silently alter a user's photo settings. Testing on GitHub-hosted Windows does not establish that this SCR runs under the real client session, honors /p on the chosen Windows build, or is allowed by AppLocker/WDAC and local security policies.
