@@ -3521,6 +3521,7 @@ StartExecutePSFirst=true
         internal int MetadataCount;
         internal int AssetRequests;
         internal int CdnRequests;
+        internal int TransientCdnFailures;
 
         protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
             System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
@@ -3590,9 +3591,11 @@ StartExecutePSFirst=true
                 Check(request.Headers.Authorization is null,
                     "Bearer must NEVER leak into the signed release CDN redirect");
                 CdnRequests++;
-                response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) {
-                    Content = new System.Net.Http.ByteArrayContent(archive)
-                };
+                response = CdnRequests <= TransientCdnFailures
+                    ? new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.GatewayTimeout)
+                    : new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                        Content = new System.Net.Http.ByteArrayContent(archive)
+                    };
             }
             else throw new InvalidOperationException("Unexpected request destination in updater test.");
             response.RequestMessage = request;
@@ -3701,6 +3704,22 @@ StartExecutePSFirst=true
                     File.Exists(publicStaged.ExtractedExecutablePath) &&
                     publicStaged.ArchiveSha256 == archiveDigest,
                     "Public update uses signed GitHub URL to CDN, verifies SHA/PE and requires no token");
+            }
+            // A public CDN may return 504 temporarily. Retry without sending
+            // credentials to CDN, and still verify the exact signed archive.
+            var flakyTransport = new TestReleaseTransport(archive, null, archiveDigest) {
+                TransientCdnFailures = 2
+            };
+            using (var flakyHttp = new System.Net.Http.HttpClient(flakyTransport, true))
+            using (var flakyReleases = new UniversalUpdater.GitHubReleaseClient(flakyHttp))
+            using (var flakyDownloader = new UniversalUpdater.UpdateDownloader(flakyHttp))
+            {
+                var found = await flakyReleases.CheckAsync(isolated);
+                Check(found is not null, "Retry fixture provides pinned release metadata");
+                var recovered = await flakyDownloader.StageAsync(isolated, found!);
+                Check(flakyTransport.CdnRequests == 3 &&
+                    recovered.ArchiveSha256 == archiveDigest,
+                    "Two CDN 504 gateway timeouts retry with exact SHA-256 integrity");
             }
             // A public repo with only prereleases must never report HTTP 404
             // in Stable only mode. The result should be 'no newer stable'.
