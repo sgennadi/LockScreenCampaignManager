@@ -912,6 +912,22 @@ StartExecutePSFirst=true
             NativeGpoConflictScan.IsPolicyPartDisabled(2, false) &&
             !NativeGpoConflictScan.IsPolicyPartDisabled(2, true),
             "User and computer GPO flags disable only their own policy half");
+        Check(!NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(0, "", true) &&
+            !NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(0, "", false) &&
+            !NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(1, "", true) &&
+            NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(1, "", false) &&
+            NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(65536, "", true) &&
+            !NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(65536, "", false) &&
+            NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(-65536, "", true),
+            "Missing User/Machine SYSVOL directory allowed only for genuinely unconfigured GPO halves");
+        const string registryCse =
+            "[{35378EAC-683F-11D2-A89A-00C04FBBCFA2}{0F6B957E-509E-11D1-A7CC-0000F87571E3}]";
+        Check(NativeGpoConflictScan.RegistryCseAdvertised(registryCse) &&
+            NativeGpoConflictScan.RegistryCseAdvertised(registryCse.ToLowerInvariant()) &&
+            !NativeGpoConflictScan.RegistryCseAdvertised("") &&
+            !NativeGpoConflictScan.RegistryCseAdvertised(null) &&
+            NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(0, registryCse, true),
+            "Advertised Registry Policy CSE requires matching SYSVOL User/Registry.pol evidence");
 
         byte[] saverPolicy = NativeUserScreenSaverGpo.BuildRegistryPol(
             "scrnsave.scr", 600, true);
@@ -929,8 +945,11 @@ StartExecutePSFirst=true
             NativeGpoConflictScan.TargetValue(
                 @"Control Panel\Desktop", "ScreenSaverIsSecure", "1", true)?.risk == "High" &&
             NativeGpoConflictScan.TargetValue(
-                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                @"Software\Microsoft\Windows\CurrentVersion\Policies\System",
                 "NoDispScrSavPage", "1", true)?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                "NoDispScrSavPage", "1", true) is null &&
             NativeGpoConflictScan.TargetValue(
                 @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
                 "ScreenSaveActive", "1") is null,
@@ -947,6 +966,15 @@ StartExecutePSFirst=true
         Check(userGppHits.Count == 1 && userGppHits[0].name == "SCRNSAVE.EXE" &&
             NativeGpoConflictScan.ParseGppRegistry(userGpp).Count == 0,
             "User GPP Registry.xml scan requires HKCU and never reads wrong hive");
+        string uiXml = "<RegistrySettings><Registry><Properties hive=\"HKCU\" " +
+            "key=\"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" " +
+            "name=\"NoDispScrSavPage\" value=\"1\" /></Registry></RegistrySettings>";
+        var uiHit = NativeGpoConflictScan.ParseGppRegistry(
+            System.Text.Encoding.UTF8.GetBytes(uiXml), true);
+        Check(uiHit.Count == 1 && uiHit[0].risk == "Warning" &&
+            NativeGpoConflictScan.ParseGppRegistry(
+                System.Text.Encoding.UTF8.GetBytes(uiXml)).Count == 0,
+            "Screen Saver UI restriction must be read under the real HKCU System policy path");
         bool brokenUserPolicyDenied = false;
         try { NativeGpoConflictScan.ParseRegistryPol(saverPolicy[..^1], true); }
         catch (InvalidDataException) { brokenUserPolicyDenied = true; }
