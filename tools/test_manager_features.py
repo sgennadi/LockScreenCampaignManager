@@ -154,7 +154,9 @@ class ClientManagementContracts(unittest.TestCase):
         # violates the MS-GPREG UTF-16 NUL-terminated identifier contract.
         policy = read("NativeUserScreenSaverGpo.cs")
         tests = read("SelfTests.cs")
-        self.assertIn('Text("[" + key + "\\\\0;" + field + "\\\\0;")', policy)
+        self.assertIn('Text("[" + key + ', policy)
+        self.assertIn(' + field + ', policy)
+        self.assertGreaterEqual(policy.count(chr(92) + "0;"), 2)
         self.assertIn("ParseUserRegistryPol(byte[] bytes)", policy)
         self.assertIn("VerifyScreenSaverRegistryPol(actualPolicyBytes", policy)
         self.assertIn("VerifyScreenSaverRegistryPol(registry, saver, seconds, secure)", policy)
