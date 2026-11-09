@@ -44,8 +44,11 @@ internal sealed class CampaignAssignmentsDialog : Form
         _draft = (project.TargetAssignments ?? []).Select(x => x.Clone()).ToList();
         if (_draft.Count == 0)
             _draft.Add(new CampaignGroupTarget {
-                Name = "Computer Lock Screen",
-                Mode = CampaignTargetMode.LockScreen,
+                Name = project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver
+                    ? "User Screen Saver"
+                    : project.EffectiveCampaignMode == CampaignTargetMode.Both
+                        ? "Both policies" : "Computer Lock Screen",
+                Mode = project.EffectiveCampaignMode,
                 ComputerOuDn = currentComputerOu, ComputerGroupDn = currentComputerGroup
             });
 
