@@ -136,14 +136,14 @@ internal sealed partial class GpoOperationsForm : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
             RowCount = 3, Padding = new Padding(16), BackColor = UiStyle.Canvas };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         Controls.Add(root);
         var headline = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
         headline.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         headline.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        headline.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        headline.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         headline.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         headline.Controls.Add(new Label { Text = "Domain campaign management", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 17f), ForeColor = UiStyle.Foreground }, 0, 0);
@@ -153,9 +153,19 @@ internal sealed partial class GpoOperationsForm : Form
             ForeColor = UiStyle.Accent, AutoEllipsis = true,
             Font = new Font("Segoe UI Semibold", 10f)
         }, 1, 0);
-        var scopeLabel = Note("Domain: " + _domain + "  |  DC: " + _dc + "  |  OU: " + _ouDn);
-        headline.Controls.Add(scopeLabel, 0, 1);
-        headline.SetColumnSpan(scopeLabel, 2);
+        var scopePath = new TextBox
+        {
+            Name = "GpoScopePathViewer",
+            Text = "Domain: " + _domain + "  |  DC: " + _dc +
+                Environment.NewLine + "OU: " + _ouDn,
+            Dock = DockStyle.Fill, Multiline = true,
+            WordWrap = false, ScrollBars = ScrollBars.Horizontal,
+            ReadOnly = true, BorderStyle = BorderStyle.None,
+            BackColor = UiStyle.Canvas, ForeColor = UiStyle.Muted,
+            Margin = new Padding(2, 5, 2, 3)
+        };
+        headline.Controls.Add(scopePath, 0, 1);
+        headline.SetColumnSpan(scopePath, 2);
         root.Controls.Add(headline, 0, 0);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(15, 7) };
@@ -194,7 +204,8 @@ internal sealed partial class GpoOperationsForm : Form
         _status.Text = "Read-only until explicit Preview + Apply. No automatic AD changes.";
         _status.Dock = DockStyle.Fill;
         _status.ForeColor = UiStyle.Muted;
-        _status.AutoEllipsis = true;
+        _status.Padding = new Padding(8, 10, 8, 12);
+        _status.AutoEllipsis = false;
         root.Controls.Add(_status, 0, 2);
     }
 
@@ -216,6 +227,7 @@ internal sealed partial class GpoOperationsForm : Form
         _policies.HorizontalScrollbar = true;
         _policies.SelectedIndexChanged += (_, _) => {
             InvalidatePlans();
+            _lifecyclePreview.Enabled = _policies.SelectedItem is GpoRow;
             var managed = _policies.SelectedItem as GpoRow;
             if (managed is not null && _clientHealth is not null)
                 _clientHealth.SetSelectedManagedCampaign(managed.CampaignId);
@@ -247,6 +259,9 @@ internal sealed partial class GpoOperationsForm : Form
         _lifecycleAction.SelectedIndexChanged += (_, _) => InvalidatePlans();
         actions.Controls.Add(_lifecycleAction);
         _lifecyclePreview = ActionButton("Preview", () => _ = PreviewLifecycleAsync(), 145);
+        _lifecyclePreview.Name = "GpoLifecyclePreviewButton";
+        // Never send a routine missing-selection prompt to universal diagnostics.
+        _lifecyclePreview.Enabled = false;
         actions.Controls.Add(_lifecyclePreview);
         _applyGpo = ActionButton("Apply", () => _ = ApplyLifecycleAsync(), 160, primary: true);
         _applyGpo.Enabled = false;
@@ -415,7 +430,10 @@ internal sealed partial class GpoOperationsForm : Form
                 if (_policies.Items.Count > 0) _policies.SelectedIndex = 0;
             }
             finally { _policies.EndUpdate(); }
-            _status.Text = "Managed GPOs: " + _policies.Items.Count;
+            _lifecyclePreview.Enabled = _policies.SelectedItem is GpoRow;
+            _status.Text = _policies.Items.Count == 0
+                ? "No managed GPOs found. Create/deploy a campaign before using lifecycle Preview."
+                : "Managed GPOs: " + _policies.Items.Count + ". Select a GPO to preview.";
         }
         catch (Exception ex) { Fail(ex, "List managed GPOs"); }
     }
@@ -443,9 +461,17 @@ internal sealed partial class GpoOperationsForm : Form
     {
         if (_busy) return;
         InvalidatePlans();
+        if (string.IsNullOrWhiteSpace(SelectedId))
+        {
+            // Issue #11: a routine incomplete form is not an exception.
+            // Keep the report dialog for actual failures only.
+            _lifecycleInfo.Text = "Choose a managed GPO in the list first. " +
+                "Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.";
+            _status.Text = "Select a managed GPO first (no action performed).";
+            return;
+        }
         try
         {
-            if (string.IsNullOrWhiteSpace(SelectedId)) throw new InvalidOperationException("Select a managed GPO first.");
             string action = SelectedAction;
             string package = action == "Reuse" ? CreateReusePackage() : "";
             var plan = await ExecuteAsync(DomainOperation.Lifecycle, "Preview",
@@ -768,10 +794,15 @@ internal sealed partial class GpoOperationsForm : Form
         if (_busy) return;
         _pushPlanHash = null;
         _push.Enabled = false;
+        string id = SelectedId;
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            _status.Text = "Select a managed GPO in the first tab before previewing a remote task.";
+            _pushInfo.Text = "No remote task requested. Select a managed GPO, then eligible computers.";
+            return;
+        }
         try
         {
-            string id = SelectedId;
-            if (string.IsNullOrWhiteSpace(id)) throw new InvalidOperationException("Choose a managed GPO in the first tab.");
             string[] hosts = SelectedComputerNames();
             string purpose = SelectedPushPurpose;
             var data = await ExecuteAsync(DomainOperation.Immediate, "Preview", new {

@@ -11,6 +11,7 @@ internal sealed class CampaignScheduleDialog : Form
     private readonly CampaignProject _draft;
     private readonly ComboBox _mode = new();
     private readonly ComboBox _timeZone = new();
+    private readonly Label _timeZoneDifference = new();
     private readonly FlowLayoutPanel _intervalInputs = new();
     private readonly NumericUpDown _intervalHours = new();
     private readonly NumericUpDown _intervalMinutes = new();
@@ -81,12 +82,12 @@ internal sealed class CampaignScheduleDialog : Form
             Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1,
             Padding = new Padding(14), AutoScroll = true
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 83));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 151));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 114));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         Controls.Add(root);
         root.Controls.Add(new Label {
             Dock = DockStyle.Fill, Text = "When to change the image" + Environment.NewLine +
@@ -185,9 +186,11 @@ internal sealed class CampaignScheduleDialog : Form
         // in the draft for DST validation and client deployment.
         var zoneRow = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
             Padding = new Padding(2, 7, 2, 7)
         };
+        zoneRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        zoneRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         zoneRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165));
         zoneRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         zoneRow.Controls.Add(new Label
@@ -208,9 +211,21 @@ internal sealed class CampaignScheduleDialog : Form
             string chosen = TimeZoneChoices.SelectedId(_timeZone);
             if (chosen.Length == 0) return;
             _draft.TimeZoneId = chosen;
+            _timeZoneDifference.Text =
+                TimeZoneChoices.OffsetComparison(chosen, DateTimeOffset.UtcNow);
             Draw();
         };
         zoneRow.Controls.Add(_timeZone, 1, 0);
+        _timeZoneDifference.Name = "ScheduleTimeZoneDifference";
+        _timeZoneDifference.Dock = DockStyle.Fill;
+        _timeZoneDifference.TextAlign = ContentAlignment.MiddleLeft;
+        _timeZoneDifference.Padding = new Padding(6, 5, 6, 7);
+        _timeZoneDifference.ForeColor = UiStyle.Green;
+        _timeZoneDifference.AutoEllipsis = false;
+        _timeZoneDifference.Text = TimeZoneChoices.OffsetComparison(
+            _draft.TimeZoneId, DateTimeOffset.UtcNow);
+        zoneRow.Controls.Add(_timeZoneDifference, 0, 1);
+        zoneRow.SetColumnSpan(_timeZoneDifference, 2);
         root.Controls.Add(zoneRow, 0, 2);
 
         var middle = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };

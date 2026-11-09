@@ -354,7 +354,7 @@ public sealed partial class MainForm
             if (_host.IsDisposed) return;
             if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
                 && !page.IsDisposed)
-                page.Height = Math.Max(_step is 1 or 2 ? 720 : 390,
+                page.Height = Math.Max(_step is 1 or 2 ? 720 : 555,
                     _host.ClientSize.Height - _host.Padding.Vertical);
         }
 
@@ -435,7 +435,7 @@ public sealed partial class MainForm
                 var page = new TableLayoutPanel
                 {
                     Dock = DockStyle.Top,
-                    Height = Math.Max(imagePage ? 720 : 390,
+                    Height = Math.Max(imagePage ? 720 : 555,
                         _host.ClientSize.Height - _host.Padding.Vertical),
                     ColumnCount = 1, RowCount = 5,
                     Padding = new Padding(10, 7, 10, 9),
@@ -444,11 +444,11 @@ public sealed partial class MainForm
                 // Images/Arrange dedicate the majority of the viewport to
                 // the actual image. The old fixed headers consumed almost
                 // the entire page at 125-200% DPI and collapsed PictureBox.
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 60 : 72));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 67 : 112));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 66 : 77));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 60 : 85));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 67 : 118));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 66 : 83));
                 page.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 37 : 48));
+                page.RowStyles.Add(new RowStyle(SizeType.Absolute, imagePage ? 46 : 72));
                 _host.Controls.Add(page);
 
                 string[] titles =
@@ -501,8 +501,10 @@ public sealed partial class MainForm
                 {
                     Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                     ForeColor = UiStyle.Navy,
+                    Font = new Font("Segoe UI", 9.5f),
+                    Padding = new Padding(5, 7, 5, 9),
                     AutoEllipsis = false,
-                    Font = new Font("Segoe UI", 9.5f)
+                    Name = "CampaignWizardBottomStatus"
                 };
                 page.Controls.Add(status, 0, 4);
 
@@ -906,12 +908,16 @@ public sealed partial class MainForm
             // status line, requiring a hidden trip to the Advanced editor.
             var schedule = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1,
-                Padding = new Padding(9, 7, 9, 9)
+                Name = "WizardScheduleContent",
+                Dock = DockStyle.Top, Height = 380, RowCount = 5, ColumnCount = 1,
+                Padding = new Padding(9, 7, 9, 12)
             };
-            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+            // A top-docked fixed-height content surface makes the nested
+            // Panel scroll when a laptop/DPI viewport is too short.
+            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
-            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
             schedule.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             schedule.Controls.Add(new Label
             {
@@ -927,6 +933,16 @@ public sealed partial class MainForm
                 DropDownWidth = 540
             };
             TimeZoneChoices.Populate(zone, _owner._project.TimeZoneId);
+            var offsetInfo = new Label
+            {
+                Name = "WizardTimeZoneDifference",
+                Text = TimeZoneChoices.OffsetComparison(
+                    _owner._project.TimeZoneId, DateTimeOffset.UtcNow),
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = UiStyle.Green, AutoEllipsis = false,
+                Padding = new Padding(8, 6, 6, 8),
+                Font = new Font("Segoe UI", 9.5f)
+            };
             zone.SelectedIndexChanged += (_, _) =>
             {
                 string id = TimeZoneChoices.SelectedId(zone);
@@ -934,6 +950,8 @@ public sealed partial class MainForm
                 try
                 {
                     _owner.ChooseCampaignTimeZone(id);
+                    offsetInfo.Text = TimeZoneChoices.OffsetComparison(
+                        id, DateTimeOffset.UtcNow);
                     _everConfiguredSchedule = true;
                     _saved = false;
                     status.Text = "Selected time zone: " + id +
@@ -945,21 +963,24 @@ public sealed partial class MainForm
                 }
             };
             schedule.Controls.Add(zone, 0, 1);
+            schedule.Controls.Add(offsetInfo, 0, 2);
             var feedbackSummary = _owner._project.EnableFeedback
                 ? "Client Health: ENABLED\n" + _owner._project.FeedbackShare +
                     "  |  every " + _owner._project.FeedbackIntervalMinutes + " min"
                 : "Client Health: DISABLED. No client reports until enabled.";
-            var feedbackInfo = new Label
+            var feedbackInfo = new TextBox
             {
                 Text = feedbackSummary,
                 Name = "WizardFeedbackConfiguration",
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
+                ScrollBars = ScrollBars.Both, WordWrap = false,
+                BorderStyle = BorderStyle.None,
                 ForeColor = _owner._project.EnableFeedback ? UiStyle.Foreground : UiStyle.Muted,
-                BackColor = UiStyle.SoftBlue, AutoEllipsis = true,
-                Padding = new Padding(9, 7, 9, 7),
-                Font = new Font("Segoe UI", 9.5f)
+                BackColor = UiStyle.SoftBlue,
+                Font = new Font("Segoe UI", 9.5f),
+                Margin = new Padding(6, 6, 6, 5)
             };
-            schedule.Controls.Add(feedbackInfo, 0, 2);
+            schedule.Controls.Add(feedbackInfo, 0, 3);
             var list = new ListBox
             {
                 Dock = DockStyle.Fill, IntegralHeight = false,
@@ -972,7 +993,8 @@ public sealed partial class MainForm
                 catch { date = "Schedule not configured"; }
                 list.Items.Add($"{i + 1:00}  {date}  |  {Path.GetFileName(_owner._project.ImagePaths[i])}");
             }
-            schedule.Controls.Add(list, 0, 3);
+            schedule.Controls.Add(list, 0, 4);
+            body.AutoScroll = true;
             body.Controls.Add(schedule);
             status.Text = "Time zone: " + _owner._project.TimeZoneId +
                 (_everConfiguredSchedule || _owner._wizardScheduleConfigured

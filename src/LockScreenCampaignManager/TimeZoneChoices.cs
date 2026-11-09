@@ -46,4 +46,50 @@ internal static class TimeZoneChoices
 
     internal static string SelectedId(ComboBox box) =>
         box.SelectedItem as string ?? "";
+
+    // Display-only current offset comparison. Persist the original Windows
+    // time-zone ID, never a formatted UTC offset: DST changes during a campaign.
+    internal static string OffsetComparison(string timeZoneId, DateTimeOffset nowUtc)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId))
+            return "Choose a Windows time zone to compare UTC offsets.";
+        try
+        {
+            var selected = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var instant = nowUtc.ToUniversalTime();
+            TimeSpan campaignOffset = selected.GetUtcOffset(instant);
+            TimeSpan computerOffset = TimeZoneInfo.Local.GetUtcOffset(instant);
+            TimeSpan difference = campaignOffset - computerOffset;
+            string daylight = selected.IsDaylightSavingTime(instant) ? "Yes" : "No";
+            return "Campaign: UTC" + OffsetText(campaignOffset) +
+                "  |  This PC: UTC" + OffsetText(computerOffset) +
+                "  |  Difference: " + DifferenceText(difference) +
+                "  |  DST now: " + daylight;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return "Time zone unavailable on this PC; verify the selected Windows ID.";
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return "Time-zone rules are invalid on this PC; verify the selected ID.";
+        }
+    }
+
+    internal static string OffsetText(TimeSpan offset)
+    {
+        string sign = offset < TimeSpan.Zero ? "-" : "+";
+        var absolute = offset.Duration();
+        return sign + ((int)absolute.TotalHours).ToString("D2") +
+            ":" + absolute.Minutes.ToString("D2");
+    }
+
+    private static string DifferenceText(TimeSpan difference)
+    {
+        if (difference == TimeSpan.Zero) return "0 h";
+        string sign = difference < TimeSpan.Zero ? "-" : "+";
+        var absolute = difference.Duration();
+        return sign + ((int)absolute.TotalHours).ToString() +
+            (absolute.Minutes == 0 ? " h" : " h " + absolute.Minutes + " min");
+    }
 }

@@ -94,19 +94,31 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
             Padding = new Padding(13), BackColor = UiStyle.Canvas };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
         Controls.Add(layout);
         var config = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true };
-        _root.Width = 275;
+        _root.Name = "ClientHealthSmbPath";
+        _root.Width = 430;
+        _root.Height = 42;
+        _root.Multiline = true;
+        _root.WordWrap = false;
+        _root.ScrollBars = ScrollBars.Horizontal;
+        _root.AcceptsReturn = false;
+        _root.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) e.SuppressKeyPress = true;
+        };
         _root.Text = _project.FeedbackShare;
         _root.PlaceholderText = @"\\fileserver\LockScreenReports$";
-        _campaignId.Width = 258;
+        _campaignId.Width = 305;
         _campaignId.Text = CampaignSchedule.BuildId(_project);
         config.Controls.Add(new Label { Text = "SMB Share", AutoSize = true, Margin = new Padding(0, 17, 8, 0) });
         config.Controls.Add(_root);
+        config.Controls.Add(Action("Browse SMB...", BrowseShare, 155));
+        config.Controls.Add(Action("Copy path", CopyShare, 128));
         config.Controls.Add(new Label { Text = "Campaign ID", AutoSize = true, Margin = new Padding(8, 17, 8, 0) });
         config.Controls.Add(_campaignId);
         _auto.Text = "Auto refresh (15 sec)";
@@ -136,6 +148,9 @@ internal sealed class ClientFeedbackPanel : UserControl
         _grid.MultiSelect = true;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _grid.ColumnHeadersHeight = Math.Max(_grid.ColumnHeadersHeight, 45);
+        _grid.RowTemplate.Height = Math.Max(_grid.RowTemplate.Height, 40);
+        _grid.ScrollBars = ScrollBars.Both;
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Computer", FillWeight = 128 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Condition", FillWeight = 160 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Stage", FillWeight = 75 });
@@ -146,19 +161,48 @@ internal sealed class ClientFeedbackPanel : UserControl
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Task", FillWeight = 48 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Agent version", FillWeight = 104 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Client type", FillWeight = 92 });
+        foreach (DataGridViewColumn column in _grid.Columns)
+            column.MinimumWidth = Math.Max(94, (int)column.FillWeight);
         layout.Controls.Add(_grid, 0, 2);
         var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         foot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _totals.Dock = DockStyle.Fill;
+        _totals.AutoEllipsis = false;
+        _totals.Padding = new Padding(4, 7, 4, 7);
         _totals.Font = new Font("Segoe UI Semibold", 10f);
         _totals.Text = "Load computers from OU + Security Group to calculate fleet totals.";
         _message.Dock = DockStyle.Fill;
+        _message.AutoEllipsis = false;
+        _message.Padding = new Padding(4, 6, 4, 6);
         _message.ForeColor = UiStyle.Muted;
         _message.Text = "No data. Reports are diagnostic; Healthy does not prove the image is visible.";
         foot.Controls.Add(_totals, 0, 0);
         foot.Controls.Add(_message, 0, 1);
         layout.Controls.Add(foot, 0, 3);
+    }
+
+    private void CopyShare()
+    {
+        if (!string.IsNullOrWhiteSpace(_root.Text))
+            try { Clipboard.SetText(_root.Text.Trim()); }
+            catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Copy SMB share", ex); }
+    }
+
+    private void BrowseShare()
+    {
+        using var picker = new FolderBrowserDialog
+        {
+            Description = "Select the dedicated SMB share root, not a local directory.",
+            UseDescriptionForTitle = true, ShowNewFolderButton = false
+        };
+        if (picker.ShowDialog(FindForm()) != DialogResult.OK) return;
+        try { _root.Text = FeedbackPath.ValidateRoot(picker.SelectedPath); }
+        catch (ArgumentException)
+        {
+            MessageBox.Show(FindForm(), "Select a UNC share root: \\\\server\\share$",
+                "SMB share root required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private async Task LoadExpectedAsync()

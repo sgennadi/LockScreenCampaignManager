@@ -14,8 +14,8 @@ internal sealed class FeedbackSettingsDialog : Form
     {
         _project = project;
         Text = "Client feedback — SMB";
-        Size = new Size(805, 485);
-        MinimumSize = new Size(630, 420);
+        Size = new Size(930, 560);
+        MinimumSize = new Size(705, 475);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterParent;
         Font = new Font("Segoe UI", 9.5f);
@@ -25,11 +25,11 @@ internal sealed class FeedbackSettingsDialog : Form
             Padding = new Padding(20), BackColor = UiStyle.Canvas,
             AutoScroll = true
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 75));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 59));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
         Controls.Add(layout);
         layout.Controls.Add(new Label
         {
@@ -44,7 +44,16 @@ internal sealed class FeedbackSettingsDialog : Form
         var source = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         source.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 78));
         source.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+        _share.Name = "FeedbackShareScrollable";
         _share.Dock = DockStyle.Fill;
+        _share.Multiline = true;
+        _share.ScrollBars = ScrollBars.Horizontal;
+        _share.WordWrap = false;
+        _share.AcceptsReturn = false;
+        _share.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) e.SuppressKeyPress = true;
+        };
         _share.PlaceholderText = @"\\fileserver\LockScreenReports$";
         _share.Text = project.FeedbackShare;
         source.Controls.Add(Field("Dedicated SMB share (NOT SYSVOL/NETLOGON)", _share), 0, 0);
@@ -55,8 +64,13 @@ internal sealed class FeedbackSettingsDialog : Form
         source.Controls.Add(Field("Interval (minutes)", _interval), 1, 0);
         layout.Controls.Add(source, 0, 2);
 
-        layout.Controls.Add(new Label
+        layout.Controls.Add(new TextBox
         {
+            Name = "FeedbackSmbInstructions",
+            ReadOnly = true, Multiline = true, WordWrap = true,
+            ScrollBars = ScrollBars.Vertical,
+            BorderStyle = BorderStyle.None,
+            BackColor = UiStyle.Canvas,
             Text = "How it works: GPO installs the agent; each client periodically " +
                    "writes a small JSON report to the <share>\\<CampaignID> folder. " +
                    "When the manager is open, the table refreshes every 15 seconds. " +
@@ -77,6 +91,8 @@ internal sealed class FeedbackSettingsDialog : Form
         };
         actions.Controls.Add(Button("Save", () => Save(), 140, true));
         actions.Controls.Add(Button("Cancel", Close, 110));
+        actions.Controls.Add(Button("Browse SMB...", BrowseShare, 165));
+        actions.Controls.Add(Button("Copy share path", CopyShare, 185));
         actions.Controls.Add(Button("Create campaign folder", CreateFolder, 240));
         layout.Controls.Add(actions, 0, 4);
         SetEnabledFields();
@@ -87,9 +103,17 @@ internal sealed class FeedbackSettingsDialog : Form
     private static Control Field(string title, Control control)
     {
         var box = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-        box.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+        box.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         box.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        box.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill }, 0, 0);
+        var caption = new Label { Text = title, Dock = DockStyle.Fill,
+            AutoEllipsis = false, TextAlign = ContentAlignment.MiddleLeft };
+        box.Controls.Add(caption, 0, 0);
+        caption.FontChanged += (_, _) =>
+        {
+            if (!box.IsDisposed)
+                box.RowStyles[0].Height = Math.Max(36,
+                    TextRenderer.MeasureText("Agpqy", caption.Font).Height + 10);
+        };
         box.Controls.Add(control, 0, 1);
         return box;
     }
@@ -109,6 +133,31 @@ internal sealed class FeedbackSettingsDialog : Form
     {
         _share.Enabled = _enabled.Checked;
         _interval.Enabled = _enabled.Checked;
+    }
+
+    private void CopyShare()
+    {
+        if (!string.IsNullOrWhiteSpace(_share.Text))
+            try { Clipboard.SetText(_share.Text.Trim()); }
+            catch (Exception ex) { UiErrorDialog.Show(this, "Copy SMB share", ex); }
+    }
+
+    private void BrowseShare()
+    {
+        using var picker = new FolderBrowserDialog
+        {
+            Description = "Select the root of a dedicated SMB share (not its campaign folder).",
+            UseDescriptionForTitle = true, ShowNewFolderButton = false
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        try { _share.Text = FeedbackPath.ValidateRoot(picker.SelectedPath); }
+        catch (ArgumentException)
+        {
+            MessageBox.Show(this,
+                "Choose an SMB share root such as \\\\server\\share$; " +
+                "do not select a local folder or campaign subfolder.",
+                "SMB share root required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
     private void Save()
     {

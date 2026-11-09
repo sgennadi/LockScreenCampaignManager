@@ -15,7 +15,7 @@ internal sealed class UiPreferences
     public UiPreferences Validate()
     {
         if (Density is not ("Auto" or "Compact" or "Comfortable")) Density = "Auto";
-        UiScalePercent = Math.Clamp(UiScalePercent, 100, 150);
+        UiScalePercent = Math.Clamp(UiScalePercent, 100, 200);
         FontScalePercent = Math.Clamp(FontScalePercent, 90, 125);
         return this;
     }
@@ -145,29 +145,43 @@ internal static class UiStyle
                 }
                 else if (c is FlowLayoutPanel flow) flow.AutoScroll = true;
             }
-            // Header labels with large fonts need enough vertical room at
-            // 125-200% DPI. Adapt absolute table rows instead of clipping the
-            // descenders of letters such as g, p, q and y.
-            foreach (var label in all.OfType<Label>())
-            {
-                if (label.Font.SizeInPoints < 13f ||
-                    label.Parent is not TableLayoutPanel table ||
-                    label.AutoSize || label.Dock != DockStyle.Fill)
-                    continue;
-                int row = table.GetRow(label);
-                if (row < 0 || row >= table.RowStyles.Count ||
-                    table.RowStyles[row].SizeType != SizeType.Absolute)
-                    continue;
-                int required = TextRenderer.MeasureText("Agpqy",
-                    label.Font, Size.Empty, TextFormatFlags.SingleLine).Height +
-                    label.Padding.Vertical + label.Margin.Vertical + 7;
-                if (table.RowStyles[row].Height < required)
-                    table.RowStyles[row].Height = required;
-            }
+            // A single control fitting its font is not enough: a fixed
+            // TableLayoutPanel row can still shave off descenders, especially
+            // at 125-200% scaling. Check all one-line text controls, not only
+            // large titles; keep percent-sized content panes flexible.
+            FitDpiTableRows(all);
             form.BackColor = Canvas;
         }
         finally { form.ResumeLayout(true); }
     }
+    internal static void FitDpiTableRows(IEnumerable<Control> controls)
+    {
+        foreach (Control child in controls)
+        {
+            if (child.Parent is not TableLayoutPanel parent ||
+                child.Dock != DockStyle.Fill) continue;
+            int row = parent.GetRow(child);
+            if (row < 0 || row >= parent.RowStyles.Count ||
+                parent.RowStyles[row].SizeType != SizeType.Absolute) continue;
+
+            int glyph = TextRenderer.MeasureText("Agpqy", child.Font,
+                new Size(4096, 4096),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+            int minimum = child switch
+            {
+                Label label when !label.AutoSize =>
+                    glyph + label.Padding.Vertical + label.Margin.Vertical + 9,
+                CheckBox or RadioButton =>
+                    glyph + child.Padding.Vertical + child.Margin.Vertical + 13,
+                Button => glyph + child.Margin.Vertical + 17,
+                ComboBox picker => picker.PreferredHeight + picker.Margin.Vertical + 7,
+                _ => 0
+            };
+            if (minimum > 0 && parent.RowStyles[row].Height < minimum)
+                parent.RowStyles[row].Height = minimum;
+        }
+    }
+
     // Keep both rows of a dark Wizard header independently DPI-aware.
     // The parent table's absolute header row must grow together with the
     // child rows; growing only the child caused the subtitle to be clipped.
