@@ -100,7 +100,7 @@ public sealed partial class MainForm
         internal CampaignWizardDialog(MainForm owner)
         {
             _owner = owner;
-            Text = "LockScreen Campaign Manager - Campaign Wizard";
+            Text = "LockScreen Campaign Manager " + AppVersion.Current + " - Campaign Wizard";
             Font = new Font("Segoe UI", 10f);
             StartPosition = FormStartPosition.CenterParent;
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -146,7 +146,9 @@ public sealed partial class MainForm
 
             _header.Dock = DockStyle.Fill;
             _header.RowCount = 2;
-            _header.ColumnCount = 1;
+            _header.ColumnCount = 2;
+            _header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            _header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205));
             _header.Padding = new Padding(22, 13, 18, 10);
             _header.BackColor = UiStyle.Navy;
             _header.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
@@ -169,7 +171,16 @@ public sealed partial class MainForm
             _heading.FontChanged += (_, _) => FitHeader();
             _subheading.FontChanged += (_, _) => FitHeader();
             _header.Controls.Add(_heading, 0, 0);
+            _header.Controls.Add(new Label {
+                Name = "CampaignWizardVersion",
+                Text = "Version " + AppVersion.Current,
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(223, 238, 255),
+                Font = new Font("Segoe UI Semibold", 10f),
+                AutoEllipsis = true
+            }, 1, 0);
             _header.Controls.Add(_subheading, 0, 1);
+            _header.SetColumnSpan(_subheading, 2);
             _root.Controls.Add(_header, 0, 0);
             _root.SetColumnSpan(_header, 2);
 
