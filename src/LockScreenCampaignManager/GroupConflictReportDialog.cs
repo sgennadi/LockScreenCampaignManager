@@ -208,7 +208,7 @@ internal sealed class GroupConflictReportDialog : Form
                     t.Target + " | " + t.Scope + " | " +
                     t.HighRisk + " high / " + t.Warnings + " warning\r\n" +
                     "OU: " + t.OuDn + "\r\nGroup: " + t.GroupDn + "\r\n" +
-                    string.Join("\r\n", t.Notes.Select(n => "COVERAGE: " + n)))));
+                    string.Join("\r\n", t.Notes.Select(n => "COVERAGE: " + n))));
             return;
         }
         var target = _targets.First(t =>
