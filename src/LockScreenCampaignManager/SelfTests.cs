@@ -208,6 +208,85 @@ internal static class SelfTests
         Check(decoded.Contains("scrnsave.scr", StringComparison.Ordinal) &&
             decoded.Contains("660", StringComparison.Ordinal),
             "Screen Saver timeout/program preserved");
+
+        // Regression: v0.4.0-preview.72 serialized key/value names without the
+        // required UTF-16 NUL delimiter. Substring tests did not detect it.
+        var parsed = NativeUserScreenSaverGpo.ParseUserRegistryPol(registry);
+        Check(parsed.Count == 4 &&
+            parsed["ScreenSaveActive"] == "1" &&
+            parsed["SCRNSAVE.EXE"] == "scrnsave.scr" &&
+            parsed["ScreenSaveTimeOut"] == "660" &&
+            parsed["ScreenSaverIsSecure"] == "1",
+            "MS-GPREG parser roundtrip with exact Screen Saver policy values");
+        NativeUserScreenSaverGpo.VerifyScreenSaverRegistryPol(
+            registry, "scrnsave.scr", 660, true);
+        byte[] passwordOff = NativeUserScreenSaverGpo.BuildRegistryPol(
+            "Mystify.scr", 300, false);
+        var parsedOff = NativeUserScreenSaverGpo.ParseUserRegistryPol(passwordOff);
+        Check(parsedOff["ScreenSaverIsSecure"] == "0" &&
+            parsedOff["SCRNSAVE.EXE"] == "Mystify.scr" &&
+            parsedOff["ScreenSaveTimeOut"] == "300",
+            "Password-off and alternative built-in Screen Saver GPO roundtrip");
+
+        // The record starts with '[' as UTF16LE, then a NUL-terminated key.
+        // Verify the binary layout independently of the parser implementation.
+        int keyNull = 8 + 2 +
+            System.Text.Encoding.Unicode.GetByteCount(
+                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop");
+        Check(registry[keyNull] == 0 && registry[keyNull + 1] == 0 &&
+            registry[keyNull + 2] == (byte)';' && registry[keyNull + 3] == 0,
+            "MS-GPREG key must end with UTF-16 NUL before semicolon");
+        int valueNull = keyNull + 4 +
+            System.Text.Encoding.Unicode.GetByteCount("ScreenSaveActive");
+        Check(registry[valueNull] == 0 && registry[valueNull + 1] == 0 &&
+            registry[valueNull + 2] == (byte)';' && registry[valueNull + 3] == 0,
+            "MS-GPREG value must end with UTF-16 NUL before semicolon");
+
+        static bool RejectCorruptScreenSaverPol(byte[] content)
+        {
+            try { _ = NativeUserScreenSaverGpo.ParseUserRegistryPol(content); return false; }
+            catch (InvalidDataException) { return true; }
+        }
+        byte[] missingKeyTerminator = registry.ToArray();
+        missingKeyTerminator[keyNull] = 0x41;
+        Check(RejectCorruptScreenSaverPol(missingKeyTerminator),
+            "MS-GPREG rejects missing key NUL");
+        byte[] missingValueTerminator = registry.ToArray();
+        missingValueTerminator[valueNull] = 0x41;
+        Check(RejectCorruptScreenSaverPol(missingValueTerminator),
+            "MS-GPREG rejects missing value NUL");
+        Check(RejectCorruptScreenSaverPol(registry[..^1]),
+            "MS-GPREG rejects truncated last record");
+        byte[] changedKind = registry.ToArray();
+        int kindOffset = valueNull + 4;
+        changedKind[kindOffset] = 4; // Not REG_SZ.
+        Check(RejectCorruptScreenSaverPol(changedKind),
+            "MS-GPREG rejects unexpected REG_DWORD type");
+        bool changedValueRejected = false;
+        try {
+            NativeUserScreenSaverGpo.VerifyScreenSaverRegistryPol(
+                passwordOff, "Mystify.scr", 300, true);
+        }
+        catch (InvalidDataException) { changedValueRejected = true; }
+        Check(changedValueRejected, "MS-GPREG fails closed on mismatched approval.");
+
+        string initialGpt = "[General]\r\nVersion=0\r\n" +
+            "gPCFunctionalityVersion=2\r\n[Other]\r\nSafe=1\r\n";
+        string upgradedGpt = NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(initialGpt);
+        Check(upgradedGpt == initialGpt.Replace("Version=0", "Version=65536",
+                StringComparison.Ordinal) &&
+            upgradedGpt.Contains("Version=65536\r\ngPCFunctionalityVersion=2",
+                StringComparison.Ordinal),
+            "User GPO GPT upgrade preserves following lines and sections");
+        bool gptDenied = false;
+        try
+        {
+            _ = NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(
+                "[General]\r\nVersion=0\r\nVersion=0\r\n");
+        }
+        catch (InvalidDataException) { gptDenied = true; }
+        Check(gptDenied, "Duplicate fresh user GPT Version rows must fail closed.");
+
         bool denied = false;
         try { NativeUserScreenSaverGpo.BuildRegistryPol("bad.exe", 600, true); }
         catch (ArgumentException) { denied = true; }
