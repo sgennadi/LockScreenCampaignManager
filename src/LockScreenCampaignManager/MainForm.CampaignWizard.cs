@@ -1078,6 +1078,7 @@ public sealed partial class MainForm
                             "The Remove local JPG pilot button restores your original settings.",
                             "Local JPG pilot installed", MessageBoxButtons.OK,
                             MessageBoxIcon.Information);
+                        RenderPage(); // Reveal Remove immediately after a successful install.
                     }
                     catch (Exception ex)
                     {
