@@ -204,6 +204,8 @@ internal static class UiLayoutSmokeTests
             fixture = Path.Combine(Path.GetTempPath(),
                 "lscm-preview-smoke-" + Guid.NewGuid().ToString("N") + ".png");
             using var sample = new Bitmap(120, 68);
+            using (var brush = Graphics.FromImage(sample))
+                brush.Clear(Color.FromArgb(23, 201, 143));
             sample.Save(fixture, System.Drawing.Imaging.ImageFormat.Png);
         }
         var editor = new MainForm();
@@ -485,6 +487,31 @@ internal static class UiLayoutSmokeTests
                         throw new InvalidOperationException(
                             $"Wizard preview is visually collapsed at {profile.Name}: " +
                             $"{imagePreview.Width} x {imagePreview.Height}.");
+                    // A non-null bitmap alone does not prove that it is painted.
+                    imagePreview.CreateControl();
+                    using var painted = new Bitmap(imagePreview.Width, imagePreview.Height);
+                    imagePreview.DrawToBitmap(painted,
+                        new Rectangle(0, 0, painted.Width, painted.Height));
+                    Color center = painted.GetPixel(painted.Width / 2, painted.Height / 2);
+                    if (Math.Abs(center.R - 23) > 10 ||
+                        Math.Abs(center.G - 201) > 10 ||
+                        Math.Abs(center.B - 143) > 10)
+                        throw new InvalidOperationException(
+                            $"Wizard preview did not paint the selected image at {profile.Name}: " +
+                            $"center={center.R},{center.G},{center.B}.");
+                }
+                if (window.Name == "AD / GPO deployment - offline Wizard")
+                {
+                    var selector = Descendants(form).OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentClientType");
+                    if (selector is null ||
+                        selector.DropDownStyle != ComboBoxStyle.DropDownList ||
+                        selector.Items.Count != 2 || selector.SelectedIndex != 0 ||
+                        selector.Items[0]?.ToString()?.Contains(".ps1", StringComparison.Ordinal) != true ||
+                        selector.Items[1]?.ToString()?.Contains(".exe", StringComparison.Ordinal) != true ||
+                        selector.Width < 250 || selector.Height < selector.PreferredHeight)
+                        throw new InvalidOperationException(
+                            $"Deployment client selector PS1/EXE missing or clipped at {profile.Name}");
                 }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
