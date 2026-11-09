@@ -148,6 +148,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('_advancedDc.Dock = DockStyle.Fill', ad)
         self.assertIn('_connectionPage.AutoScroll = true', ad)
         self.assertIn('FitAdvancedConnectionLayout()', ad)
+        self.assertIn('captionLabel.FontChanged += (_, _) => FitCaption()', ad)
         self.assertIn('ShowAdvancedOptionsForSmokeTest()', ad)
         self.assertIn('CheckUpdaterHeader(form, profile.Name)', smoke)
         self.assertIn('CheckAdAdvancedOptions(form, profile.Name)', smoke)
