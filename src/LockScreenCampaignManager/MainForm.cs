@@ -166,7 +166,24 @@ public sealed partial class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
             Margin = new Padding(3, 0, 0, 0)
         };
-        header.Controls.Add(mainTitle, 0, 0);
+        // Keep the release number visible on the main canvas, not just in
+        // the Windows title bar. A separate right-aligned label avoids
+        // cropping the descenders of the large heading at high DPI.
+        var headerIdentity = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Margin = Padding.Empty, Padding = Padding.Empty
+        };
+        headerIdentity.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        headerIdentity.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 215));
+        headerIdentity.Controls.Add(mainTitle, 0, 0);
+        headerIdentity.Controls.Add(new Label {
+            Name = "MainHeaderVersion", Text = "Version " + AppVersion.Current,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+            AutoEllipsis = true, ForeColor = UiStyle.Accent,
+            Font = new Font("Segoe UI Semibold", 10f),
+            AccessibleName = "LockScreen Campaign Manager version " + AppVersion.Current
+        }, 1, 0);
+        header.Controls.Add(headerIdentity, 0, 0);
         header.Controls.Add(mainSteps, 0, 1);
         _companyLabel.Name = "MainHeaderCompany";
         _companyLabel.Dock = DockStyle.Fill;

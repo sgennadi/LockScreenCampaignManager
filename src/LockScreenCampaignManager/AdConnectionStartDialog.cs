@@ -162,7 +162,7 @@ internal sealed class AdConnectionStartDialog : Form
     internal AdConnectionStartDialog(CompanyProfile? company = null)
     {
         _company = company;
-        Text = "LockScreen Campaign Manager - AD Connection Wizard";
+        Text = "LockScreen Campaign Manager " + AppVersion.Current + " - AD Connection Wizard";
         Font = new Font("Segoe UI", 9.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterParent;
@@ -307,9 +307,12 @@ internal sealed class AdConnectionStartDialog : Form
         Controls.Add(root);
 
         var title = new TableLayoutPanel {
-            Dock = DockStyle.Fill, RowCount = 2, BackColor = UiStyle.Navy,
+            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2,
+            BackColor = UiStyle.Navy,
             Padding = new Padding(20, 12, 16, 8)
         };
+        title.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        title.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205));
         title.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
         title.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         var headerTitle = new Label {
@@ -329,7 +332,14 @@ internal sealed class AdConnectionStartDialog : Form
             AutoEllipsis = true
         };
         title.Controls.Add(headerTitle, 0, 0);
+        title.Controls.Add(new Label {
+            Name = "AdWizardVersion", Text = "Version " + AppVersion.Current,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+            AutoEllipsis = true, ForeColor = Color.FromArgb(223, 238, 255),
+            Font = new Font("Segoe UI Semibold", 10f)
+        }, 1, 0);
         title.Controls.Add(headerSubtitle, 0, 1);
+        title.SetColumnSpan(headerSubtitle, 2);
         root.Controls.Add(title, 0, 0);
         root.SetColumnSpan(title, 2);
         void FitAdHeader() => UiStyle.FitWizardHeader(root, title,

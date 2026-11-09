@@ -2500,7 +2500,7 @@ StartExecutePSFirst=true
                 computerName = "PC001", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.1"
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.1", clientType = "PowerShell"
             };
             File.WriteAllText(Path.Combine(root, "PC001.json"),
                 System.Text.Json.JsonSerializer.Serialize(good));
@@ -2512,10 +2512,19 @@ StartExecutePSFirst=true
                 snapshot.LatestReports.ContainsKey("PC001") &&
                 !snapshot.LatestReports.ContainsKey("PC002"),
                 "agent overview counts validated reports only for AD-expected devices");
+            Check(snapshot.LatestReports["PC001"].ClientType == "PowerShell" &&
+                snapshot.Rows.First(row => row.Computer == "PC001").ClientType == "PowerShell",
+                "explicit PS1 agent type is retained in client health and diagnostics");
+            Check(AgentReportEvidence.MethodAgreement("PowerShell", "PowerShell") == "Reported match" &&
+                AgentReportEvidence.MethodAgreement("Executable", "PowerShell") == "Reported mismatch" &&
+                AgentReportEvidence.MethodAgreement("PowerShell", "Unknown") == "Not reported (legacy client)" &&
+                AgentReportEvidence.MethodAgreement("Unknown", "Executable") == "GPO method unknown",
+                "GPO comparison distinguishes matching, mismatching and legacy/unknown method");
             var activeEvidence = AgentReportEvidence.Interpret("PC001",
                 "test-campaign-202611081400", snapshot.LatestReports["PC001"], now, 15);
             Check(activeEvidence.Condition == "Reported healthy" &&
-                activeEvidence.Fresh && activeEvidence.Version == "0.4.0-preview.1",
+                activeEvidence.Fresh && activeEvidence.Version == "0.4.0-preview.1" &&
+                activeEvidence.ClientType == "PowerShell",
                 "fresh SMB feedback is displayed as reported health, never online proof");
             var missingEvidence = AgentReportEvidence.Interpret("PC002",
                 "test-campaign-202611081400", null, now, 15);
@@ -2545,6 +2554,9 @@ StartExecutePSFirst=true
                 new[] { "PC001" }, now.AddHours(24));
             Check(afterExpiry.Completed == 1 && afterExpiry.Stale == 0,
                 "terminal completion remains visible after feedback heartbeat expires");
+            Check(afterExpiry.LatestReports["PC001"].ClientType == "Unknown" &&
+                afterExpiry.Rows.Single().ClientType == "Unknown",
+                "legacy schema-v1 reports without clientType stay readable but are not called PS1");
             File.WriteAllText(Path.Combine(root, "PC001.json"),
                 System.Text.Json.JsonSerializer.Serialize(good));
             var forged = new
@@ -2561,6 +2573,38 @@ StartExecutePSFirst=true
                 new[] { "PC001", "PC002" }, now);
             Check(snapshot.Healthy == 1 && snapshot.InvalidReports == 1,
                 "forged file name is rejected");
+
+            var exe = new {
+                schemaVersion = 1, campaignId = "test-campaign-202611081400",
+                computerName = "PC003", timestampUtc = now,
+                stage = "Active", health = "Healthy", expectedImage = "02.jpg",
+                imageMatches = true, registryMatches = true, taskPresent = true,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.69-native",
+                clientType = "Executable"
+            };
+            File.WriteAllText(Path.Combine(root, "PC003.json"),
+                System.Text.Json.JsonSerializer.Serialize(exe));
+            snapshot = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001", "PC003" }, now);
+            Check(snapshot.LatestReports["PC003"].ClientType == "Executable" &&
+                AgentReportEvidence.HasReportedMethodMismatch("PowerShell", "Executable"),
+                "native EXE type is explicit and a conflicting managed GPO method is reported");
+
+            var invalidMethod = new {
+                schemaVersion = 1, campaignId = "test-campaign-202611081400",
+                computerName = "PC004", timestampUtc = now,
+                stage = "Active", health = "Healthy", expectedImage = "02.jpg",
+                imageMatches = true, registryMatches = true, taskPresent = true,
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.69",
+                clientType = "=HYPERLINK(\"http://untrusted\")"
+            };
+            File.WriteAllText(Path.Combine(root, "PC004.json"),
+                System.Text.Json.JsonSerializer.Serialize(invalidMethod));
+            snapshot = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
+                new[] { "PC001", "PC003", "PC004" }, now);
+            Check(snapshot.InvalidReports >= 2 &&
+                !snapshot.LatestReports.ContainsKey("PC004"),
+                "unrecognized client method cannot enter the report list or spreadsheet");
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }

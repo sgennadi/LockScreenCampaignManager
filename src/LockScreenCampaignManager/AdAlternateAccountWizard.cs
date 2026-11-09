@@ -67,7 +67,7 @@ internal sealed class AdAlternateAccountWizard : Form
         _allowSaving = allowSaving;
         _forgetSavedLogin = forgetSavedLogin;
 
-        Text = "LockScreen Campaign Manager - Select AD account";
+        Text = "LockScreen Campaign Manager " + AppVersion.Current + " - Select AD account";
         Font = new Font("Segoe UI", 9.5f);
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterParent;
@@ -196,7 +196,7 @@ internal sealed class AdAlternateAccountWizard : Form
         rail.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         rail.Controls.Add(new Label
         {
-            Text = "ACTIVE DIRECTORY", Dock = DockStyle.Fill, AutoEllipsis = true,
+            Text = "AD SIGN-IN | " + AppVersion.Current, Dock = DockStyle.Fill, AutoEllipsis = true,
             ForeColor = Color.FromArgb(178, 208, 251),
             Font = new Font("Segoe UI Semibold", 10f)
         }, 0, 0);

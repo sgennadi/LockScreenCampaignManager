@@ -53,12 +53,15 @@ internal sealed partial class GpoOperationsForm : Form
     private sealed record PcRow(string Name, string Sam,
         bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
         DateTimeOffset? AdLastSeenUtc = null, bool? AdDisabled = null,
-        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null)
+        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null,
+        string MethodAgreement = "Not checked")
     {
         public override string ToString() =>
             $"{Name}   |   RPC: " +
             (RpcReachable is null ? "unknown" : RpcReachable.Value ? "reachable" : "unreachable") +
             "   |   Agent: " + (AgentReport?.Condition ?? "not checked") +
+            "   |   Client type: " + (AgentReport?.ClientType ?? "Unknown") +
+            "   |   GPO method: " + MethodAgreement +
             "   |   Version: " + (AgentReport?.Version ?? "—") +
             "   |   Last report: " +
             (AgentReport?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—") +
@@ -137,12 +140,22 @@ internal sealed partial class GpoOperationsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
         Controls.Add(root);
-        var headline = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        var headline = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
+        headline.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        headline.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
         headline.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         headline.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         headline.Controls.Add(new Label { Text = "Domain campaign management", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 17f), ForeColor = UiStyle.Foreground }, 0, 0);
-        headline.Controls.Add(Note("Domain: " + _domain + "  |  DC: " + _dc + "  |  OU: " + _ouDn), 0, 1);
+        headline.Controls.Add(new Label {
+            Name = "AgentManagementVersion", Text = "Version " + AppVersion.Current,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+            ForeColor = UiStyle.Accent, AutoEllipsis = true,
+            Font = new Font("Segoe UI Semibold", 10f)
+        }, 1, 0);
+        var scopeLabel = Note("Domain: " + _domain + "  |  DC: " + _dc + "  |  OU: " + _ouDn);
+        headline.Controls.Add(scopeLabel, 0, 1);
+        headline.SetColumnSpan(scopeLabel, 2);
         root.Controls.Add(headline, 0, 0);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(15, 7) };

@@ -87,7 +87,7 @@ internal sealed class DomainDeploymentForm : Form
             throw new InvalidOperationException(
                 "The selected company does not match this campaign project.");
         _company = company;
-        Text = "LockScreen Campaign Manager - Active Directory Deployment" +
+        Text = "LockScreen Campaign Manager " + AppVersion.Current + " - Active Directory Deployment" +
             (_company is null ? "" : " — " + _company.Name);
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1280, 870);
@@ -188,8 +188,21 @@ internal sealed class DomainDeploymentForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
         Controls.Add(layout);
-        layout.Controls.Add(new Label { Text = "Active Directory / GPO Deployment", Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold), ForeColor = Color.FromArgb(30, 44, 65) }, 0, 0);
+        var pageHeader = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2 };
+        pageHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        pageHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        pageHeader.Controls.Add(new Label {
+            Text = "Active Directory / GPO Deployment", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold),
+            ForeColor = Color.FromArgb(30, 44, 65), AutoEllipsis = true
+        }, 0, 0);
+        pageHeader.Controls.Add(new Label {
+            Name = "DeploymentVersion", Text = "Version " + AppVersion.Current,
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
+            ForeColor = UiStyle.Accent, AutoEllipsis = true,
+            Font = new Font("Segoe UI Semibold", 10f)
+        }, 1, 0);
+        layout.Controls.Add(pageHeader, 0, 0);
         var navigation = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));

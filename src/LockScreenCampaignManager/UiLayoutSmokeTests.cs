@@ -313,10 +313,16 @@ internal static class UiLayoutSmokeTests
             throw new InvalidOperationException("Missing main editor step label.");
         Label company = labels.FirstOrDefault(x => x.Name == "MainHeaderCompany") ??
             throw new InvalidOperationException("Missing main editor company label.");
-        if (title.Parent is not TableLayoutPanel header ||
+        if (title.Parent is not TableLayoutPanel identity ||
+            identity.Parent is not TableLayoutPanel header ||
             header.Parent is not TableLayoutPanel outer ||
             header.RowStyles.Count < 4)
-            throw new InvalidOperationException("Main editor header layout invalid.");
+            throw new InvalidOperationException("Main editor title and version header layout invalid.");
+        Label? visibleVersion = labels.FirstOrDefault(x => x.Name == "MainHeaderVersion");
+        if (visibleVersion is null || visibleVersion.Parent != identity ||
+            identity.GetColumn(visibleVersion) != 1 ||
+            identity.GetColumn(title) != 0)
+            throw new InvalidOperationException("Main title/version alignment is invalid.");
         Control actions = header.GetControlFromPosition(0, 3) ??
             throw new InvalidOperationException("AD controls missing from main header.");
         UiStyle.FitEditorHeader(outer, header, title, steps, company, actions, 190);
@@ -330,8 +336,8 @@ internal static class UiLayoutSmokeTests
         {
             int measured = TextRenderer.MeasureText("Agpqy", label.Font).Height +
                 label.Padding.Vertical + label.Margin.Vertical + 5;
-            int row = header.GetRow(label);
-            if (header.RowStyles[row].Height < measured)
+            int row = label == title ? 0 : header.GetRow(label);
+            if (row < 0 || header.RowStyles[row].Height < measured)
                 throw new InvalidOperationException(
                     $"Main editor header clipped {label.Name} at {profile}.");
         }
@@ -448,6 +454,29 @@ internal static class UiLayoutSmokeTests
                 form.PerformLayout();
                 CheckMainEditorHeader(form, profile.Name);
                 CheckWizardHeader(form, profile.Name);
+                // Every operator-facing primary window must show the SAME
+                // version as the package. This catches stale hard-coded tags.
+                string? versionLabel = window.Name switch
+                {
+                    "Campaign editor - offline Wizard" or
+                    "Campaign editor - update available" => "MainHeaderVersion",
+                    "Campaign Wizard - AD connection" or "Campaign Wizard - images" or
+                    "Campaign Wizard - arrange" or "Campaign Wizard - schedule" or
+                    "Campaign Wizard - save" or "Campaign Wizard - deploy" => "CampaignWizardVersion",
+                    "Agent Management - read-only desktop layout" => "AgentManagementVersion",
+                    "AD / GPO deployment - offline Wizard" => "DeploymentVersion",
+                    "AD first-step connect/read" => "AdWizardVersion",
+                    _ => null
+                };
+                if (versionLabel is not null)
+                {
+                    Label? label = Descendants(form).OfType<Label>()
+                        .FirstOrDefault(x => x.Name == versionLabel);
+                    if (label is null || label.Text != "Version " + AppVersion.Current ||
+                        label.Width < 130 || label.Height < 18)
+                        throw new InvalidOperationException(
+                            "Missing/clipped live version " + versionLabel + " at " + profile.Name);
+                }
                 CheckWizardFooter(form, profile.Name);
                 CheckTimeZoneSelectors(form, profile.Name);
                 if (window.Name is "Campaign Wizard - images" or "Campaign Wizard - arrange")

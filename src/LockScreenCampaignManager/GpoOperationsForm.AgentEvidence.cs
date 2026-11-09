@@ -32,7 +32,9 @@ internal sealed partial class GpoOperationsForm
         for (int i = 0; i < _agentInventory.Count; ++i)
         {
             var row = _agentInventory[i];
-            _agentInventory[i] = row with { AgentReport = null, LastAction = null };
+            _agentInventory[i] = row with {
+                AgentReport = null, LastAction = null, MethodAgreement = "Not checked"
+            };
         }
         if (!IsDisposed && !Disposing) DrawAgentInventory();
     }
@@ -101,9 +103,12 @@ internal sealed partial class GpoOperationsForm
                 string shortName = row.Name.Split('.')[0].ToUpperInvariant();
                 snapshot.LatestReports.TryGetValue(shortName, out var report);
                 if (report is not null) reported++;
+                var interpretation = AgentReportEvidence.Interpret(
+                    shortName, campaign, report, now, _project.FeedbackIntervalMinutes);
                 _agentInventory[i] = row with {
-                    AgentReport = AgentReportEvidence.Interpret(
-                        shortName, campaign, report, now, _project.FeedbackIntervalMinutes)
+                    AgentReport = interpretation,
+                    MethodAgreement = report is null ? "No report" :
+                        AgentReportEvidence.MethodAgreement(policy.ClientType, interpretation.ClientType)
                 };
             }
 
@@ -195,6 +200,13 @@ internal sealed partial class GpoOperationsForm
             " | Version: " + (evidence?.Version ?? "—") +
             " | Last: " + (evidence?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—"));
         if (evidence is not null) sb.AppendLine(evidence.Details);
+        sb.AppendLine("Managed GPO method: " +
+            (_policies.SelectedItem is GpoRow managed ? managed.ClientType : "Unknown") +
+            " | Client-reported type: " + (evidence?.ClientType ?? "Unknown") +
+            " | Comparison: " + row.MethodAgreement);
+        if (row.MethodAgreement == "Reported mismatch")
+            sb.AppendLine("WARNING: Client-reported type differs from the verified managed GPO method. " +
+                "Verify installed endpoint binary before any repair.");
         sb.AppendLine("Last remote task submission: " +
             (row.LastAction is { } task
                 ? task.Display + " at " + task.SubmittedUtc.ToLocalTime().ToString("dd.MM HH:mm:ss")
@@ -233,6 +245,7 @@ internal sealed partial class GpoOperationsForm
         int inactive = _agentInventory.Count(pc =>
             pc.AdLastSeenUtc is null || pc.AdLastSeenUtc < DateTimeOffset.UtcNow.AddDays(-90));
         int fresh = _agentInventory.Count(pc => pc.AgentReport?.Fresh == true);
+        int methodMismatch = _agentInventory.Count(pc => pc.MethodAgreement == "Reported mismatch");
         string reported = _agentShareAvailable ? _agentValidReportCount.ToString() : "?";
         string noReport = _agentShareAvailable
             ? (eligible - _agentValidReportCount).ToString() : "?";
@@ -247,6 +260,7 @@ internal sealed partial class GpoOperationsForm
         string checkedAt = _agentReportsCheckedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "Not checked";
         string feedbackSummary = "SMB reports: " + reported + " / " + eligible +
             " eligible | Recent: " + (_agentShareAvailable ? fresh.ToString() : "?") +
+            " | Client type mismatch: " + (_agentShareAvailable ? methodMismatch.ToString() : "?") +
             " | No report: " + noReport +
             " | Invalid files: " + (_agentShareAvailable ? _agentInvalidReportCount.ToString() : "?") +
             " | Checked: " + checkedAt;
