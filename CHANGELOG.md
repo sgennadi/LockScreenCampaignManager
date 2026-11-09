@@ -2,7 +2,7 @@
 - Consolidate existing secured Push / Repair / Report / Cleanup actions in the renamed Agent Management / Live tab, with AD-scoped computer list and search.
 - Add bounded asynchronous TCP/135 reachability checks for verified OU + computer-group hosts, auto-run on opening the tab, optional 60-second refresh, and reachable-only filter / select up to 25.
 - Show checked time and explicit Unknown vs RPC-reachable status. Endpoint mapper reachability does not prove Task Scheduler access, an agent heartbeat, or actual lock-screen image; use Report and Client Health for verification.
-- Expose Agent Management / GPO Operations from the final Deployment Wizard page rather than Advanced mode only. Preserve Preview, full GPO GUID confirmation and fresh native OU/group revalidation before any remote task.
+- Expose Agent Management / GPO Operations from the final Deployment Wizard page rather than Advanced mode only; add direct AD / GPO main-menu shortcut for company profiles with explicit OU/group defaults. Preserve Preview, full GPO GUID confirmation and fresh native OU/group revalidation before any remote task.
 - PS1 remains the production agent. The EXE implementation stays gated in the separate laboratory PR; arbitrary remote EXE execution is deliberately unsupported.
 - No live AD or real client RPC was tested in hosted CI.
 
