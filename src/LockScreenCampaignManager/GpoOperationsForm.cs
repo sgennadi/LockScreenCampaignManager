@@ -597,6 +597,12 @@ internal sealed partial class GpoOperationsForm : Form
                 " AD-verified computers. Check RPC reachability to find contactable endpoints.",
                 UiStatusKind.Neutral);
             _status.Text = $"Eligible computers: {_agentInventory.Count} (nested group membership).";
+            // Entering Agent Management performs an explicitly scoped,
+            // read-only RPC reachability sample without waiting for the user
+            // to navigate to another panel. No remote task is created.
+            if (_agentTabControl?.SelectedTab == _agentManagementTab &&
+                _agentInventory.Count > 0)
+                await ProbeVisibleAgentHostsAsync();
         }
         catch (Exception ex) { Fail(ex, "List eligible computers"); }
     }
