@@ -46,7 +46,8 @@ internal static class NativeGpoLifecycleList
         CampaignClientType clientType);
     private sealed record PolicyResult(
         string id, string name, string campaignId, string end,
-        string timeZone, LinkInfo[] links, int linkCount, int gpoFlags);
+        string timeZone, LinkInfo[] links, int linkCount, int gpoFlags,
+        string clientType);
 
     internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
     {
@@ -114,7 +115,7 @@ internal static class NativeGpoLifecycleList
 
                 managed.Add(new PolicyResult(id.ToString("D"), display,
                     info.campaignId, info.end, info.timeZone,
-                    links, links.Length, flags));
+                    links, links.Length, flags, info.clientType.ToString()));
             }
 
             // GPOs not matched to the exact embedded startup-script signature
