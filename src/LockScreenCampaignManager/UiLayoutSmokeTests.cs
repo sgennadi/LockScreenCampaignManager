@@ -511,7 +511,11 @@ internal static class UiLayoutSmokeTests
                         selector.Items[1]?.ToString()?.Contains(".exe", StringComparison.Ordinal) != true ||
                         selector.Width < 250 || selector.Height < selector.PreferredHeight)
                         throw new InvalidOperationException(
-                            $"Deployment client selector PS1/EXE missing or clipped at {profile.Name}");
+                            $"Deployment client selector PS1/EXE missing or clipped at {profile.Name}: " +
+                            $"found={selector is not null}; width={selector?.Width}; " +
+                            $"height={selector?.Height}; preferred={selector?.PreferredHeight}; " +
+                            $"items={selector?.Items.Count}; index={selector?.SelectedIndex}; " +
+                            $"style={selector?.DropDownStyle}.");
                 }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
