@@ -59,7 +59,8 @@ public sealed partial class MainForm
         if (!string.IsNullOrWhiteSpace(imagePath))
             _project.ImagePaths.Add(imagePath);
         var wizard = new CampaignWizardDialog(this);
-        wizard.ShowPageForSmokeTest(page);
+        if (page == -1) wizard.ExerciseScreenSaverSkipForSmokeTest();
+        else wizard.ShowPageForSmokeTest(page);
         return wizard;
     }
 
