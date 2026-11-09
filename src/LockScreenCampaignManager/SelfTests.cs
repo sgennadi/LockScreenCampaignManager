@@ -487,6 +487,19 @@ StartExecutePSFirst=true
         }
         catch (InvalidDataException) { invalidPurposeRejected = true; }
         Check(invalidPurposeRejected, "Immediate actions reject unknown preview purposes");
+        var lastLogon = new DateTime(2025, 2, 18, 12, 10, 0, DateTimeKind.Utc);
+        var parsed = NativeImmediateActions.ParseAdLastSeen(
+            lastLogon.ToFileTimeUtc().ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Check(parsed is not null && parsed.Value.UtcDateTime == lastLogon,
+            "AD lastLogonTimestamp parses as a replicated UTC filetime");
+        Check(NativeImmediateActions.ParseAdLastSeen("0") is null &&
+              NativeImmediateActions.ParseAdLastSeen("not-filetime") is null &&
+              NativeImmediateActions.ParseAdLastSeen(long.MaxValue.ToString()) is null,
+            "invalid or unobserved AD logon is unknown, never online");
+        Check(NativeImmediateActions.ParseAdDisabled("4098") == true &&
+              NativeImmediateActions.ParseAdDisabled("4096") == false &&
+              NativeImmediateActions.ParseAdDisabled("not-valid") is null,
+            "AD userAccountControl disabled flag parsing is explicit");
     }
 
     private static void TestNativeGpoLifecyclePreviewContracts()
@@ -2393,9 +2406,30 @@ StartExecutePSFirst=true
                 new[] { "PC001", "PC002" }, now);
             Check(snapshot.Expected == 2 && snapshot.Healthy == 1 && snapshot.NoReport == 1,
                 "health denominator uses AD list and reports");
+            Check(snapshot.LatestReports.Count == 1 &&
+                snapshot.LatestReports.ContainsKey("PC001") &&
+                !snapshot.LatestReports.ContainsKey("PC002"),
+                "agent overview counts validated reports only for AD-expected devices");
+            var activeEvidence = AgentReportEvidence.Interpret("PC001",
+                "test-campaign-202611081400", snapshot.LatestReports["PC001"], now, 15);
+            Check(activeEvidence.Condition == "Reported healthy" &&
+                activeEvidence.Fresh && activeEvidence.Version == "0.4.0-preview.1",
+                "fresh SMB feedback is displayed as reported health, never online proof");
+            var missingEvidence = AgentReportEvidence.Interpret("PC002",
+                "test-campaign-202611081400", null, now, 15);
+            Check(missingEvidence.Condition == "No report" && !missingEvidence.Fresh,
+                "missing SMB status is not equivalent to offline machine");
             var stale = ClientFeedbackReader.ReadDirectory(root, "test-campaign-202611081400",
                 new[] { "PC001" }, now.AddHours(2));
             Check(stale.Stale == 1 && stale.Healthy == 0, "stale report is not counted active");
+            var staleEvidence = AgentReportEvidence.Interpret("PC001",
+                "test-campaign-202611081400", stale.LatestReports["PC001"], now.AddHours(2), 15);
+            Check(staleEvidence.Condition == "Stale report" && !staleEvidence.Fresh,
+                "old client report is not proof of current agent health");
+            Check(AgentReportEvidence.Interpret("PC002",
+                "test-campaign-202611081400", stale.LatestReports["PC001"], now, 15)
+                .Condition == "Invalid report",
+                "SMB evidence for another AD computer is rejected");
             var finished = new {
                 schemaVersion = 1, campaignId = "test-campaign-202611081400",
                 computerName = "PC001", timestampUtc = now,

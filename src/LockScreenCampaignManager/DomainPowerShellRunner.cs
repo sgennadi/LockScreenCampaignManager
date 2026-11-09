@@ -65,7 +65,7 @@ internal static class DomainPowerShellRunner
         }
 
         if (operation == DomainOperation.Immediate &&
-            mode is ("List" or "Preview" or "VerifyCleanup"))
+            mode is ("List" or "Inventory" or "Preview" or "VerifyCleanup"))
             return NativeImmediateActions.Execute(mode, request, credentials);
         if (operation == DomainOperation.Immediate &&
             mode is ("Push" or "Repair" or "Report" or "Cleanup"))

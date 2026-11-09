@@ -50,13 +50,18 @@ internal sealed partial class GpoOperationsForm : Form
         public override string ToString() => $"{Name}  |  {CampaignId}  |  {Links} link(s)  |  {Id}";
     }
     private sealed record PcRow(string Name, string Sam,
-        bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null)
+        bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
+        DateTimeOffset? AdLastSeenUtc = null, bool? AdDisabled = null,
+        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null)
     {
-        public override string ToString() => $"{Name}   ({Sam})" +
-            (RpcReachable.HasValue
-                ? (RpcReachable.Value ? "   |   RPC 135: reachable" : "   |   RPC 135: not reachable") +
-                  "   |   checked " + CheckedUtc?.ToLocalTime().ToString("HH:mm:ss")
-                : "   |   RPC: not checked");
+        public override string ToString() =>
+            $"{Name}   |   RPC: " +
+            (RpcReachable is null ? "unknown" : RpcReachable.Value ? "reachable" : "unreachable") +
+            "   |   Agent: " + (AgentReport?.Condition ?? "not checked") +
+            "   |   Version: " + (AgentReport?.Version ?? "—") +
+            "   |   Last report: " +
+            (AgentReport?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—") +
+            "   |   Last command: " + (LastAction?.Display ?? "—");
     }
 
     internal GpoOperationsForm(string domain, string dc, string ouDn, string groupDn,
@@ -202,6 +207,9 @@ internal sealed partial class GpoOperationsForm : Form
                 _clientHealth.SetSelectedManagedCampaign(managed.CampaignId);
             _deviceDashboard?.SetManagedCampaign(managed?.CampaignId, managed?.Id);
             _dcConsistency?.InvalidateSelectedCampaign();
+            InvalidateAgentEvidence();
+            if (_agentTabControl?.SelectedTab == _agentManagementTab)
+                _ = RefreshAgentEvidenceAsync();
         };
         layout.Controls.Add(_policies, 0, 1);
         _lifecycleInfo.Dock = DockStyle.Fill;
@@ -297,6 +305,7 @@ internal sealed partial class GpoOperationsForm : Form
         _computers.CheckOnClick = true;
         _computers.HorizontalScrollbar = true;
         _computers.ItemCheck += (_, _) => BeginInvoke((Action)InvalidatePlans);
+        _computers.SelectedIndexChanged += (_, _) => DisplaySelectedAgentDetails();
         layout.Controls.Add(AgentComputerList(), 0, 1);
         _pushInfo.Dock = DockStyle.Fill;
         _pushInfo.Multiline = true;
@@ -589,28 +598,64 @@ internal sealed partial class GpoOperationsForm : Form
         InvalidatePlans();
         try
         {
-            var data = await ExecuteAsync(DomainOperation.Immediate, "List", new {
+            var data = await ExecuteAsync(DomainOperation.Immediate, "Inventory", new {
                 domain = _domain, dc = _dc, ouDn = _ouDn, groupDn = _groupDn
             });
-            _agentInventoryGeneration++;
+            ++_agentInventoryGeneration;
+            ++_agentEvidenceGeneration;
             _agentInventory.Clear();
-            foreach (JsonElement e in data.EnumerateArray())
+            _adOuComputerTotal = data.GetProperty("ouTotal").GetInt32();
+            int matched = data.GetProperty("groupEligible").GetInt32();
+            foreach (JsonElement e in data.GetProperty("computers").EnumerateArray())
+            {
+                DateTimeOffset? adSeen = e.TryGetProperty("adLastSeenUtc", out var last) &&
+                    last.ValueKind == JsonValueKind.String &&
+                    last.TryGetDateTimeOffset(out var timestamp)
+                        ? timestamp : null;
+                bool? adDisabled = e.TryGetProperty("adDisabled", out var disabled) &&
+                    disabled.ValueKind is JsonValueKind.True or JsonValueKind.False
+                        ? disabled.GetBoolean() : null;
                 _agentInventory.Add(new PcRow(e.GetProperty("name").GetString() ?? "",
-                    e.GetProperty("sam").GetString() ?? ""));
+                    e.GetProperty("sam").GetString() ?? "",
+                    AdLastSeenUtc: adSeen, AdDisabled: adDisabled));
+            }
+            if (matched != _agentInventory.Count || _adOuComputerTotal < matched)
+                throw new InvalidDataException("AD OU and group inventory counts do not match.");
+            _agentShareAvailable = false;
+            _agentValidReportCount = 0;
+            _agentInvalidReportCount = 0;
+            _agentReportsCheckedUtc = null;
+            _agentEvidenceNotice = "Agent reports not checked. Choose a managed GPO and refresh feedback.";
             DrawAgentInventory();
             UiStyle.ApplyStatus(_agentProbeStatus,
                 "Loaded " + _agentInventory.Count +
                 " AD-verified computers. Check RPC reachability to find contactable endpoints.",
                 UiStatusKind.Neutral);
-            _status.Text = $"Eligible computers: {_agentInventory.Count} (nested group membership).";
+            _status.Text = $"AD OU: {_adOuComputerTotal} computers; OU + campaign group: {_agentInventory.Count}. " +
+                "Last logon is approximate. Filters do not change AD or the GPO target scope.";
             // Entering Agent Management performs an explicitly scoped,
             // read-only RPC reachability sample without waiting for the user
             // to navigate to another panel. No remote task is created.
             if (_agentTabControl?.SelectedTab == _agentManagementTab &&
                 _agentInventory.Count > 0)
-                await ProbeVisibleAgentHostsAsync();
+            {
+                // SMB feedback and RPC reachability are unrelated signals.
+                // Refresh reports first; reachability continues independently.
+                await RefreshAgentEvidenceAsync();
+                _ = ProbeVisibleAgentHostsAsync();
+            }
         }
-        catch (Exception ex) { Fail(ex, "List eligible computers"); }
+        catch (Exception ex)
+        {
+            ++_agentInventoryGeneration;
+            ++_agentEvidenceGeneration;
+            _agentInventory.Clear();
+            _adOuComputerTotal = 0;
+            _agentShareAvailable = false;
+            _agentEvidenceNotice = "AD inventory unavailable; all computer and report counts are UNKNOWN.";
+            DrawAgentInventory();
+            Fail(ex, "List eligible computers");
+        }
     }
     private async Task RepairFromHealthAsync(IReadOnlyList<string> shortNames)
     {
@@ -760,6 +805,7 @@ internal sealed partial class GpoOperationsForm : Form
                         approvedGmsaRoute)
                     : (0, 0, 0, 0, true);
             _pushInfo.Text = Pretty(data);
+            UpdateAgentTaskOutcomes(data, mode);
             _status.Text = tracked.Tracked
                 ? $"Remote task attempted. Offline queued: {tracked.Offline}; " +
                   $"awaiting healthy feedback: {tracked.AwaitingHealth + tracked.AwaitingTask}; " +

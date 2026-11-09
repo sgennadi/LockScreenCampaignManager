@@ -873,16 +873,25 @@ public sealed partial class MainForm
                 _saved = false;
                 RenderPage();
             }, 207, true);
+            Action(actions, "Client Health / Feedback...", () =>
+            {
+                using var feedback = new FeedbackSettingsDialog(_owner._project);
+                if (feedback.ShowDialog(this) != DialogResult.OK) return;
+                _owner._projectDirty = true;
+                _saved = false;
+                RenderPage();
+            }, 264);
             // Time zone is a first-class editable field in the guided
             // schedule step. The previous version only displayed it in a
             // status line, requiring a hidden trip to the Advanced editor.
             var schedule = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1,
+                Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1,
                 Padding = new Padding(9, 7, 9, 9)
             };
             schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
             schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 57));
+            schedule.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             schedule.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             schedule.Controls.Add(new Label
             {
@@ -916,6 +925,21 @@ public sealed partial class MainForm
                 }
             };
             schedule.Controls.Add(zone, 0, 1);
+            var feedbackSummary = _owner._project.EnableFeedback
+                ? "Client Health: ENABLED\n" + _owner._project.FeedbackShare +
+                    "  |  every " + _owner._project.FeedbackIntervalMinutes + " min"
+                : "Client Health: DISABLED. No client reports until enabled.";
+            var feedbackInfo = new Label
+            {
+                Text = feedbackSummary,
+                Name = "WizardFeedbackConfiguration",
+                Dock = DockStyle.Fill,
+                ForeColor = _owner._project.EnableFeedback ? UiStyle.Foreground : UiStyle.Muted,
+                BackColor = UiStyle.SoftBlue, AutoEllipsis = true,
+                Padding = new Padding(9, 7, 9, 7),
+                Font = new Font("Segoe UI", 9.5f)
+            };
+            schedule.Controls.Add(feedbackInfo, 0, 2);
             var list = new ListBox
             {
                 Dock = DockStyle.Fill, IntegralHeight = false,
@@ -928,12 +952,12 @@ public sealed partial class MainForm
                 catch { date = "Schedule not configured"; }
                 list.Items.Add($"{i + 1:00}  {date}  |  {Path.GetFileName(_owner._project.ImagePaths[i])}");
             }
-            schedule.Controls.Add(list, 0, 2);
+            schedule.Controls.Add(list, 0, 3);
             body.Controls.Add(schedule);
             status.Text = "Time zone: " + _owner._project.TimeZoneId +
                 (_everConfiguredSchedule || _owner._wizardScheduleConfigured
-                    ? "  -  Schedule edited. Continue to Save."
-                    : "  -  Select a time zone and review scheduled changes.");
+                    ? " | Schedule edited. Continue to Save."
+                    : " | Select a time zone and review scheduled changes.");
         }
 
         private void RenderSave(FlowLayoutPanel actions, Panel body, Label status)

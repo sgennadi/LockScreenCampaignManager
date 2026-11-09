@@ -57,6 +57,10 @@ public sealed record ClientHealthRow(
 public sealed class ClientHealthSnapshot
 {
     public required IReadOnlyList<ClientHealthRow> Rows { get; init; }
+    // Validated client-supplied records. Display hints only: never use these
+    // as AD authorization or proof of actual device presence.
+    public IReadOnlyDictionary<string, ClientFeedbackRecord> LatestReports { get; init; } =
+        new Dictionary<string, ClientFeedbackRecord>(StringComparer.OrdinalIgnoreCase);
     public required string CampaignId { get; init; }
     public required string SharePath { get; init; }
     public int Expected { get; init; }
@@ -224,6 +228,9 @@ public static class ClientFeedbackReader
             Rows = rows, CampaignId = campaignId, SharePath = directory,
             Expected = expected.Count, Healthy = healthy, Ready = ready, Stale = stale,
             NoReport = missing, Errors = errors, Completed = completed, InvalidReports = invalid,
+            LatestReports = reports.Where(item => expected.Count == 0 ||
+                    expected.Contains(item.Key, StringComparer.OrdinalIgnoreCase))
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
             ObservedUtc = nowUtc
         };
     }
