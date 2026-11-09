@@ -346,6 +346,21 @@ StartExecutePSFirst=true
               !NativeGpoLifecycleList.IsManagedStartup(
                 ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
             "Native lifecycle excludes foreign or multi-script GPOs");
+        string nativeIni = "[Startup]\r\n0CmdLine=" +
+            @"\\example.com\SYSVOL\example.com\scripts\LockScreenCampaigns\alpha\LockScreen-Agent.exe" +
+            "\r\n0Parameters=--client-agent Install\r\n";
+        Check(NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni, domain, out string nativeId) && nativeId == "alpha",
+            "Native lifecycle recognizes strict EXE classic Startup signature");
+        Check(!NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni.Replace("--client-agent Install", "--client-agent Cleanup"),
+                domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni + "1CmdLine=foreign.exe\r\n", domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni.Replace(@"\\example.com\SYSVOL",
+                    @"\\other.example.com\SYSVOL"), domain, out _),
+            "EXE managed GPO audit rejects wrong methods, extra tasks and foreign domains");
     }
 
     private static void TestNativeGpoDeploymentPlanContracts()
