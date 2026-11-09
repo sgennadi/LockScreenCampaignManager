@@ -27,6 +27,8 @@ internal sealed class CampaignAssignmentsDialog : Form
     private readonly ComboBox _userOu = new();
     private readonly ComboBox _userGroup = new();
     private readonly ComboBox _saver = new();
+    private readonly CheckBox _photo = new();
+    private readonly NumericUpDown _slide = new();
     private readonly NumericUpDown _idle = new();
     private readonly CheckBox _password = new();
     private readonly TextBox _preview = new();
@@ -160,9 +162,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             Name = "AssignmentScrollableFields",
             Dock = DockStyle.Top, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            RowCount = 11, ColumnCount = 1, Padding = new Padding(5)
+            RowCount = 13, ColumnCount = 1, Padding = new Padding(5)
         };
-        foreach (int h in new[] { 75, 75, 74, 74, 75, 74, 75, 60, 62, 84, 50 })
+        foreach (int h in new[] { 75, 75, 74, 74, 75, 74, 75, 55, 65, 60, 62, 84, 50 })
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
@@ -202,20 +204,34 @@ internal sealed class CampaignAssignmentsDialog : Form
         _saver.SelectedIndexChanged += (_, _) => Preview();
         fields.Controls.Add(Field("Windows built-in .scr program", _saver), 0, 6);
 
+        _photo.Name = "AssignmentScreenSaverJpegMode";
+        _photo.Dock = DockStyle.Fill;
+        _photo.Text = "Use JPG slideshow from selected campaign images (pilot only)";
+        _photo.Checked = _project.ScreenSaver.UseJpegSlideshow;
+        _photo.CheckedChanged += (_, _) => { SetModeVisibility(); Preview(); };
+        fields.Controls.Add(_photo, 0, 7);
+        _slide.Name = "AssignmentScreenSaverSlideSeconds";
+        _slide.Minimum = 5;
+        _slide.Maximum = 3600;
+        _slide.Increment = 5;
+        _slide.Value = Math.Clamp(_project.ScreenSaver.SlideSeconds, 5, 3600);
+        _slide.ValueChanged += (_, _) => Preview();
+        fields.Controls.Add(Field("JPG slide interval (seconds)", _slide), 0, 8);
+
         _idle.Name = "AssignmentScreenSaverIdleSeconds";
         _idle.Minimum = 60;
         _idle.Maximum = 86400;
         _idle.Increment = 60;
         _idle.Value = Math.Clamp(_project.ScreenSaver.IdleSeconds, 60, 86400);
         _idle.ValueChanged += (_, _) => Preview();
-        fields.Controls.Add(Field("Screen Saver idle timeout (seconds)", _idle), 0, 7);
+        fields.Controls.Add(Field("Screen Saver idle timeout (seconds)", _idle), 0, 9);
         _password.Name = "AssignmentScreenSaverPassword";
         _password.Checked = _project.ScreenSaver.PasswordOnResume;
         _password.Text = "Require Windows sign-in when resuming Screen Saver";
         _password.Dock = DockStyle.Fill;
         _password.AutoSize = false;
         _password.CheckedChanged += (_, _) => Preview();
-        fields.Controls.Add(_password, 0, 8);
+        fields.Controls.Add(_password, 0, 10);
 
         _preview.Name = "AssignmentReadOnlyPreview";
         _preview.Multiline = true; _preview.ReadOnly = true;
@@ -223,13 +239,13 @@ internal sealed class CampaignAssignmentsDialog : Form
         _preview.ScrollBars = ScrollBars.Both;
         _preview.Font = new Font("Consolas", 9.5f);
         _preview.Dock = DockStyle.Fill;
-        fields.Controls.Add(_preview, 0, 9);
+        fields.Controls.Add(_preview, 0, 11);
         _help.Name = "AssignmentModeHelp";
         _help.Dock = DockStyle.Fill;
         _help.Text = "Screen Saver is a User Configuration policy. " +
             "No loopback/Replace setting is made automatically.";
         _help.ForeColor = UiStyle.Muted;
-        fields.Controls.Add(_help, 0, 10);
+        fields.Controls.Add(_help, 0, 12);
 
         var footer = new FlowLayoutPanel {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
@@ -342,7 +358,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             or CampaignTargetMode.Both;
         _computerOu.Enabled = _computerGroup.Enabled = hasComputer;
         _userOu.Enabled = _userGroup.Enabled = hasUser;
-        _saver.Enabled = _idle.Enabled = _password.Enabled = hasUser;
+        _saver.Enabled = hasUser && !_photo.Checked;
+        _photo.Enabled = hasUser;
+        _slide.Enabled = hasUser && _photo.Checked;
+        _idle.Enabled = _password.Enabled = hasUser;
     }
 
     private void AddRow()
@@ -383,7 +402,10 @@ internal sealed class CampaignAssignmentsDialog : Form
                 lines.Add("  User OU: " + target.UserOuDn +
                     " | User group: " + target.UserGroupDn);
         }
-        lines.Add("Screen Saver: " + _saver.Text +
+        lines.Add("Screen Saver: " + (_photo.Checked
+            ? "JPG slideshow (local .scr pilot; GPO blocked)"
+            : _saver.Text) +
+            " | JPG every " + _slide.Value + " s" +
             " | idle " + _idle.Value + " sec | password " + _password.Checked);
         lines.Add("User GPO applies to the user group, not automatically to a computer group.");
         _preview.Text = string.Join(Environment.NewLine, lines);
@@ -398,11 +420,14 @@ internal sealed class CampaignAssignmentsDialog : Form
                 throw new CampaignValidationException("Add at least one target assignment.");
             var settings = new CampaignScreenSaverSettings {
                 Executable = _saver.SelectedItem as string ?? "scrnsave.scr",
+                UseJpegSlideshow = _photo.Checked,
+                SlideSeconds = (int)_slide.Value,
                 IdleSeconds = (int)_idle.Value, PasswordOnResume = _password.Checked
             };
             var checker = new CampaignProject {
                 TargetAssignments = _draft.Select(row => row.Clone()).ToList(),
-                ScreenSaver = settings
+                ScreenSaver = settings,
+                ImagePaths = _project.ImagePaths.ToList()
             };
             CampaignTargetAssignments.Validate(checker);
             _project.TargetAssignments = checker.TargetAssignments;

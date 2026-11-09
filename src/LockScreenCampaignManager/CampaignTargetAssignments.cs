@@ -42,9 +42,12 @@ public sealed class CampaignGroupTarget
 
 public sealed class CampaignScreenSaverSettings
 {
-    // Windows built-in .scr only. Image campaign slides are NOT executables.
-    // A custom slideshow saver requires a separately signed .scr deployment.
+    // Legacy campaigns retain their existing built-in Windows .scr.
+    // JPG slideshow is a separate portable package that must be tested
+    // locally before administrator-approved GPO deployment.
     public string Executable { get; set; } = "scrnsave.scr";
+    public bool UseJpegSlideshow { get; set; }
+    public int SlideSeconds { get; set; } = 15;
     public int IdleSeconds { get; set; } = 600;
     public bool PasswordOnResume { get; set; } = true;
 }
@@ -97,7 +100,14 @@ public static class CampaignTargetAssignments
         if (!BuiltInScreenSavers.Contains(saver.Executable,
                 StringComparer.OrdinalIgnoreCase))
             throw new CampaignValidationException(
-                "Choose a supported built-in Windows .scr; custom programs are not accepted.");
+                "Choose a supported built-in Windows .scr for non-JPG mode.");
+        if (saver.SlideSeconds is < 5 or > 3600)
+            throw new CampaignValidationException(
+                "JPG slideshow interval must be between 5 and 3600 seconds.");
+        if (saver.UseJpegSlideshow &&
+            (project.ImagePaths is null || project.ImagePaths.Count < 1))
+            throw new CampaignValidationException(
+                "JPG Screen Saver requires at least one selected image.");
         if (saver.IdleSeconds is < 60 or > 86400)
             throw new CampaignValidationException(
                 "Screen Saver idle timeout must be between 60 and 86400 seconds.");

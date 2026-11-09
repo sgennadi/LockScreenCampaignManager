@@ -51,7 +51,9 @@ public sealed partial class MainForm
 
         private bool NeedsLockImages =>
             _owner._project.EffectiveCampaignMode is
-                CampaignTargetMode.LockScreen or CampaignTargetMode.Both;
+                CampaignTargetMode.LockScreen or CampaignTargetMode.Both ||
+            (_owner._project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver &&
+                _owner._project.ScreenSaver.UseJpegSlideshow);
 
         // Track only the name the wizard itself generated. A manually typed
         // name is never silently replaced when the user changes mode.
@@ -96,11 +98,11 @@ public sealed partial class MainForm
             var details = new TableLayoutPanel
             {
                 Name = "WizardCampaignTypeDetails",
-                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 7,
+                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 9,
                 AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Height = 470, Padding = new Padding(14, 12, 14, 14)
+                Height = 650, Padding = new Padding(14, 12, 14, 14)
             };
-            foreach (int h in new[] { 53, 55, 87, 58, 57, 54, 95 })
+            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115 })
                 details.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
             details.Controls.Add(heading, 0, 0);
 
@@ -149,6 +151,30 @@ public sealed partial class MainForm
             saverRow.Controls.Add(saver, 1, 0);
             details.Controls.Add(saverRow, 0, 3);
 
+            var photo = new CheckBox {
+                Name = "WizardScreenSaverJpegMode", Dock = DockStyle.Fill,
+                Text = "JPG photo slideshow (use selected campaign images)",
+                Checked = _owner._project.ScreenSaver.UseJpegSlideshow
+            };
+            details.Controls.Add(photo, 0, 4);
+            var slide = new NumericUpDown {
+                Name = "WizardScreenSaverSlideSeconds",
+                Minimum = 5, Maximum = 3600, Increment = 5,
+                Value = Math.Clamp(_owner._project.ScreenSaver.SlideSeconds, 5, 3600),
+                Dock = DockStyle.Fill
+            };
+            var slideRow = new TableLayoutPanel {
+                Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2
+            };
+            slideRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
+            slideRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            slideRow.Controls.Add(new Label {
+                Text = "Change JPG every (s)", Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+            slideRow.Controls.Add(slide, 1, 0);
+            details.Controls.Add(slideRow, 0, 5);
+
             var idle = new NumericUpDown
             {
                 Name = "WizardScreenSaverIdleSeconds",
@@ -166,47 +192,53 @@ public sealed partial class MainForm
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
             }, 0, 0);
             idleRow.Controls.Add(idle, 1, 0);
-            details.Controls.Add(idleRow, 0, 4);
+            details.Controls.Add(idleRow, 0, 6);
             var password = new CheckBox
             {
                 Name = "WizardScreenSaverRequirePassword",
                 Text = "Require Windows sign-in on resume",
                 Dock = DockStyle.Fill, Checked = _owner._project.ScreenSaver.PasswordOnResume
             };
-            details.Controls.Add(password, 0, 5);
+            details.Controls.Add(password, 0, 7);
             var note = new Label
             {
-                Text = "Screen Saver: built-in Windows .scr, user OU/security group. " +
-                    "Lock Screen: campaign images, computer OU/security group. " +
-                    "Both can have different modes for each group. " +
-                    "A built-in .scr does not display JPEG campaign slides.",
+                Text = "Screen Saver can use a Windows built-in .scr OR a local " +
+                    "JPG slideshow package exported for pilot testing. " +
+                    "JPG mode uses selected campaign images and restores image pages. " +
+                    "Automatic GPO delivery for JPG is blocked until client pilot verification.",
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false,
                 ForeColor = UiStyle.Muted, Padding = new Padding(8, 8, 8, 8)
             };
-            details.Controls.Add(note, 0, 6);
+            details.Controls.Add(note, 0, 8);
 
             void RefreshDescription(bool persist)
             {
                 if (mode.SelectedItem is not CampaignTargetMode selected)
                 {
                     saver.Enabled = idle.Enabled = password.Enabled = false;
+                    photo.Enabled = slide.Enabled = false;
                     message.Text = "Choose a campaign type to continue. No images or schedule steps are skipped yet.";
                     status.Text = "No campaign type selected. Choose Lock Screen, Screen Saver or Both.";
                     _next.Enabled = false;
                     return;
                 }
                 bool saverEnabled = selected != CampaignTargetMode.LockScreen;
-                saver.Enabled = idle.Enabled = password.Enabled = saverEnabled;
+                saver.Enabled = saverEnabled && !photo.Checked;
+                photo.Enabled = saverEnabled;
+                slide.Enabled = saverEnabled && photo.Checked;
+                idle.Enabled = password.Enabled = saverEnabled;
                 message.Text = selected switch
                 {
                     CampaignTargetMode.LockScreen =>
                         "LOCK SCREEN: next select campaign images, arrange them, " +
                         "and choose days and times. Applies to computers.",
+                    CampaignTargetMode.ScreenSaver when photo.Checked =>
+                        "JPG SCREEN SAVER: select photos on the next page, arrange " +
+                        "their order and set the slide interval. Local pilot package first.",
                     CampaignTargetMode.ScreenSaver =>
-                        "SCREEN SAVER: images, arrangement and JPEG schedule " +
-                        "are skipped. Applies to users; configure a user " +
-                        "OU/security group during Deploy.",
+                        "SCREEN SAVER: built-in .scr; image/arrange/schedule " +
+                        "pages are skipped. Applies to selected user group.",
                     _ => "BOTH: configure image schedule and user Screen Saver. " +
                         "Choose independent computer/user groups at Deploy."
                 };
@@ -216,20 +248,24 @@ public sealed partial class MainForm
                 _next.Enabled = true;
                 if (!persist) return;
                 // Repaint the rail as soon as the operator changes the type.
-                // Only Screen Saver-only skips image pages. Both never skips.
+                // JPG Screen Saver needs images; only built-in Screen Saver
+                // skips those wizard stages.
                 for (int i = 2; i <= 4; i++)
                 {
-                    bool skip = selected == CampaignTargetMode.ScreenSaver;
+                    bool skip = selected == CampaignTargetMode.ScreenSaver && !photo.Checked;
                     _rail[i].Text = skip ? StepNames[i] + " (skip)" : StepNames[i];
                     _rail[i].ForeColor = skip ? UiStyle.Muted : UiStyle.Navy;
                 }
-                _footnote.Text = selected == CampaignTargetMode.ScreenSaver
-                    ? "Screen Saver: images not needed" : "All image stages are available";
+                _footnote.Text = selected == CampaignTargetMode.ScreenSaver && !photo.Checked
+                    ? "Built-in Screen Saver: images not needed"
+                    : "JPG/Lock Screen: image stages are available";
                 SuggestCampaignName(selected);
                 _owner._project.CampaignMode = selected;
                 _owner._project.CampaignModeExplicit = true;
                 _owner._project.ScreenSaver.Executable =
                     saver.SelectedItem as string ?? "scrnsave.scr";
+                _owner._project.ScreenSaver.UseJpegSlideshow = photo.Checked;
+                _owner._project.ScreenSaver.SlideSeconds = (int)slide.Value;
                 _owner._project.ScreenSaver.IdleSeconds = (int)idle.Value;
                 _owner._project.ScreenSaver.PasswordOnResume = password.Checked;
                 _owner._projectDirty = true;
@@ -238,6 +274,8 @@ public sealed partial class MainForm
 
             mode.SelectedIndexChanged += (_, _) => RefreshDescription(true);
             saver.SelectedIndexChanged += (_, _) => RefreshDescription(true);
+            photo.CheckedChanged += (_, _) => RefreshDescription(true);
+            slide.ValueChanged += (_, _) => RefreshDescription(true);
             idle.ValueChanged += (_, _) => RefreshDescription(true);
             password.CheckedChanged += (_, _) => RefreshDescription(true);
             body.Controls.Add(details);

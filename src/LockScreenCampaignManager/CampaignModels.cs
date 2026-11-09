@@ -274,7 +274,10 @@ public static class CampaignSchedule
                 "Group assignments include a different target type. Choose Both or edit group assignments.");
         bool needsImages = chosenMode is CampaignTargetMode.LockScreen or
             CampaignTargetMode.Both ||
-            project.TargetAssignments.Any(x => x.UsesLockScreen);
+            project.TargetAssignments.Any(x => x.UsesLockScreen) ||
+            (project.ScreenSaver?.UseJpegSlideshow == true &&
+                (chosenMode is CampaignTargetMode.ScreenSaver or CampaignTargetMode.Both ||
+                 project.TargetAssignments.Any(x => x.UsesScreenSaver)));
         if (requireImages && needsImages && project.ImagePaths.Count == 0)
             throw new CampaignValidationException(
                 project.TargetAssignments.Any(x => x.UsesLockScreen)
