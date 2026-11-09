@@ -77,7 +77,13 @@ internal sealed partial class GpoOperationsForm : Form
         BackColor = Color.FromArgb(247, 248, 251);
         Build();
         InitializeDeferred();
-        Shown += async (_, _) => await ReloadAsync();
+        Shown += async (_, _) =>
+        {
+            await ReloadAsync();
+            if (_openAgentManagementInitially && !IsDisposed && !Disposing &&
+                _agentTabControl is not null && _agentManagementTab is not null)
+                _agentTabControl.SelectedTab = _agentManagementTab;
+        };
         FormClosing += (_, e) => {
             if (!_busy) return;
             e.Cancel = true;
