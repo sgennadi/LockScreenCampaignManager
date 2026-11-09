@@ -1,3 +1,10 @@
+## 0.4.0-preview.64 — Deployment Wizard rights and readable targets (2026-11-09)
+- Make the read-only GPO/OU rights check advisory: unknown or unconfirmed ACL hints do not interrupt a safe Preview with a blocking confirmation. GPO creation and SYSVOL writes still require a separately confirmed deployment and fresh native checks.
+- Keep AD connection status distinct from color-coded permission hints (potential allow, possible deny, incomplete group token, no matching allow, unavailable). Explicitly mark SYSVOL and GPO COM write rights untested.
+- Give connection, OU/group selection and Preview distinct full-height/full-width Wizard stages. Hide redundant connection fields after connection; use concise list names, searchable full DNs and hover tooltips for exact OU/group identities.
+- Add regression checks for advisory preflight and offline Windows x86/x64 multi-scale Deployment Wizard layout.
+- Existing PS1 client deployment is unchanged. A separate native EXE client with its own GPO delivery mode is not part of this preview; do not claim client EXE parity until verified. No live domain write test was performed.
+
 ## 0.4.0-preview.31 — AD wizard, DNS auto-discovery, image import and icons (2026-11-08)
 - Public GitHub Release updater uses the pinned /releases?per_page=100 endpoint for both channels. Stable-only with no stable release returns a normal empty result instead of an HTTP 404.
 - AD-first start is a three-step BitKeyBridge-style connection wizard with left-side progress, read-only LDAP inventory and explicit final review. Windows DNS SRV automatically discovers DC FQDNs for the detected domain. Long DC names remain visible in a wide dropdown and tooltip.
