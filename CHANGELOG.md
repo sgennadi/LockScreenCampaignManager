@@ -1,3 +1,12 @@
+## 0.4.0-preview.71 — DPI/Client Health/SMB usability + Bug Reports review (2026-11-09)
+- Fix clipped Campaign Wizard Schedule/Client Health and bottom helper text by allocating additional scrollable content and status space.
+- Show actual current UTC offset, PC UTC offset, difference in hours/minutes and DST state in both schedule editors. Preserve Windows time-zone IDs so future DST changes do not become fixed-offset schedules.
+- Make long SMB share roots and Campaign Wizard Client Health details horizontally scrollable. Add Browse SMB and Copy path actions to Client Health and Feedback Settings; GPO Operations exposes full OU DN in a scrollable viewer.
+- Increase readable header/footer and DataGridView row heights throughout Client Health, Device Repair and GPO Operations. Fit single-line text rows based on rendered fonts.
+- Expand UI scale preferences and offline multi-window WinForms checks to 175% and 200% (previously silently clamped to 150%), alongside 100%, 125%, 150% and 187.5% font simulation.
+- Reviewed published GitHub Bug Report #11. Missing GPO selection now disables lifecycle Preview and displays an instructional status without generating an error report or touching AD/GPO.
+- Keep GitHub diagnostic Issues review opt-in/public-safe, read-only, and scheduled via existing workflow.
+
 ## 0.4.0-preview.70 — Opt-in Agent Management auto-refresh and fair RPC fleet polling (2026-11-09)
 - Fix high-DPI clipping reported in three screens: make the Software updates subtitle/both header rows scale with the outer container, reserve the full Continue text in Campaign Wizard, and allocate scrollable/DPI-aware height to the Advanced connection options checkbox and its expanded DC controls.
 - Extend multi-font WinForms layout smoke to assert the exact affected labels, full Continue caption, and expanded Advanced connection controls.
