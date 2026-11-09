@@ -129,7 +129,7 @@ internal static class NativeGpoDeploymentPlan
                     clientScriptPath = dfsScript,
                     clientType = requestedClient.ToString(),
                     gpoMethod = requestedClient == CampaignClientType.Executable
-                        ? "ClassicStartupCmd" : "PowerShellStartup",
+                        ? "ClassicStartupExe" : "PowerShellStartup",
                     operation = "Plan",
                     rsatRequired = false, nativeEngine = "Windows ADSI + gpedit.dll COM",
                     dcUtc = dcUtc.ToString("o", CultureInfo.InvariantCulture),
