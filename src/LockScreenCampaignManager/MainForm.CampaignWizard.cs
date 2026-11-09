@@ -780,6 +780,9 @@ public sealed partial class MainForm
                     Environment.NewLine + path;
                 if (placeholder is { IsDisposed: false })
                     placeholder.Visible = false;
+                // Paint selected bitmap above the placeholder after DPI/layout.
+                preview.BringToFront();
+                preview.Invalidate();
             }
             catch (Exception ex)
             {

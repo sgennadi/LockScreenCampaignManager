@@ -45,9 +45,10 @@ internal sealed partial class GpoOperationsForm : Form
     private string? _tempPackage;
     private readonly string _version = AppVersion.Current;
 
-    private sealed record GpoRow(string Id, string Name, string CampaignId, int Links)
+    private sealed record GpoRow(string Id, string Name, string CampaignId, int Links, string ClientType)
     {
-        public override string ToString() => $"{Name}  |  {CampaignId}  |  {Links} link(s)  |  {Id}";
+        public override string ToString() =>
+            $"{Name}  |  Client: {ClientType}  |  {CampaignId}  |  {Links} link(s)  |  {Id}";
     }
     private sealed record PcRow(string Name, string Sam,
         bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
@@ -395,7 +396,8 @@ internal sealed partial class GpoOperationsForm : Form
                 {
                     _policies.Items.Add(new GpoRow(e.GetProperty("id").GetString() ?? "",
                         e.GetProperty("name").GetString() ?? "", e.GetProperty("campaignId").GetString() ?? "",
-                        e.GetProperty("linkCount").GetInt32()));
+                        e.GetProperty("linkCount").GetInt32(),
+                        e.GetProperty("clientType").GetString() ?? "Unknown"));
                 }
                 if (_policies.Items.Count > 0) _policies.SelectedIndex = 0;
             }

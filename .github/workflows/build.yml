@@ -55,6 +55,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_manager_features.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_dual_client.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_live_ad_lab_contracts.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_diagnostics_issue_review.py
@@ -200,6 +202,20 @@ jobs:
           if (Test-Path $err) { Get-Content $err | Write-Host }
           if ($test.ExitCode -ne 0) { throw "Full self-test failed with exit code $($test.ExitCode)" }
 
+      - name: Reject invalid native EXE client modes without launching the GUI
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe").Path
+          $reject = Start-Process -FilePath $exe -ArgumentList '--client-agent Invalid' -Wait -PassThru
+          if ($reject.ExitCode -ne 2) {
+            throw "Native EXE must reject invalid client modes with exit code 2: got $($reject.ExitCode)."
+          }
+
+      - name: Verify native EXE read-only Status and pinned binary SHA-256
+        shell: pwsh
+        run: |
+          ./tools/test_native_agent_cli.ps1 -PublishedExe "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe"
+
       - name: Verify UniversalUpdater public/private download and SHA-256
         shell: pwsh
         run: |
@@ -319,7 +335,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.67':
+          if version != '0.4.0-preview.68':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -351,22 +367,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.67 (no overwrite)
+      - name: Publish 0.4.0-preview.68 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.67'
+          tag='v0.4.0-preview.68'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.67' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW67.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.68' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW68.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -375,7 +391,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.67'
+          tag='v0.4.0-preview.68'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json

@@ -24,7 +24,8 @@ internal static class NativeGpoDeploymentPlan
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Digest = new(@"^[0-9a-fA-F]{64}$",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-    private sealed record VerifiedPackage(string Id, int Count, long Bytes);
+    private sealed record VerifiedPackage(string Id, int Count, long Bytes,
+        CampaignClientType ClientType);
     internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
     {
         if (!OperatingSystem.IsWindows())
@@ -38,6 +39,7 @@ internal static class NativeGpoDeploymentPlan
         string groupDn = String(args, "groupDn").Trim();
         string gpoName = String(args, "gpoName").Trim();
         string localPackage = String(args, "packagePath").Trim();
+        CampaignClientType requestedClient = ParseClientType(String(args, "clientType"));
         NativeAdDiscovery.ValidateNames(domain, dc);
         if (dc.Length == 0)
             throw new ArgumentException("Select an explicit writable domain controller.");
@@ -89,9 +91,13 @@ internal static class NativeGpoDeploymentPlan
             int memberCount = CountDirectMembers(group);
 
             VerifiedPackage package = ValidatePackage(localPackage);
+            if (package.ClientType != requestedClient)
+                throw new InvalidDataException("Selected client does not match the immutable campaign package.");
             string dfsSource = @"\\" + domain + @"\SYSVOL\" + domain +
                 @"\scripts\LockScreenCampaigns\" + package.Id;
-            string dfsScript = Path.Combine(dfsSource, "LockScreen-Agent.ps1");
+            string dfsScript = Path.Combine(dfsSource,
+                requestedClient == CampaignClientType.Executable
+                    ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1");
             string dcCampaign = @"\\" + actualDc + @"\SYSVOL\" + domain +
                 @"\scripts\LockScreenCampaigns\" + package.Id;
             if (dfsScript.Length >= 260)
@@ -120,7 +126,11 @@ internal static class NativeGpoDeploymentPlan
                     gpoName, campaignId = package.Id,
                     imageCount = package.Count, imageBytes = package.Bytes,
                     sysvolOnDc = dcCampaign,
-                    clientScriptPath = dfsScript, operation = "Plan",
+                    clientScriptPath = dfsScript,
+                    clientType = requestedClient.ToString(),
+                    gpoMethod = requestedClient == CampaignClientType.Executable
+                        ? "ClassicStartupExe" : "PowerShellStartup",
+                    operation = "Plan",
                     rsatRequired = false, nativeEngine = "Windows ADSI + gpedit.dll COM",
                     dcUtc = dcUtc.ToString("o", CultureInfo.InvariantCulture),
                     clockSkewSeconds = skew
@@ -149,6 +159,13 @@ internal static class NativeGpoDeploymentPlan
         using (token)
             return WindowsIdentity.RunImpersonated(token, Run);
     }
+
+    internal static CampaignClientType ParseClientType(string value) => value switch
+    {
+        "" or "PowerShell" => CampaignClientType.PowerShell,
+        "Executable" => CampaignClientType.Executable,
+        _ => throw new InvalidDataException("Unsupported clientType in deployment package.")
+    };
 
     private static string String(JsonElement json, string name) =>
         json.ValueKind == JsonValueKind.Object &&
@@ -222,12 +239,15 @@ internal static class NativeGpoDeploymentPlan
         VerifyDirectory(packagePath);
         VerifyDirectory(Path.Combine(packagePath, "images"));
         string jsonPath = Path.Combine(packagePath, "campaign.json");
-        string agent = Path.Combine(packagePath, "LockScreen-Agent.ps1");
-        var agentInfo = VerifyFile(agent, 5 * 1_048_576);
         _ = VerifyFile(jsonPath, 1_048_576);
         using var doc = JsonDocument.Parse(File.ReadAllBytes(jsonPath),
             new JsonDocumentOptions { MaxDepth = 12 });
         var cfg = doc.RootElement;
+        CampaignClientType clientType = ParseClientType(String(cfg, "clientType"));
+        string agent = Path.Combine(packagePath, clientType == CampaignClientType.Executable
+            ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1");
+        var agentInfo = VerifyFile(agent, clientType == CampaignClientType.Executable
+            ? 250L * 1_048_576 : 5 * 1_048_576);
         string id = String(cfg, "campaignId");
         if (!NativeSysvolStorage.ValidCampaignId(id) ||
             cfg.GetProperty("schemaVersion").GetInt32() != 1)
@@ -273,7 +293,7 @@ internal static class NativeGpoDeploymentPlan
                 throw new InvalidDataException("Campaign image SHA-256 differs from manifest.");
             imageBytes = checked(imageBytes + file.Bytes);
         }
-        return new VerifiedPackage(id, slides.GetArrayLength(), imageBytes);
+        return new VerifiedPackage(id, slides.GetArrayLength(), imageBytes, clientType);
     }
 
     // Offline CI can verify the same package validation without LDAP,

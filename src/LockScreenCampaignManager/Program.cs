@@ -8,6 +8,10 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0].Equals("--client-agent",
+                StringComparison.OrdinalIgnoreCase))
+            return NativeClientAgent.Run(args);
+
         if (args.Length > 0 && args[0] == PortableUpdateCoordinator.HelperSwitch)
             return PortableUpdateCoordinator.RunHelper(args);
 

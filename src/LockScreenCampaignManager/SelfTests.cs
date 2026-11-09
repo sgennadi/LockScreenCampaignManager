@@ -27,6 +27,7 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
         TestFlexibleSchedules();
+        TestNativeClientImageOrder();
         TestFilenameScheduleInference();
         TestExpectedCampaignValidation();
         TestAdDirectorySnapshot();
@@ -40,6 +41,7 @@ internal static class SelfTests
         TestNativeImmediateActionsContracts();
         TestNativeRemoteCleanupContracts();
         TestNativeGpoDeploymentPlanContracts();
+        TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -344,6 +346,21 @@ StartExecutePSFirst=true
               !NativeGpoLifecycleList.IsManagedStartup(
                 ini + "1CmdLine=foreign-script.ps1\r\n", domain, out _),
             "Native lifecycle excludes foreign or multi-script GPOs");
+        string nativeIni = "[Startup]\r\n0CmdLine=" +
+            @"\\example.com\SYSVOL\example.com\scripts\LockScreenCampaigns\alpha\LockScreen-Agent.exe" +
+            "\r\n0Parameters=--client-agent Install\r\n";
+        Check(NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni, domain, out string nativeId) && nativeId == "alpha",
+            "Native lifecycle recognizes strict EXE classic Startup signature");
+        Check(!NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni.Replace("--client-agent Install", "--client-agent Cleanup"),
+                domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni + "1CmdLine=foreign.exe\r\n", domain, out _) &&
+              !NativeGpoLifecycleList.IsManagedExecutableStartup(
+                nativeIni.Replace(@"\\example.com\SYSVOL",
+                    @"\\other.example.com\SYSVOL"), domain, out _),
+            "EXE managed GPO audit rejects wrong methods, extra tasks and foreign domains");
     }
 
     private static void TestNativeGpoDeploymentPlanContracts()
@@ -389,6 +406,66 @@ StartExecutePSFirst=true
             Check(corruptDenied, "Native GPO preflight rejects modified campaign JPEGs");
         }
         finally { Directory.Delete(folder, true); }
+    }
+
+    private static void TestNativeExePreviewPackage()
+    {
+        // A real native EXE package must be inspectable without LDAP or
+        // deploying a GPO, yet default export must refuse an unvalidated
+        // production client. This test never executes the exported agent.
+        string root = Path.Combine(Path.GetTempPath(),
+            "LSCM-EXE-Preview-CI-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string image = Path.Combine(root, "input.jpg");
+            using (var bitmap = new System.Drawing.Bitmap(900, 500))
+                bitmap.Save(image, System.Drawing.Imaging.ImageFormat.Jpeg);
+            var project = new CampaignProject
+            {
+                Name = "Native Preview CI",
+                ClientType = CampaignClientType.Executable,
+                StartLocal = new DateTime(2027, 6, 1, 9, 0, 0),
+                TimeZoneId = "UTC", LastImageHours = 24,
+                ImagePaths = new List<string> { image }
+            };
+            bool blocked = false;
+            try { _ = CampaignExporter.Export(project, root); }
+            catch (NotSupportedException) { blocked = true; }
+            Check(blocked, "Unvalidated native agent cannot be exported for production");
+
+            string folder = CampaignExporter.Export(project, root, forReadOnlyPreview: true);
+            string exe = Path.Combine(folder, "LockScreen-Agent.exe");
+            Check(File.Exists(exe) && !File.Exists(
+                Path.Combine(folder, "LockScreen-Agent.ps1")),
+                "Read-only EXE Preview packages only the native executable");
+            using var document = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(folder, "campaign.json")));
+            var manifest = document.RootElement;
+            string expectedSha = manifest.GetProperty("agentSha256").GetString() ?? "";
+            string actualSha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(exe)));
+            Check(manifest.GetProperty("clientType").GetString() == "Executable" &&
+                expectedSha.Equals(actualSha, StringComparison.OrdinalIgnoreCase),
+                "Native Preview manifest pins the exact exported EXE SHA-256");
+            var local = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder);
+            Check(local.Count == 1 && local.Id == CampaignSchedule.BuildId(project),
+                "Native read-only GPO Plan validates the EXE package without AD writes");
+
+            using (var stream = new FileStream(exe, FileMode.Open,
+                FileAccess.ReadWrite, FileShare.None))
+            {
+                stream.Position = stream.Length - 1;
+                int previous = stream.ReadByte();
+                stream.Position = stream.Length - 1;
+                stream.WriteByte((byte)(previous ^ 1));
+            }
+            bool tampered = false;
+            try { _ = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder); }
+            catch (InvalidDataException) { tampered = true; }
+            Check(tampered, "Native GPO Plan refuses a modified EXE source");
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     private static void TestNativeRemoteCleanupContracts()
@@ -962,6 +1039,31 @@ StartExecutePSFirst=true
             try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
             catch { }
         }
+    }
+
+    private static void TestNativeClientImageOrder()
+    {
+        Check(NativeClientAgent.PreferredRegistryView(true) ==
+                Microsoft.Win32.RegistryView.Registry64 &&
+              NativeClientAgent.PreferredRegistryView(false) ==
+                Microsoft.Win32.RegistryView.Registry32,
+            "Native x86 and x64 clients target the machine's real lock-screen policy registry view");
+        // The fixture is the SHA256(hash + original index) ordering used by
+        // the previously published PowerShell client, NOT a new random shuffle.
+        string[] slides = ["01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg"];
+        int[] actual = NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "TEST-PC-01", slides);
+        Check(actual.SequenceEqual(new[] { 1, 2, 3, 0, 4 }),
+            "native EXE image mapping matches PS1 SHA256 fixture");
+        Check(actual.Distinct().Count() == slides.Length &&
+              actual.All(x => x >= 0 && x < slides.Length),
+            "native EXE image mapping is a full deterministic permutation");
+        Check(actual.SequenceEqual(NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "test-pc-01", slides)),
+            "PS1 device image ordering is computer-name case insensitive");
+        Check(NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "TEST-PC-01", ["01.jpg"]).SequenceEqual([0]),
+            "native image order handles single-image campaign");
     }
 
     private static void TestFlexibleSchedules()

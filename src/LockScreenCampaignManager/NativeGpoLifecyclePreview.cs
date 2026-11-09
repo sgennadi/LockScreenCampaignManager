@@ -108,7 +108,17 @@ internal static class NativeGpoLifecyclePreview
 
             string gpt = @"\\" + actualDc + @"\SYSVOL\" + domain +
                 @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
-            string scriptFile = Path.Combine(gpt, "Machine", "Scripts", "psscripts.ini");
+            string psScriptFile = Path.Combine(gpt, "Machine", "Scripts", "psscripts.ini");
+            string classicScriptFile = Path.Combine(gpt, "Machine", "Scripts", "scripts.ini");
+            // ReadManagedGpo has already verified the exact startup method
+            // and immutable campaign identity; do not re-infer a method from
+            // File.Exists, which hides SYSVOL ACL/network failures.
+            bool nativeClient = managed.clientType == CampaignClientType.Executable;
+            string scriptFile = nativeClient ? classicScriptFile : psScriptFile;
+            if (action == "Reuse" && nativeClient)
+                throw new NotSupportedException(
+                    "EXE GPO Reuse requires a separate method-specific migration. " +
+                    "Create a fresh EXE GPO instead.");
             string iniHash = FileSha256(scriptFile, 1, 1_048_576);
             string gptText = ReadBoundedText(Path.Combine(gpt, "gpt.ini"),
                 1, 1_048_576, Encoding.UTF8);

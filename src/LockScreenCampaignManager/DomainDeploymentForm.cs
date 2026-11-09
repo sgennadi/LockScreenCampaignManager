@@ -16,6 +16,7 @@ internal sealed class DomainDeploymentForm : Form
     private readonly TextBox _passwordBox = new();
     private readonly Label _otherAccountHint = new();
     private readonly TextBox _gpoBox = new();
+    private readonly ComboBox _clientTypeBox = new();
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
@@ -111,6 +112,7 @@ internal sealed class DomainDeploymentForm : Form
             _dcBox.Text = readOnlyInventory.Dc;
         }
         _gpoBox.Text = CampaignSchedule.DefaultGpoName(_project);
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
         if (authenticatedSession is { IsAlternate: true })
         {
             _suppressConnectionChanged = true;
@@ -180,7 +182,9 @@ internal sealed class DomainDeploymentForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+        // Two status banners and the client/GPO-method selector must retain
+        // independent height at 100%-200% scaling.
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
         Controls.Add(layout);
@@ -288,8 +292,34 @@ internal sealed class DomainDeploymentForm : Form
         _rightsBanner.TextAlign = ContentAlignment.MiddleLeft;
         _rightsBanner.Text = "GPO RIGHTS: Not checked. Preview does not change Active Directory.";
         notification.Controls.Add(_rightsBanner, 0, 1);
-        notification.Controls.Add(new Label { Text = "Security filtering uses COMPUTER accounts from the selected security group, within the linked OU.",
-            Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 2);
+        // Choose the endpoint agent and corresponding Windows GPO startup method.
+        var engineChoice = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 445));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        engineChoice.Controls.Add(new Label {
+            Text = "Client / GPO method", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy }, 0, 0);
+        _clientTypeBox.Name = "DeploymentClientType";
+        _clientTypeBox.Dock = DockStyle.Fill;
+        _clientTypeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _clientTypeBox.Items.Add("PowerShell (.ps1) - PowerShell Startup Scripts");
+        _clientTypeBox.Items.Add("Native (.exe) - classic Startup Scripts");
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
+        _clientTypeBox.SelectedIndexChanged += (_, _) => {
+            CampaignClientType selected = _clientTypeBox.SelectedIndex == 1
+                ? CampaignClientType.Executable : CampaignClientType.PowerShell;
+            if (_project.ClientType != selected) {
+                _project.ClientType = selected;
+                InvalidatePlan();
+            }
+        };
+        engineChoice.Controls.Add(_clientTypeBox, 1, 0);
+        engineChoice.Controls.Add(new Label {
+            Text = "EXE: isolated test OU only.", Dock = DockStyle.Fill,
+            ForeColor = UiStyle.Muted, AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
+        notification.Controls.Add(engineChoice, 0, 2);
         layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
@@ -507,6 +537,7 @@ internal sealed class DomainDeploymentForm : Form
         _usersButton.Enabled = credentialsStep && _alternateRadio.Checked && !_running;
         _connectButton.Enabled = credentialsStep && !_running;
         _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
+        _clientTypeBox.Enabled = targetStep && !_running;
         _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
@@ -520,7 +551,9 @@ internal sealed class DomainDeploymentForm : Form
         _planButton.Enabled = !_running && HasSelectedTargets;
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
-            _lastPlanKey is not null && _lastPlanKey == PlanKey();
+            _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
+            (_project.ClientType != CampaignClientType.Executable ||
+             NativeClientAgent.CanDeployNativeClient);
         if (_gpoOperationsButton is not null)
         {
             // Read-only inventory and remote actions are useful directly from
@@ -792,15 +825,15 @@ internal sealed class DomainDeploymentForm : Form
     {
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
-            CampaignSchedule.BuildId(_project));
+            CampaignSchedule.BuildId(_project), _project.ClientType);
     }
 
-    private (string parent,string package) MakeTemporaryPackage()
+    private (string parent,string package) MakeTemporaryPackage(bool forReadOnlyPreview = false)
     {
         CampaignSchedule.Validate(_project, true);
         string parent = Path.Combine(Path.GetTempPath(), "LSCM-Package-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(parent);
-        try { return (parent, CampaignExporter.Export(_project, parent)); }
+        try { return (parent, CampaignExporter.Export(_project, parent, forReadOnlyPreview)); }
         catch { Directory.Delete(parent, true); throw; }
     }
 
@@ -818,13 +851,14 @@ internal sealed class DomainDeploymentForm : Form
                 if (!Directory.Exists(inbox))
                     throw new DirectoryNotFoundException("Prepare the SMB feedback directory first: " + inbox);
             }
-            var (parent, package) = MakeTemporaryPackage();
+            var (parent, package) = MakeTemporaryPackage(forReadOnlyPreview: true);
             try
             {
                 var result = await RunBusy("Checking permissions, domain, OU, GPO name and image hashes...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Plan", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 240000));
                 var d = result.GetProperty("data");
                 // Fail closed: deployment preview must also perform a read-only
@@ -871,9 +905,10 @@ internal sealed class DomainDeploymentForm : Form
                     $"Time source: selected AD DC (RootDSE currentTime), schedule interpreted in chosen campaign time zone.\r\n" +
                     $"OU: {x.ou.Dn}\r\nComputer group: {x.group.Dn}\r\n" +
                     $"Direct group members: {d.GetProperty("directGroupMembers").GetInt32()}\r\n" +
-                    $"GPO: {x.gpoName}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
+                    $"GPO: {x.gpoName}\r\nClient: {_project.ClientType}\r\n" +
+                    $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (direct EXE)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
                     $"Files on DC: {d.GetProperty("sysvolOnDc").GetString()}\r\n" +
-                    $"Client startup script: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
+                    $"Client startup: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
                     $"Security filtering: selected group receives Apply; Authenticated Users retains Read only.\r\n" +
                     $"GPO is linked to the OU. No GPO domain-wide link.\r\n" +
                     $"Cleaning up: local agent restores registry; domain GPO and SYSVOL require administrator removal.\r\n" +
@@ -884,8 +919,12 @@ internal sealed class DomainDeploymentForm : Form
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
                 UpdateDeploymentSteps();
-                _progress.Text = "Preview validated campaign and GPO scope. " +
-                    "AD write rights and SYSVOL still require verification during deployment.";
+                _progress.Text = _project.ClientType == CampaignClientType.Executable
+                    ? NativeClientAgent.CanDeployNativeClient
+                        ? "EXE LAB CANARY: Preview ready; max 5 directly listed computers, no nested groups."
+                        : "EXE preview only: use --native-exe-lab in an isolated test lab; Deploy is blocked."
+                    : "Preview validated campaign and GPO scope. " +
+                      "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
@@ -896,12 +935,37 @@ internal sealed class DomainDeploymentForm : Form
     private async Task DeployAsync()
     {
         if (_running) return;
+        if (_project.ClientType == CampaignClientType.Executable &&
+            !NativeClientAgent.CanDeployNativeClient)
+        {
+            _progress.Text = "EXE Deploy locked. Restart this preview with --native-exe-lab for isolated canaries.";
+            return;
+        }
         var plan = await PlanAsync();
         if (plan is null) return;
         try
         {
             var x = Selection();
             if (_lastPlanKey != PlanKey()) throw new InvalidOperationException("Scope changed. Preview again.");
+            if (_project.ClientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction)
+            {
+                int count = plan.Value.GetProperty("directGroupMembers").GetInt32();
+                if (count is < 1 or > 5)
+                    throw new InvalidOperationException(
+                        "EXE canary requires 1-5 direct computer accounts in an isolated lab group.");
+                if (MessageBox.Show(this,
+                        "NATIVE EXE CLIENT - LAB CANARY ONLY\n\n" +
+                        $"Writable DC: {x.dc}\nTarget OU: {x.ou.Dn}\n" +
+                        $"Computer group: {x.group.Dn}\nDirect members: {count} (maximum 5)\n\n" +
+                        "Real GPO/endpoint acceptance tests have not been completed. " +
+                        "Use only an isolated lab OU and flat test-computer group. " +
+                        "Native deployment verifies group members before GPO creation and linking.\n\n" +
+                        "Create this TEST GPO?",
+                        "Native EXE laboratory confirmation",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            }
             if (_lastConflictHigh > 0 && MessageBox.Show(this,
                     $"Detected {_lastConflictHigh} potentially conflicting Lock Screen policy settings.\n" +
                     "Do not deploy without confirming resultant policy on a test computer. Continue anyway?",
@@ -909,7 +973,7 @@ internal sealed class DomainDeploymentForm : Form
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (MessageBox.Show(this,
                     $"CREATE A NEW GPO AND COPY IMAGES INTO SYSVOL?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
-                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\n\n" +
+                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\nClient: {_project.ClientType}\n\n" +
                     "No changes are made to other GPOs. Confirm you have a tested campaign and delegated rights.",
                     "Confirm Active Directory deployment", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
@@ -920,7 +984,8 @@ internal sealed class DomainDeploymentForm : Form
                 var response = await RunBusy("Creating GPO, uploading files to DC and applying OU / security filters...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Deploy", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 300000));
                 var data = response.GetProperty("data");
                 string gpoId = data.GetProperty("gpoId").GetString()!;
