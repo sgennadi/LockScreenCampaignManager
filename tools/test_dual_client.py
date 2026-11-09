@@ -26,13 +26,17 @@ assert "InvalidatePlan();" in ui
 assert 'clientType = _project.ClientType.ToString()' in ui
 assert "CampaignSchedule.BuildId(_project), _project.ClientType" in ui
 assert '"LockScreen-Agent.exe"' in export and '"LockScreen-Agent.ps1"' in export
-assert "NativeClientAgent.IsReadyForProduction" in export
+# Native EXE is preview-only until production validation, unless the operator
+# explicitly opts into the narrow, isolated canary workflow.
+assert "NativeClientAgent.CanDeployNativeClient" in export
+assert "NativeClientAgent.CanDeployNativeClient" in ui
+assert "NativeClientAgent.CanDeployNativeClient" in apply
+assert "internal const bool IsReadyForProduction = false;" in native
+assert '"--native-exe-lab"' in native
 assert "config.AgentSha256" in export
 assert "forReadOnlyPreview = false" in export
-assert "!NativeClientAgent.IsReadyForProduction && !forReadOnlyPreview" in export
+assert "!NativeClientAgent.CanDeployNativeClient && !forReadOnlyPreview" in export
 assert "MakeTemporaryPackage(forReadOnlyPreview: true)" in ui
-assert "!NativeClientAgent.IsReadyForProduction" in ui
-assert "!NativeClientAgent.IsReadyForProduction" in apply
 assert "DeviceImageOrder" in native
 assert 'prefix + fileName' in native
 assert "AssertNoScheduleOverlap(ctx);" in native
