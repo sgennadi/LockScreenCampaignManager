@@ -252,7 +252,7 @@ internal static class NativeUserScreenSaverGpo
     internal static string UpgradeFreshUserGptIni(string original)
     {
         ArgumentNullException.ThrowIfNull(original);
-        if (!Regex.IsMatch(original, @"(?mi)^\[General\]\s*\r?$",
+        if (!Regex.IsMatch(original, @"(?mi)^\[General\][ \t]*\r?$",
                 RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)) ||
             ZeroVersion.Matches(original).Count != 1)
             throw new InvalidDataException(
