@@ -147,6 +147,44 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertNotIn('RegisterTaskDefinition', evidence)
         self.assertNotIn('Directory.CreateDirectory', evidence)
 
+    def test_visible_version_and_client_type_status(self):
+        editor = read("MainForm.cs")
+        campaign_wizard = read("MainForm.CampaignWizard.cs")
+        ad_wizard = read("AdConnectionStartDialog.cs")
+        ad_user = read("AdAlternateAccountWizard.cs")
+        deployment = read("DomainDeploymentForm.cs")
+        gpo = read("GpoOperationsForm.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        reader = read("ClientFeedback.cs")
+        panel = read("ClientFeedbackPanel.cs")
+        native = read("NativeClientAgent.Health.cs")
+        ps1 = read("Assets/LockScreen-Agent.ps1")
+        evidence = read("AgentReportEvidence.cs")
+        summary = read("GpoOperationsForm.AgentEvidence.cs")
+        for file, marker in (
+            (editor, "MainHeaderVersion"),
+            (campaign_wizard, "CampaignWizardVersion"),
+            (ad_wizard, "AdWizardVersion"),
+            (deployment, "DeploymentVersion"),
+            (gpo, "AgentManagementVersion"),
+        ):
+            self.assertIn(marker, file)
+            self.assertIn("AppVersion.Current", file)
+        self.assertIn("AppVersion.Current", ad_user)
+        self.assertIn("CheckMainEditorHeader", smoke)
+        self.assertIn("Missing/clipped live version", smoke)
+        self.assertIn("agentVersion='0.4.0-preview.69';clientType='PowerShell'", ps1)
+        self.assertIn('agentVersion = "0.4.0-preview.69-native", clientType = "Executable"', native)
+        self.assertIn("ValidClientType", reader)
+        self.assertIn("NormalizedClientType", reader)
+        self.assertIn('Stale report', reader)
+        self.assertNotIn('Stale / offline', reader)
+        self.assertIn('HeaderText = "Client type"', panel)
+        self.assertIn('AgentVersion,ClientType', panel)
+        self.assertIn('HasReportedMethodMismatch', evidence)
+        self.assertIn('MethodAgreement(policy.ClientType, interpretation.ClientType)', summary)
+        self.assertIn('reported mismatch', summary.lower())
+
     def test_export_and_deploy_events(self):
         self.assertIn('CampaignHistoryStore.TryRecordEvent(id, "Export"', read('CampaignExporter.cs'))
         self.assertIn('"GPO Deploy"', read('DomainDeploymentForm.cs'))
