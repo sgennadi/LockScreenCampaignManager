@@ -823,15 +823,15 @@ internal sealed class DomainDeploymentForm : Form
     {
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
-            CampaignSchedule.BuildId(_project));
+            CampaignSchedule.BuildId(_project), _project.ClientType);
     }
 
-    private (string parent,string package) MakeTemporaryPackage()
+    private (string parent,string package) MakeTemporaryPackage(bool forReadOnlyPreview = false)
     {
         CampaignSchedule.Validate(_project, true);
         string parent = Path.Combine(Path.GetTempPath(), "LSCM-Package-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(parent);
-        try { return (parent, CampaignExporter.Export(_project, parent)); }
+        try { return (parent, CampaignExporter.Export(_project, parent, forReadOnlyPreview)); }
         catch { Directory.Delete(parent, true); throw; }
     }
 
@@ -849,13 +849,14 @@ internal sealed class DomainDeploymentForm : Form
                 if (!Directory.Exists(inbox))
                     throw new DirectoryNotFoundException("Prepare the SMB feedback directory first: " + inbox);
             }
-            var (parent, package) = MakeTemporaryPackage();
+            var (parent, package) = MakeTemporaryPackage(forReadOnlyPreview: true);
             try
             {
                 var result = await RunBusy("Checking permissions, domain, OU, GPO name and image hashes...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Plan", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 240000));
                 var d = result.GetProperty("data");
                 // Fail closed: deployment preview must also perform a read-only
@@ -902,9 +903,10 @@ internal sealed class DomainDeploymentForm : Form
                     $"Time source: selected AD DC (RootDSE currentTime), schedule interpreted in chosen campaign time zone.\r\n" +
                     $"OU: {x.ou.Dn}\r\nComputer group: {x.group.Dn}\r\n" +
                     $"Direct group members: {d.GetProperty("directGroupMembers").GetInt32()}\r\n" +
-                    $"GPO: {x.gpoName}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
+                    $"GPO: {x.gpoName}\r\nClient: {_project.ClientType}\r\n" +
+                    $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (direct EXE)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
                     $"Files on DC: {d.GetProperty("sysvolOnDc").GetString()}\r\n" +
-                    $"Client startup script: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
+                    $"Client startup: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
                     $"Security filtering: selected group receives Apply; Authenticated Users retains Read only.\r\n" +
                     $"GPO is linked to the OU. No GPO domain-wide link.\r\n" +
                     $"Cleaning up: local agent restores registry; domain GPO and SYSVOL require administrator removal.\r\n" +
@@ -915,8 +917,12 @@ internal sealed class DomainDeploymentForm : Form
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
                 UpdateDeploymentSteps();
-                _progress.Text = "Preview validated campaign and GPO scope. " +
-                    "AD write rights and SYSVOL still require verification during deployment.";
+                _progress.Text = _project.ClientType == CampaignClientType.Executable
+                    ? NativeClientAgent.CanDeployNativeClient
+                        ? "EXE LAB CANARY: Preview ready; max 5 directly listed computers, no nested groups."
+                        : "EXE preview only: use --native-exe-lab in an isolated test lab; Deploy is blocked."
+                    : "Preview validated campaign and GPO scope. " +
+                      "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
