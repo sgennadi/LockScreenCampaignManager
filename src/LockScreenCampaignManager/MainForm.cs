@@ -73,7 +73,7 @@ public sealed partial class MainForm : Form
         {
             // Corrupt company profiles cannot silently select the wrong AD scope.
             _company = null;
-            SetProject(new CampaignProject());
+            SetProject(new CampaignProject { Name = "" });
             _status.Text = "Company profiles unavailable: inspect Diagnostics.";
             AppLog.Write(ex, "Company startup");
         }
@@ -1393,7 +1393,7 @@ public sealed partial class MainForm : Form
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.Controls.Add(new Label
             {
-                Text = "New lock screen campaign",
+                Text = "New campaign",
                 Dock = DockStyle.Fill,
                 Font = new Font("Segoe UI Semibold", 15f, FontStyle.Bold),
                 ForeColor = UiStyle.Navy
@@ -1408,7 +1408,7 @@ public sealed partial class MainForm : Form
             }, 0, 1);
             layout.Controls.Add(new Label { Text = "Campaign name", Dock = DockStyle.Fill }, 0, 2);
             var nameBox = new TextBox { Dock = DockStyle.Fill, MaxLength = 100,
-                Text = draft.Name };
+                Text = draft.Name, PlaceholderText = "Enter campaign name" };
             layout.Controls.Add(nameBox, 0, 3);
             layout.Controls.Add(new Label { Text = "Start date and time", Dock = DockStyle.Fill }, 0, 4);
             var start = new DateTimePicker
