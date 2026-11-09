@@ -21,6 +21,7 @@ namespace LockScreenCampaignManager;
 internal static class NativeImmediateActions
 {
     private const int MaxEligible = 2000;
+    private const int MaxInventory = 5000;
     private const int MaxSelected = 25;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex HostRegex = new(
@@ -35,8 +36,8 @@ internal static class NativeImmediateActions
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Windows signed/sealed LDAP is required.");
-        if (mode is not ("List" or "Preview" or "VerifyCleanup"))
-            throw new ArgumentException("Only read-only List, Preview and VerifyCleanup are native.");
+        if (mode is not ("List" or "Inventory" or "Preview" or "VerifyCleanup"))
+            throw new ArgumentException("Only read-only List, Inventory, Preview and VerifyCleanup are native.");
         JsonElement args = JsonSerializer.SerializeToElement(request, Json);
         string domain = Text(args, "domain").Trim().ToLowerInvariant();
         string selectedDc = Text(args, "dc").Trim();
@@ -83,6 +84,46 @@ internal static class NativeImmediateActions
                     message = "Eligible AD computers in the selected OU and nested security group. No changes made.",
                     data = candidates
                 }, Json);
+
+            if (mode == "Inventory")
+            {
+                // Separate the total OU computer population from the verified
+                // OU + nested security-group intersection. Never use a
+                // lastLogonTimestamp threshold for authorization or remote
+                // actions: it is replicated, approximate and can lag by days.
+                var computersInOu = NativeGpoLifecycleList.SearchPaged(ldap,
+                    ouDn, "(objectCategory=computer)", MaxInventory,
+                    Stopwatch.StartNew(), "distinguishedName", "lastLogonTimestamp",
+                    "userAccountControl");
+                var activity = computersInOu.ToDictionary(
+                    e => e.DistinguishedName,
+                    e => new {
+                        seen = ParseAdLastSeen(NativeAdDiscovery.Attr(e, "lastLogonTimestamp")),
+                        disabled = ParseAdDisabled(NativeAdDiscovery.Attr(e, "userAccountControl"))
+                    }, StringComparer.OrdinalIgnoreCase);
+                var members = candidates.Select(c =>
+                {
+                    var found = activity.TryGetValue(c.dn, out var value) ? value : null;
+                    return new
+                    {
+                        c.name, c.sam, c.dn,
+                        adLastSeenUtc = found?.seen,
+                        adDisabled = found?.disabled
+                    };
+                }).ToArray();
+                return JsonSerializer.SerializeToElement(new
+                {
+                    success = true,
+                    message = "Read-only AD OU count and OU/group intersection with approximate replicated AD activity. No changes made.",
+                    data = new
+                    {
+                        ouTotal = computersInOu.Count,
+                        groupEligible = members.Length,
+                        activitySource = "lastLogonTimestamp (replicated; approximate, not online presence)",
+                        computers = members
+                    }
+                }, Json);
+            }
 
             string purpose = Text(args, "purpose");
             if (purpose.Length == 0) purpose = "Push";
@@ -259,6 +300,28 @@ internal static class NativeImmediateActions
             list.Add(new EligibleComputer(fqdn, sam, entry.DistinguishedName));
         }
         return list.OrderBy(x => x.name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+    }
+
+    internal static DateTimeOffset? ParseAdLastSeen(string? raw)
+    {
+        if (!long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out long fileTime) || fileTime <= 0)
+            return null;
+        try
+        {
+            var utc = DateTime.FromFileTimeUtc(fileTime);
+            if (utc.Year < 2000 || utc > DateTime.UtcNow.AddDays(2))
+                return null;
+            return new DateTimeOffset(utc, TimeSpan.Zero);
+        }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
+
+    internal static bool? ParseAdDisabled(string? raw)
+    {
+        if (!uint.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out uint flags)) return null;
+        return (flags & 2u) != 0;
     }
 
     internal static bool ValidHost(string host, string domain) =>
