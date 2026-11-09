@@ -1,3 +1,11 @@
+## 0.4.0-preview.77 — Correct GPO empty-half handling and Screen Saver policy path (2026-11-09)
+
+- Fix a false-blocking Preview.76 regression: a linked GPO with no User/Computer settings can legitimately omit the respective SYSVOL subdirectory. Before rejecting missing policy folders, inspect AD GPC `versionNumber` and `gPCUserExtensionNames` / `gPCMachineExtensionNames` on the **same selected DC**. Skip only an unconfigured policy half (with coverage note); reject missing User/Machine folders if AD says the half contains settings.
+- Fail closed when the registry policy CSE is advertised for an applicable GPO but its `Registry.pol` is missing. Keep rejecting access denied, UNC/network errors and unsafe junction/reparse folders for GPP evidence, never equating them with an empty policy.
+- Detect `NoDispScrSavPage` at the correct Microsoft ADMX `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System` registry key, and explain that this user UI restriction does not itself disable Screen Saver execution.
+- Add self-tests for User/Computer GPO version halves, signed 32-bit version values, Registry CSE metadata, correct HKCU GPP path, and negative tests for accidental wrong-hive/wrong-key detection.
+- Update manager to preview.77, publication workflow and release documentation. Existing PS1 and native EXE agent payloads are unchanged; live AD/RSoP/Client tests still require a dedicated pilot.
+
 ## 0.4.0-preview.76 — Scoped read-only User/Computer GPO conflict auditing (2026-11-09)
 
 - Extend the native read-only GPO conflict scanner with an explicit **User** policy scope, while keeping existing **Computer** as the backwards-compatible default. Read the matching SYSVOL User/Machine halves with selected-DC LDAP identity and signed/sealed connections.

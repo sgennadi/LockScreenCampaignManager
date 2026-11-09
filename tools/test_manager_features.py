@@ -175,6 +175,26 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("MS-GPREG rejects unexpected REG_DWORD type", tests)
         self.assertIn("User GPO GPT upgrade preserves following lines", tests)
 
+    def test_optional_gpo_policy_half_and_registry_cse_integrity(self):
+        source = read("NativeGpoConflictScan.cs")
+        tests = read("SelfTests.cs")
+        self.assertIn('"versionNumber", "gPCUserExtensionNames"', source)
+        self.assertIn('"gPCMachineExtensionNames"', source)
+        self.assertIn('PolicyHalfHasConfiguredSettings(versionNumber,', source)
+        self.assertIn('RegistryCseAdvertised(extensionNames)', source)
+        self.assertIn('EnsureDirectory(gpoRoot)', source)
+        self.assertIn('if (!PolicyFolderExistsSafe(policyRoot))', source)
+        self.assertIn('catch (FileNotFoundException) { return false; }', source)
+        self.assertIn('catch (DirectoryNotFoundException) { return false; }', source)
+        self.assertIn('EnsureDirectory(Path.GetDirectoryName(registryFolder)!)', source)
+        self.assertIn('@"software\\microsoft\\windows\\currentversion\\policies\\system"', source)
+        self.assertIn('Missing User/Machine SYSVOL directory allowed only for genuinely unconfigured GPO halves', tests)
+        self.assertIn('Advertised Registry Policy CSE requires matching SYSVOL', tests)
+        self.assertIn('Screen Saver UI restriction must be read under the real HKCU System', tests)
+        # Cannot silently mark access-denied / network failures as an absent policy half.
+        self.assertNotIn('catch (UnauthorizedAccessException) { return false; }', source)
+        self.assertNotIn('catch (IOException) { return false; }', source)
+
     def test_per_group_user_and_computer_conflict_preflight(self):
         native = read("NativeGpoConflictScan.cs")
         form = read("DomainDeploymentForm.AssignmentDeployment.cs")

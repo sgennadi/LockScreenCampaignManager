@@ -78,6 +78,8 @@ internal static class NativeGpoConflictScan
             var levels = ReadLevels(ldap, baseDn, ouDn);
             var found = new List<Match>();
             var notes = new List<string>();
+            int skippedEmptyHalves = 0;
+            int skippedInactiveMissingHalves = 0;
             foreach (var level in levels)
             {
                 foreach (var link in level.Links)
@@ -90,10 +92,15 @@ internal static class NativeGpoConflictScan
                         throw new InvalidDataException(
                             "A linked GPO is invalid or outside the selected domain; scan incomplete.");
                     var entry = ReadObject(ldap, link.Dn,
-                        "(objectClass=groupPolicyContainer)", "displayName", "flags", "gPCWQLFilter");
+                        "(objectClass=groupPolicyContainer)", "displayName", "flags",
+                        "gPCWQLFilter", "versionNumber", "gPCUserExtensionNames",
+                        "gPCMachineExtensionNames");
                     string gpoName = NativeAdDiscovery.Attr(entry, "displayName");
                     if (gpoName.Length == 0) gpoName = id.ToString("D");
                     int flags = IntAttribute(entry, "flags");
+                    int versionNumber = IntAttribute(entry, "versionNumber");
+                    string extensionNames = NativeAdDiscovery.Attr(entry,
+                        userScope ? "gPCUserExtensionNames" : "gPCMachineExtensionNames");
                     string wmi = NativeAdDiscovery.Attr(entry, "gPCWQLFilter");
                     bool partDisabled = IsPolicyPartDisabled(flags, userScope);
                     if (partDisabled) inScope = false;
@@ -102,11 +109,30 @@ internal static class NativeGpoConflictScan
                             " cannot be evaluated without client-side RSoP.");
 
                     // The SYSVOL path is pinned to the same verified DC used
-                    // for LDAP. A missing/unreadable User or Machine directory must
-                    // block pre-deployment audit, never count as no conflicts.
+                    // for LDAP. Real GPOs can have no User/Machine directory
+                    // when that policy half has no configured settings at all.
+                    // Check AD version + CSEs before treating absence as benign.
                     string policyFolder = userScope ? "User" : "Machine";
-                    string policyRoot = Path.Combine(@"\\", actualDc, "SYSVOL", domain,
-                        "Policies", "{" + id.ToString("D").ToUpperInvariant() + "}", policyFolder);
+                    string gpoRoot = Path.Combine(@"\\", actualDc, "SYSVOL", domain,
+                        "Policies", "{" + id.ToString("D").ToUpperInvariant() + "}");
+                    EnsureDirectory(gpoRoot);
+                    string policyRoot = Path.Combine(gpoRoot, policyFolder);
+                    if (!PolicyFolderExistsSafe(policyRoot))
+                    {
+                        if (!inScope)
+                        {
+                            skippedInactiveMissingHalves++;
+                            continue; // Disabled/non-applicable links cannot override this scope.
+                        }
+                        if (PolicyHalfHasConfiguredSettings(versionNumber,
+                                extensionNames, userScope))
+                            throw new InvalidDataException("Linked GPO " +
+                                SafeName(gpoName) + " advertises " + policyFolder +
+                                " Configuration in AD, but its SYSVOL folder is missing. " +
+                                "Check AD/SYSVOL consistency on the selected DC.");
+                        skippedEmptyHalves++;
+                        continue; // Legitimately empty policy half.
+                    }
                     EnsureDirectory(policyRoot);
                     foreach (string startup in new[]
                     {
@@ -125,7 +151,24 @@ internal static class NativeGpoConflictScan
                     })
                     {
                         string file = Path.Combine(policyRoot, source);
-                        if (!FileExistsSafe(file)) continue;
+                        if (!FileExistsSafe(file))
+                        {
+                            if (inScope && source == "Registry.pol" &&
+                                RegistryCseAdvertised(extensionNames))
+                                throw new InvalidDataException("Linked GPO " +
+                                    SafeName(gpoName) + " advertises Registry Policy CSE in AD " +
+                                    "but Registry.pol is missing from " + policyFolder +
+                                    " on the selected DC.");
+                            continue;
+                        }
+                        if (source != "Registry.pol")
+                        {
+                            // Registry.xml itself is not a link, but ancestor
+                            // folders could be a junction outside the GPO.
+                            string registryFolder = Path.GetDirectoryName(file)!;
+                            EnsureDirectory(Path.GetDirectoryName(registryFolder)!);
+                            EnsureDirectory(registryFolder);
+                        }
                         IReadOnlyList<Hit> hits;
                         try
                         {
@@ -154,6 +197,15 @@ internal static class NativeGpoConflictScan
                     }
                 }
             }
+            if (skippedEmptyHalves > 0)
+                notes.Add(skippedEmptyHalves + " GPO " +
+                    (userScope ? "User" : "Computer") +
+                    " policy halves had no configured AD settings and no SYSVOL folder; " +
+                    "skipped as empty, not as conflicts.");
+            if (skippedInactiveMissingHalves > 0)
+                notes.Add(skippedInactiveMissingHalves +
+                    " inactive/non-applicable linked policy halves had no SYSVOL folder; " +
+                    "they cannot override this target scope.");
             object? remoteRegistry = null;
             if (computer.Length > 0)
             {
@@ -216,6 +268,22 @@ internal static class NativeGpoConflictScan
 
     internal static bool IsPolicyPartDisabled(int gpoFlags, bool userScope) =>
         (gpoFlags & (userScope ? 1 : 2)) != 0;
+
+    // GPO versionNumber = high 16 bits User, low 16 bits Computer.
+    // AD may represent the 32-bit value as signed; preserve the raw bit layout.
+    internal static bool PolicyHalfHasConfiguredSettings(
+        int versionNumber, string? extensionNames, bool userScope)
+    {
+        uint version = unchecked((uint)versionNumber);
+        uint halfVersion = userScope ? version >> 16 : version & 0xFFFF;
+        return halfVersion != 0 || !string.IsNullOrWhiteSpace(extensionNames);
+    }
+
+    // MS-GPREG Registry Policy Client Side Extension, same for User/Computer.
+    internal static bool RegistryCseAdvertised(string? extensionNames) =>
+        (extensionNames ?? "").Contains(
+            "{35378EAC-683F-11D2-A89A-00C04FBBCFA2}",
+            StringComparison.OrdinalIgnoreCase);
 
     private static string Get(JsonElement args, string key) =>
         args.ValueKind == JsonValueKind.Object &&
@@ -315,6 +383,20 @@ internal static class NativeGpoConflictScan
             && id != Guid.Empty;
     }
 
+    // Only an actual not-found error is benign for an unconfigured half.
+    // Access denied, broken network paths and reparse points are not.
+    private static bool PolicyFolderExistsSafe(string path)
+    {
+        FileAttributes attributes;
+        try { attributes = File.GetAttributes(path); }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        if ((attributes & FileAttributes.Directory) == 0 ||
+            (attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("Selected DC GPO policy folder is unsafe.");
+        return true;
+    }
+
     private static void EnsureDirectory(string path)
     {
         var directory = new DirectoryInfo(path);
@@ -356,9 +438,11 @@ internal static class NativeGpoConflictScan
                  "screensavetimeout" or "screensaverissecure"))
                 return new Hit(key, name, value, "High",
                     "Potential User Configuration Screen Saver overlap; check user gpresult/RSoP.");
-            if (screenSaverKey && n == "nodispscrsavpage")
+            if (n == "nodispscrsavpage" && k ==
+                @"software\microsoft\windows\currentversion\policies\system")
                 return new Hit(key, name, value, "Warning",
-                    "Screen Saver configuration UI restriction; verify User Configuration.");
+                    "Screen Saver UI restriction (HKCU Policies\\System); " +
+                    "does not itself prevent a screen saver from running.");
             return null;
         }
         if ((n == "lockscreenimage" || n == "nochanginglockscreen" || n == "nolockscreen")
