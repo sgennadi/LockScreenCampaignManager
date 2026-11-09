@@ -19,7 +19,17 @@ The native client is an independent headless mode of the portable application ex
 
 ## Current limitations — EXE must not be deployed to production
 
-**`NativeClientAgent.IsReadyForProduction = false`.** The EXE option is visible in the Deployment Wizard and can participate in design and review, but EXE export/deployment intentionally fails until real-domain endpoint testing and approval. The default PowerShell option remains functional.
+**`NativeClientAgent.IsReadyForProduction = false`.** The EXE option is visible in the Deployment Wizard and can participate in read-only Preview, but normal EXE export/deployment remains disabled until real-domain endpoint testing and approval. The default PowerShell option remains functional.
+
+For **explicit, limited lab canaries only**, start the PR's Windows build from an interactive administrator workstation using:
+
+```cmd
+LockScreenCampaignManager.exe --native-exe-lab
+```
+
+Then choose the EXE client, connect to a verified writable DC, choose an **isolated lab OU**, and select a **flat lab security group containing at most five directly listed computer accounts, all under that OU**. Complete read-only Preview and accept the separate EXE laboratory-risk confirmation. The C# GPO deployment engine rechecks all direct group members as computer objects immediately before creating the GPO and again before linking the OU. It rejects nested groups, out-of-scope members, broad built-in computer groups and membership drift. The flag is per process/session and is never used by the client agent or scheduled tasks.
+
+This lab opt-in is **not** a production-readiness assertion. Membership may change after deployment; keep the lab group controlled. Do not point it at production OUs or allow inherited scope to broaden.
 
 Automated x86/x64 compilation, source contracts, headless Status and SHA-256 tamper tests do **not** prove that a GPO actually executes on a client, that scheduled pictures appear on the physical lock screen, or that cleanup succeeds at reboot. Validate at least one isolated Windows 10 and one Windows 11 Enterprise/Education client, with no production OU/groups, before enabling EXE export.
 
@@ -28,7 +38,7 @@ A running executable cannot delete itself. The native engine schedules its execu
 ## Acceptance checklist for the isolated test OU
 
 - Test **PS1** first to confirm prior campaign / policy behavior did not change.
-- Test **EXE** only after the safety gate is consciously removed on a dedicated test build. Confirm that `scripts.ini` calls the EXE directly and `psscripts.ini` / CMD launchers are absent.
+- Test **EXE** only with the explicit `--native-exe-lab` flag and the five-computer scope limit. Confirm that `scripts.ini` calls the EXE directly and `psscripts.ini` / CMD launchers are absent.
 - Apply `gpupdate`, reboot, and confirm an administrator-selected client successfully starts as SYSTEM without a GUI or PowerShell.
 - Verify startup installation, the configured first slide, exact scheduled changes, time-zone / DST handling and the daily self-check.
 - Verify image hash repair, broken manifest/agent refusal, owner collision, conflicting registry policy refusal and delegated GPO permissions.
