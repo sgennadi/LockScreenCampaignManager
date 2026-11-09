@@ -268,11 +268,22 @@ internal sealed class AdConnectionStartDialog : Form
         };
         field.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        field.Controls.Add(new Label {
+        var captionLabel = new Label {
             Text = caption, Dock = DockStyle.Fill,
             ForeColor = UiStyle.Muted, TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true, Margin = Padding.Empty
-        }, 0, 0);
+            AutoEllipsis = false, Margin = Padding.Empty
+        };
+        field.Controls.Add(captionLabel, 0, 0);
+        // Field captions also grow at 150-200% scaling instead of losing
+        // the lower part of the last line above their edit controls.
+        void FitCaption()
+        {
+            if (!field.IsDisposed)
+                field.RowStyles[0].Height = Math.Max(27,
+                    TextRenderer.MeasureText("Agpqy", captionLabel.Font).Height + 8);
+        }
+        captionLabel.FontChanged += (_, _) => FitCaption();
+        FitCaption();
         editor.Dock = DockStyle.Top;
         editor.Margin = new Padding(0, 1, 0, 0);
         field.Controls.Add(editor, 0, 1);
@@ -557,7 +568,7 @@ internal sealed class AdConnectionStartDialog : Form
             authentication.RowStyles[0].Height = authRadio;
             authentication.RowStyles[1].Height = authButton;
             authentication.RowStyles[2].Height = authDomain;
-            connection.RowStyles[0].Height = Math.Max(92, TextHeight(connectionIntro) * 2 + 18);
+            connection.RowStyles[0].Height = Math.Max(108, TextHeight(connectionIntro) * 3 + 22);
             connection.RowStyles[1].Height = Math.Max(230,
                 authRadio + authButton + authDomain + authentication.Padding.Vertical + 8);
             connection.RowStyles[3].Height = Math.Max(95, TextHeight(_state) * 2 + 27);
