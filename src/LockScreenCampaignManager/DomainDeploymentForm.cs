@@ -14,6 +14,7 @@ internal sealed class DomainDeploymentForm : Form
     private readonly ComboBox _dcBox = new();
     private readonly TextBox _userBox = new();
     private readonly TextBox _passwordBox = new();
+    private readonly Label _otherAccountHint = new();
     private readonly TextBox _gpoBox = new();
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
@@ -94,7 +95,9 @@ internal sealed class DomainDeploymentForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = UiStyle.Canvas;
         BuildControls();
-        LoadConnection();
+        _suppressConnectionChanged = true;
+        try { LoadConnection(); }
+        finally { _suppressConnectionChanged = false; }
         if (readOnlyInventory is not null)
         {
             // Step 1 is a read-only inventory; it never grants permission to
@@ -129,6 +132,7 @@ internal sealed class DomainDeploymentForm : Form
                   ". Session credentials reused; write permission checks follow OU selection.",
             UiStatusKind.Neutral);
         UiWindowPlacement.Attach(this, "domain-deployment");
+        FormClosed += (_, _) => _passwordBox.Clear();
         if (authenticatedSession is not null && readOnlyInventory is not null)
             Shown += async (_, _) => await ConnectAsync();
     }
@@ -232,20 +236,33 @@ internal sealed class DomainDeploymentForm : Form
         _alternateRadio.Text = "Other AD account";
         _alternateRadio.AutoSize = true;
         _currentRadio.CheckedChanged += (_, _) => SetCredentialFields();
-        _alternateRadio.CheckedChanged += (_, _) => SetCredentialFields();
+        _alternateRadio.CheckedChanged += (_, _) =>
+        {
+            SetCredentialFields();
+            if (_alternateRadio.Checked && !_suppressConnectionChanged)
+                EditAlternateAccount(revertToCurrentOnCancel: true);
+        };
         accounts.Controls.Add(_currentRadio, 0, 0);
         accounts.Controls.Add(_alternateRadio, 1, 0);
-        _userBox.PlaceholderText = @"DOMAIN\user or user@domain";
+        _userBox.PlaceholderText = "Choose account using the Wizard...";
+        _userBox.ReadOnly = true;
         _userBox.TextChanged += (_, _) => ConnectionChanged();
+        // Password is collected exclusively on the second Wizard page.
+        // This hidden in-memory text box supports existing credential routing
+        // without exposing a second, inconsistent password editor.
         _passwordBox.UseSystemPasswordChar = true;
         _passwordBox.TextChanged += (_, _) => ConnectionChanged();
+        _otherAccountHint.Dock = DockStyle.Fill;
+        _otherAccountHint.TextAlign = ContentAlignment.MiddleLeft;
+        _otherAccountHint.ForeColor = UiStyle.Muted;
+        _otherAccountHint.AutoEllipsis = true;
         accounts.Controls.Add(ResponsiveField("AD user", _userBox), 0, 1);
-        accounts.Controls.Add(ResponsiveField("Password (session only)", _passwordBox), 1, 1);
+        accounts.Controls.Add(ResponsiveField("Password", _otherAccountHint), 1, 1);
         var accountActions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        _usersButton.Text = "Find user";
-        _usersButton.Width = 100;
+        _usersButton.Text = "Select AD user...";
+        _usersButton.Width = 168;
         _usersButton.Height = 34;
-        _usersButton.Click += async (_, _) => await FindUserAsync();
+        _usersButton.Click += (_, _) => EditAlternateAccount();
         accountActions.Controls.Add(_usersButton);
         _connectButton.Text = "Connect";
         _connectButton.Width = 122;
@@ -540,8 +557,10 @@ internal sealed class DomainDeploymentForm : Form
     {
         bool alternate = _alternateRadio.Checked;
         _userBox.Enabled = alternate;
-        _passwordBox.Enabled = alternate;
         _usersButton.Enabled = alternate;
+        _otherAccountHint.Text = !alternate ? "Use current Windows credentials" :
+            _passwordBox.Text.Length > 0 ? "Set in Wizard (session only)" :
+            "Select user to enter password";
         ConnectionChanged();
     }
 
@@ -921,37 +940,36 @@ internal sealed class DomainDeploymentForm : Form
         catch (Exception ex) { DisplayError(ex); }
     }
 
-    private async Task FindUserAsync()
+    private void EditAlternateAccount(bool revertToCurrentOnCancel = false)
     {
-        if (_running) return;
-        var search = Microsoft.VisualBasic.Interaction.InputBox("AD account name (at least 2 characters)",
-            "Find a domain user", _userBox.Text);
-        if (search.Length < 2) return;
+        if (_running || IsDisposed || Disposing) return;
+        string previous = _userBox.Text.Trim();
+        using var wizard = new AdAlternateAccountWizard(
+            _domainBox.Text.Trim(), _dcBox.Text.Trim(), previous,
+            _passwordBox.Text, rememberUsername: false,
+            saveEncryptedPassword: false, allowSaving: false);
+        if (wizard.ShowDialog(this) != DialogResult.OK)
+        {
+            // Cancel must not leave a newly selected alternate account with
+            // an empty password. An existing authenticated session survives.
+            if (revertToCurrentOnCancel || _passwordBox.Text.Length == 0)
+            {
+                _suppressConnectionChanged = true;
+                try { _currentRadio.Checked = true; }
+                finally { _suppressConnectionChanged = false; }
+                SetCredentialFields();
+            }
+            return;
+        }
+        _suppressConnectionChanged = true;
         try
         {
-            string domain = _domainBox.Text.Trim();
-            string dc = _dcBox.Text.Trim();
-            var lookupCredentials = string.IsNullOrWhiteSpace(_userBox.Text) || string.IsNullOrEmpty(_passwordBox.Text)
-                ? new DomainCredentials(domain, "", "") : Credentials();
-            var response = await RunBusy("Searching AD users...", () =>
-                DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Users",
-                    new { domain, dc, search }, lookupCredentials));
-            var rows = response.GetProperty("data").EnumerateArray().Select(x =>
-                new DirectoryRow(x.GetProperty("name").GetString()!, x.GetProperty("dn").GetString()!, x.GetProperty("sam").GetString()!)).ToArray();
-            using var chooser = new Form { Text = "Select AD account", StartPosition = FormStartPosition.CenterParent,
-                Width = 650, Height = 440, MinimumSize = new Size(450, 350) };
-            var list = new ListBox { Dock = DockStyle.Fill };
-            list.Items.AddRange(rows);
-            var select = new Button { Dock = DockStyle.Bottom, Text = "Select account", Height = 45 };
-            select.Click += (_, _) => { if (list.SelectedItem is not null) chooser.DialogResult = DialogResult.OK; };
-            chooser.Controls.Add(list); chooser.Controls.Add(select);
-            if (chooser.ShowDialog(this) == DialogResult.OK && list.SelectedItem is DirectoryRow user)
-            {
-                _alternateRadio.Checked = true;
-                _userBox.Text = user.Sam;
-            }
+            _alternateRadio.Checked = true;
+            _userBox.Text = wizard.SelectedUsername;
+            _passwordBox.Text = wizard.SelectedPassword;
         }
-        catch (Exception ex) { DisplayError(ex); }
+        finally { _suppressConnectionChanged = false; }
+        SetCredentialFields();
     }
 
     private void DisplayError(Exception ex)

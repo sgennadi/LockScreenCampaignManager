@@ -700,138 +700,23 @@ internal sealed class AdConnectionStartDialog : Form
     private bool EditAlternateAccount()
     {
         if (_busy) return false;
-        using var dialog = new Form {
-            Text = "Sign in with another Active Directory account",
-            StartPosition = FormStartPosition.CenterParent,
-            MinimumSize = new Size(590, 430),
-            Size = new Size(675, 475),
-            AutoScaleMode = AutoScaleMode.Dpi,
-            Font = new Font("Segoe UI", 10f),
-            BackColor = UiStyle.Canvas,
-            ShowInTaskbar = false
-        };
-        var root = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
-            Padding = new Padding(22, 17, 22, 15)
-        };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 69));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 69));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
-        root.Controls.Add(new Label {
-            Text = "Alternate Active Directory credentials",
-            Dock = DockStyle.Fill, Font = new Font("Segoe UI Semibold", 14f),
-            ForeColor = UiStyle.Navy
-        }, 0, 0);
-        root.Controls.Add(new Label {
-            Text = "Domain: " + _domain.Text.Trim() +
-                "   •   Used for this connection and any subsequent deployment in this session.",
-            Dock = DockStyle.Fill, ForeColor = UiStyle.Muted, AutoEllipsis = true
-        }, 0, 1);
-
-        var username = new TextBox {
-            Text = _user.Text, PlaceholderText = @"DOMAIN\user or user@domain"
-        };
-        var password = new TextBox {
-            Text = _password.Text, UseSystemPasswordChar = true
-        };
-        root.Controls.Add(ConnectionField("AD username", username), 0, 2);
-        root.Controls.Add(ConnectionField("Password", password), 0, 3);
-
-        var saving = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
-            BackColor = UiStyle.SoftBlue, Padding = new Padding(7, 5, 7, 4)
-        };
-        saving.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        saving.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var remember = new CheckBox {
-            Text = "Remember username", Checked = _rememberUsername.Checked,
-            Dock = DockStyle.Fill, Margin = new Padding(8, 2, 6, 2)
-        };
-        var savePassword = new CheckBox {
-            Text = "Save password securely", Checked = _saveEncryptedPassword.Checked,
-            Dock = DockStyle.Fill, Margin = new Padding(8, 2, 5, 2)
-        };
-        remember.CheckedChanged += (_, _) => {
-            if (!remember.Checked) savePassword.Checked = false;
-        };
-        savePassword.CheckedChanged += (_, _) => {
-            if (savePassword.Checked) remember.Checked = true;
-        };
-        saving.Controls.Add(remember, 0, 0);
-        saving.Controls.Add(savePassword, 1, 0);
-        root.Controls.Add(saving, 0, 4);
-        root.Controls.Add(new Label {
-            Text = "Saving a password is optional. Windows Credential Manager protects " +
-                   "the secret for your Windows user account. Leave unchecked for session-only use.",
-            ForeColor = UiStyle.Muted, Dock = DockStyle.Fill, AutoEllipsis = true,
-            Padding = new Padding(6, 9, 6, 2)
-        }, 0, 5);
-
-        var buttons = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
-        };
-        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115));
-        var forget = new Button {
-            Text = "Forget saved login", Dock = DockStyle.Left, Width = 170,
-            Tag = "NoIcon"
-        };
-        forget.Click += (_, _) => {
-            if (MessageBox.Show(dialog,
-                "Remove credentials stored for this AD domain?",
-                "Forget saved AD login", MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
-                != DialogResult.Yes) return;
-            ForgetCredentials();
-            username.Clear();
-            password.Clear();
-            remember.Checked = false;
-            savePassword.Checked = false;
-        };
-        buttons.Controls.Add(forget, 0, 0);
-        var accept = new Button {
-            Text = "Use this account", Dock = DockStyle.Fill,
-            BackColor = UiStyle.Accent, ForeColor = Color.White,
-            Tag = "NoIcon", Margin = new Padding(5, 4, 5, 4)
-        };
-        var cancel = new Button {
-            Text = "Cancel", Dock = DockStyle.Fill,
-            DialogResult = DialogResult.Cancel, Tag = "NoIcon",
-            Margin = new Padding(5, 4, 0, 4)
-        };
-        buttons.Controls.Add(accept, 1, 0);
-        buttons.Controls.Add(cancel, 2, 0);
-        root.Controls.Add(buttons, 0, 6);
-        dialog.Controls.Add(root);
-        dialog.AcceptButton = accept;
-        dialog.CancelButton = cancel;
-        accept.Click += (_, _) => {
-            if (string.IsNullOrWhiteSpace(username.Text) ||
-                string.IsNullOrEmpty(password.Text))
-            {
-                MessageBox.Show(dialog, "Enter both AD username and password.",
-                    "Credentials required", MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-                return;
-            }
-            dialog.DialogResult = DialogResult.OK;
-        };
-        UiStyle.Apply(dialog);
-        username.Focus();
-        if (dialog.ShowDialog(this) != DialogResult.OK) return false;
+        // Share the same two-page account lookup/password Wizard with GPO
+        // Deployment. Account search is read-only; password is entered after
+        // a specific account has been chosen.
+        using var chooser = new AdAlternateAccountWizard(
+            _domain.Text.Trim(),
+            _advancedDc.Checked ? _dc.Text.Trim() : "",
+            _user.Text, _password.Text, _rememberUsername.Checked,
+            _saveEncryptedPassword.Checked, allowSaving: true,
+            forgetSavedLogin: ForgetCredentials);
+        if (chooser.ShowDialog(this) != DialogResult.OK) return false;
         _mutating = true;
         try
         {
-            _user.Text = username.Text.Trim();
-            _password.Text = password.Text;
-            _rememberUsername.Checked = remember.Checked;
-            _saveEncryptedPassword.Checked = savePassword.Checked;
+            _user.Text = chooser.SelectedUsername;
+            _password.Text = chooser.SelectedPassword;
+            _rememberUsername.Checked = chooser.RememberUsername;
+            _saveEncryptedPassword.Checked = chooser.SaveEncryptedPassword;
         }
         finally { _mutating = false; }
         SetCredentialMode();

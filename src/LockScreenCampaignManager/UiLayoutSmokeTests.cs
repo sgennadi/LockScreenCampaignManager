@@ -47,6 +47,11 @@ internal static class UiLayoutSmokeTests
             }),
             new[] { "Wizard", "Advanced", "Next >", "Check GPO rights",
                 "Preview / check conflicts", "Deploy GPO + files", "Close" }),
+        ("AD user picker - typeahead page", () => new AdAlternateAccountWizard(
+            "example.com", "dc01.example.com", "", "", false, false, true),
+            new[] { "Next >", "Use typed login instead", "Cancel", "< Back" }),
+        ("AD user picker - password page", () => CreateAdAccountPasswordWizard(),
+            new[] { "Use this account", "< Back", "Cancel", "Forget saved login" }),
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
@@ -159,6 +164,14 @@ internal static class UiLayoutSmokeTests
             return form;
         }, new[] { "Find computers", "Preview membership change", "Apply group change" })
     };
+
+    private static Form CreateAdAccountPasswordWizard()
+    {
+        var form = new AdAlternateAccountWizard("example.com", "dc01.example.com",
+            "", "", false, false, allowSaving: true, forgetSavedLogin: () => { });
+        form.ShowPasswordPageForSmokeTest();
+        return form;
+    }
 
     private static Form CreateEditorWithUpdateNotice()
     {

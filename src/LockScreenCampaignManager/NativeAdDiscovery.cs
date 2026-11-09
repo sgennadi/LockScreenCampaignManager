@@ -267,16 +267,26 @@ internal static class NativeAdDiscovery
 
     private static object[] Users(LdapConnection ldap, string baseDn, string search)
     {
+        // Typeahead accepts the first keystroke. LDAP results remain capped to
+        // avoid downloading the whole directory and require further filtering.
         search = search.Trim();
-        if (search.Length is < 2 or > 48)
-            throw new ArgumentException("Search must contain 2–48 characters.");
+        if (search.Length is < 1 or > 48)
+            throw new ArgumentException("Search must contain 1–48 characters.");
         string term = EscapeFilter(search);
         string filter = "(&(objectCategory=person)(objectClass=user)" +
-            "(|(sAMAccountName=*" + term + "*)(displayName=*" + term + "*)))";
+            "(|(sAMAccountName=*" + term + "*)(displayName=*" + term +
+            "*)(name=*" + term + "*)(userPrincipalName=*" + term +
+            "*)(mail=*" + term + "*)))";
         return Search(ldap, baseDn, filter, 75,
-            "name", "sAMAccountName", "distinguishedName")
-            .Select(x => new { name = Attr(x, "name"),
-                sam = Attr(x, "sAMAccountName"), dn = x.DistinguishedName })
+            "name", "displayName", "sAMAccountName", "userPrincipalName",
+            "distinguishedName")
+            .Select(x => new {
+                name = string.IsNullOrWhiteSpace(Attr(x, "displayName"))
+                    ? Attr(x, "name") : Attr(x, "displayName"),
+                sam = Attr(x, "sAMAccountName"),
+                upn = Attr(x, "userPrincipalName"),
+                dn = x.DistinguishedName
+            })
             .OrderBy(x => x.sam, StringComparer.OrdinalIgnoreCase)
             .Cast<object>().ToArray();
     }
