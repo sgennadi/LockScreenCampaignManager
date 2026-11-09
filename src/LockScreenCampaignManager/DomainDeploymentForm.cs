@@ -362,7 +362,7 @@ internal sealed class DomainDeploymentForm : Form
         buttons.Controls.Add(_rightsButton);
         buttons.Controls.Add(_planButton);
         buttons.Controls.Add(_deployButton);
-        _gpoOperationsButton = Button("GPO operations...", 182, OpenGpoOperations);
+        _gpoOperationsButton = Button("Agent Management / GPO...", 245, OpenGpoOperations);
         buttons.Controls.Add(_gpoOperationsButton);
         buttons.Controls.Add(Button("Close", 96, Close));
         footer.Controls.Add(buttons, 0, 0);
@@ -522,7 +522,12 @@ internal sealed class DomainDeploymentForm : Form
         _deployButton.Enabled = !_running && HasSelectedTargets &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey();
         if (_gpoOperationsButton is not null)
-            _gpoOperationsButton.Visible = _advancedMode;
+        {
+            // Read-only inventory and remote actions are useful directly from
+            // the last Wizard page, not only the Advanced editor.
+            _gpoOperationsButton.Visible = _advancedMode || _wizardStep == 2;
+            _gpoOperationsButton.Enabled = !_running && HasSelectedTargets;
+        }
     }
 
     private void OpenGpoOperations()
