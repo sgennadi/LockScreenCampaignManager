@@ -16,7 +16,8 @@ public static class CampaignExporter
         WriteIndented = true
     };
 
-    public static string Export(CampaignProject project, string destinationParent)
+    public static string Export(CampaignProject project, string destinationParent,
+        bool forReadOnlyPreview = false)
     {
         CampaignSchedule.Validate(project, requireImages: true);
         if (!Directory.Exists(destinationParent)) Directory.CreateDirectory(destinationParent);
@@ -69,9 +70,9 @@ public static class CampaignExporter
                 // Do not publish a non-functional EXE startup path. Enable
                 // only once native Install/Apply/Repair/Cleanup and health
                 // checks pass the dedicated endpoint test suite.
-                if (!NativeClientAgent.IsReadyForProduction)
+                if (!NativeClientAgent.IsReadyForProduction && !forReadOnlyPreview)
                     throw new NotSupportedException(
-                        "Native EXE client is not ready; use PowerShell or install a validated EXE build.");
+                        "Native EXE production deployment is disabled until real Windows client canary tests pass.");
                 // The portable manager contains the independent, headless
                 // --client-agent entrypoint; a pinned copy becomes the client.
                 string source = Environment.ProcessPath ?? "";
