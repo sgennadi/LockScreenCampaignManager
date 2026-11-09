@@ -10,6 +10,7 @@ The former **Run now on PCs** tab is now **Agent Management / Live**. It shows t
 - Select a mode from **Push / Repair / Cleanup / Report**, click **Preview**, then **Run on selected** and confirm the managed GPO GUID. Every remote action checks OU/group/GPO scope again and uses Task Scheduler RPC with permitted administrator credentials.
 - **Open Client Health** shows the agent's last feedback and installed version. Optional 60-second reachability refresh is disabled by default.
 - The last step of the Deployment Wizard now exposes a direct **Agent Management / GPO...** shortcut after OU/group selection.
+- Advanced main menu **AD / GPO → Agent Management / Live...** opens the console directly when an active company profile has an explicit default OU and computer security group. Otherwise, the operator must select these targets first; no scope is inferred from inventory.
 
 ### Important status semantics
 
