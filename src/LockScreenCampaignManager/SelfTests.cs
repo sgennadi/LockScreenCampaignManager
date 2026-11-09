@@ -1030,6 +1030,11 @@ StartExecutePSFirst=true
 
     private static void TestNativeClientImageOrder()
     {
+        Check(NativeClientAgent.PreferredRegistryView(true) ==
+                Microsoft.Win32.RegistryView.Registry64 &&
+              NativeClientAgent.PreferredRegistryView(false) ==
+                Microsoft.Win32.RegistryView.Registry32,
+            "Native x86 and x64 clients target the machine's real lock-screen policy registry view");
         // The fixture is the SHA256(hash + original index) ordering used by
         // the previously published PowerShell client, NOT a new random shuffle.
         string[] slides = ["01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg"];
