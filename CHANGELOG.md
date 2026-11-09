@@ -1,3 +1,11 @@
+## 0.4.0-preview.81 — Explicit current-user JPG Screen Saver pilot install / rollback (2026-11-09)
+
+- Extend the Campaign Wizard Save page with opt-in **Install local JPG pilot...** and **Remove local JPG pilot...** actions after exporting a photo .scr package. Require explicit confirmation (default No).
+- Verify the exported .scr and JPG SHA-256 manifest, copy verified files into current-user LocalAppData, back up the four previous HKCU Desktop screensaver settings before changing anything, then set the local .scr program, idle timeout and password-on-resume.
+- Reject installation when HKCU/HKLM Screen Saver policies are present, never elevate, write to AD/GPO/SYSVOL or activate arbitrary executables. No production domain deployment is enabled by this feature.
+- Remove restores the exact prior current-user registry values only if all four current values still equal this pilot's installed settings. If policy or the user changed anything afterward, refuse a destructive/stale automatic restore.
+- Add simulated 100-200% DPI Wizard checks and offline source-contract tests. Hosted Windows CI verifies builds, but a real Windows 10/11 user desktop pilot is still required for idle activation, /p preview, multi-monitor and unlock behavior.
+
 ## 0.4.0-preview.80 — JPG Screen Saver standalone pilot package (2026-11-09)
 
 - Add a separate **JPG slideshow** option under Campaign Type > Screen Saver. When enabled, the Wizard does NOT skip Images, Arrange and Schedule; existing built-in `.scr` mode still skips these steps. Support multiple files or a folder, with 5–3600 second JPG transition interval.

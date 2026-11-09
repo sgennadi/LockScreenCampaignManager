@@ -26,6 +26,15 @@ During \`/s\`, the first JPG fills the display with aspect ratio preserved (blac
 
 The package is **local and read-only**: no registry writes, no task creation, no service installation, no auto deployment, no domain settings changes. The SCR process cannot enter manager/admin/client/updater command paths, even if called with other switches. The runtime checks exact JPG names, bounded sizes, SHA-256, manifest schema, file safety and executable integrity before showing anything.
 
+
+## Opt-in current-user idle activation (preview.81)
+
+After exporting the JPG .scr package in the Campaign Wizard, choose **Install local JPG pilot...** on its Save page, select the *exported package directory*, and confirm the current-user-only installation. The manager validates the image and executable SHA-256 checksums again, copies the package to the current user's LocalAppData pilot folder, saves the existing four non-policy HKCU Desktop screen-saver values, and configures Windows to run the local photo .scr after the chosen idle timeout. You do not need to copy or install in System32.
+
+This is only for an authorized test profile with no managed Screen Saver GPO. The installer aborts if HKCU/HKLM policies already set Screen Saver values; it does not request admin rights, change GPOs, start scheduled tasks or write HKLM. Test idle activation and keyboard/mouse exit on the physical Windows desktop, then test password-on-resume and multi-monitor behavior.
+
+Select **Remove local JPG pilot...** on the Save Wizard page to restore the saved HKCU values. The removal checks that all four settings still match what the pilot installed. If the operator or Group Policy has modified a setting since installation, it refuses an automatic overwrite; inspect settings and make changes manually rather than forcing a stale backup. Removal of the local files is also stopped if rollback cannot be verified. The local test install is **not** a supported production installation, and there is still **no automatic domain GPO delivery** for JPG .scr files.
+
 ## Critical rollout limitation
 
 **Automatic JPG User GPO deployment is not enabled** in this preview. The Group Assignments preflight explicitly rejects it. User GPO deployment must first have an approved, integrity-checked installer or file delivery strategy that doesn't run unsigned/large executables directly from SYSVOL or silently alter a user's photo settings. Testing on GitHub-hosted Windows does not establish that this SCR runs under the real client session, honors /p on the chosen Windows build, or is allowed by AppLocker/WDAC and local security policies.
