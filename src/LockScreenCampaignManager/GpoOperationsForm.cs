@@ -53,12 +53,15 @@ internal sealed partial class GpoOperationsForm : Form
     private sealed record PcRow(string Name, string Sam,
         bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
         DateTimeOffset? AdLastSeenUtc = null, bool? AdDisabled = null,
-        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null)
+        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null,
+        string MethodAgreement = "Not checked")
     {
         public override string ToString() =>
             $"{Name}   |   RPC: " +
             (RpcReachable is null ? "unknown" : RpcReachable.Value ? "reachable" : "unreachable") +
             "   |   Agent: " + (AgentReport?.Condition ?? "not checked") +
+            "   |   Client type: " + (AgentReport?.ClientType ?? "Unknown") +
+            "   |   GPO method: " + MethodAgreement +
             "   |   Version: " + (AgentReport?.Version ?? "—") +
             "   |   Last report: " +
             (AgentReport?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—") +
