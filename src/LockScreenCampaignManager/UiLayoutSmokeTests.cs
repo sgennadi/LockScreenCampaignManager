@@ -16,8 +16,10 @@ internal static class UiLayoutSmokeTests
         ("100%", new UiPreferences { Density = "Auto", UiScalePercent = 100, FontScalePercent = 100 }),
         ("125%", new UiPreferences { Density = "Auto", UiScalePercent = 125, FontScalePercent = 100 }),
         ("150%", new UiPreferences { Density = "Comfortable", UiScalePercent = 150, FontScalePercent = 100 }),
+        ("175%", new UiPreferences { Density = "Comfortable", UiScalePercent = 175, FontScalePercent = 100 }),
         ("187.5% font simulation", new UiPreferences {
-            Density = "Comfortable", UiScalePercent = 150, FontScalePercent = 125 })
+            Density = "Comfortable", UiScalePercent = 150, FontScalePercent = 125 }),
+        ("200%", new UiPreferences { Density = "Comfortable", UiScalePercent = 200, FontScalePercent = 100 })
     };
 
     private static readonly (string Name, Func<Form> Factory, string[] ExpectedButtons)[] Windows =
@@ -75,6 +77,25 @@ internal static class UiLayoutSmokeTests
             "< Back", "Work offline (no AD)" }),
         ("Updater", () => new UniversalUpdaterWindow(),
             new[] { "1  Check", "2  Install", "Backup status" }),
+        ("SMB feedback settings", () => new FeedbackSettingsDialog(
+            new CampaignProject { Name = "layout-only", TimeZoneId = "UTC",
+                FeedbackShare = @"\\example.com\LockScreenReports$",
+                EnableFeedback = true }),
+            new[] { "Save", "Cancel", "Browse SMB...",
+                "Copy share path", "Create campaign folder" }),
+        ("Client Health SMB stand-alone", () => {
+            var form = new Form { Size = new Size(1250, 820),
+                MinimumSize = new Size(920, 670) };
+            var panel = new ClientFeedbackPanel("example.com", "dc01.example.com",
+                "OU=Computers,DC=example,DC=com",
+                "CN=Campaign-Clients,DC=example,DC=com",
+                new DomainCredentials("example.com", "", ""),
+                new CampaignProject { TimeZoneId = "UTC",
+                    FeedbackShare = @"\\example.com\LockScreenReports$" });
+            form.Controls.Add(panel);
+            return form;
+        }, new[] { "Browse SMB...", "Copy path", "Load PCs from AD",
+            "Refresh", "Export CSV", "Repair Selected" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
             "example.com", "OU=Clients,DC=example,DC=com",
             "CN=Clients,OU=Groups,DC=example,DC=com"),
@@ -450,6 +471,99 @@ internal static class UiLayoutSmokeTests
                 $"content={content.Height}, needed={rowsTotal}.");
     }
 
+    private static void CheckDpiTableRows(Form form, string profile)
+    {
+        // Audit *every* absolute cell, including secondary tabs, at all six
+        // font profiles. No screenshots/AD access are needed for this check.
+        var all = Descendants(form).ToArray();
+        foreach (Control control in all)
+        {
+            if (control.Parent is not TableLayoutPanel table ||
+                control.Dock != DockStyle.Fill) continue;
+            int row = table.GetRow(control);
+            if (row < 0 || row >= table.RowStyles.Count ||
+                table.RowStyles[row].SizeType != SizeType.Absolute) continue;
+            int measured = TextRenderer.MeasureText("Agpqy", control.Font,
+                new Size(4096, 4096),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+            int required = control switch
+            {
+                Label label when !label.AutoSize =>
+                    measured + control.Padding.Vertical + control.Margin.Vertical + 9,
+                CheckBox or RadioButton =>
+                    measured + control.Padding.Vertical + control.Margin.Vertical + 13,
+                Button => measured + control.Margin.Vertical + 17,
+                ComboBox box => box.PreferredHeight + box.Margin.Vertical + 7,
+                _ => 0
+            };
+            if (required > 0 && table.RowStyles[row].Height + 0.25f < required)
+                throw new InvalidOperationException(
+                    $"DPI text row clipped: {form.Text} / {profile} / " +
+                    $"{control.Name} ({control.Text}): row {table.RowStyles[row].Height}, " +
+                    $"glyphs need {required}.");
+        }
+    }
+
+    private static void CheckTimeZoneDifference(Form form, string profile)
+    {
+        string compared = TimeZoneChoices.OffsetComparison("UTC",
+            new DateTimeOffset(2026, 11, 9, 9, 0, 0, TimeSpan.Zero));
+        if (!compared.Contains("Campaign: UTC+00:00", StringComparison.Ordinal) ||
+            !compared.Contains("This PC: UTC", StringComparison.Ordinal) ||
+            !compared.Contains("Difference:", StringComparison.Ordinal) ||
+            !compared.Contains("DST now: No", StringComparison.Ordinal) ||
+            TimeZoneChoices.OffsetText(TimeSpan.FromMinutes(-210)) != "-03:30")
+            throw new InvalidOperationException("Time-zone UTC/difference/DST formatter is incorrect.");
+        string requiredName = form.Text.Contains("Campaign Wizard", StringComparison.Ordinal)
+            ? "WizardTimeZoneDifference" : form is CampaignScheduleDialog
+                ? "ScheduleTimeZoneDifference" : "";
+        if (requiredName.Length == 0) return;
+        // The Schedule pane exists only on the fourth Wizard step.
+        var label = Descendants(form).OfType<Label>()
+            .FirstOrDefault(x => x.Name == requiredName);
+        if (label is null &&
+            !(form.Text.Contains("Campaign Wizard", StringComparison.Ordinal) &&
+              Descendants(form).OfType<ComboBox>()
+                .All(x => x.Name != "WizardTimeZoneSelect")))
+            throw new InvalidOperationException(
+                $"Missing {requiredName} at {profile}.");
+        if (label is not null && (!label.Text.Contains("Difference:", StringComparison.Ordinal) ||
+            !label.Text.Contains("DST now:", StringComparison.Ordinal) ||
+            label.AutoEllipsis))
+            throw new InvalidOperationException(
+                $"Time-zone difference/DST clipped at {profile}.");
+    }
+
+    private static void CheckScrollableUncPaths(Form form, string profile)
+    {
+        var all = Descendants(form).ToArray();
+        if (form is FeedbackSettingsDialog &&
+            !all.OfType<TextBox>().Any(x =>
+                x.Name == "FeedbackShareScrollable" && x.Multiline &&
+                !x.WordWrap && x.ScrollBars == ScrollBars.Horizontal))
+            throw new InvalidOperationException(
+                $"SMB feedback share is not horizontally scrollable at {profile}.");
+        if (all.OfType<ClientFeedbackPanel>().Any() &&
+            !all.OfType<TextBox>().Any(x =>
+                x.Name == "ClientHealthSmbPath" && x.Multiline &&
+                !x.WordWrap && x.ScrollBars == ScrollBars.Horizontal))
+            throw new InvalidOperationException(
+                $"Client Health SMB share cannot be scrolled at {profile}.");
+        if (form is GpoOperationsForm &&
+            !all.OfType<TextBox>().Any(x =>
+                x.Name == "GpoScopePathViewer" && x.ReadOnly &&
+                x.Multiline && !x.WordWrap &&
+                x.ScrollBars == ScrollBars.Horizontal))
+            throw new InvalidOperationException(
+                $"GPO OU/LDAP DN path cannot be scrolled at {profile}.");
+        if (all.OfType<TextBox>().FirstOrDefault(x =>
+                x.Name == "WizardFeedbackConfiguration") is { } configuration &&
+            (!configuration.ReadOnly || !configuration.Multiline ||
+             configuration.ScrollBars != ScrollBars.Both))
+            throw new InvalidOperationException(
+                $"Wizard Client Health SMB status/path cannot be scrolled at {profile}.");
+    }
+
     private static void CheckTimeZoneSelectors(Form form, string profile)
     {
         var all = Descendants(form).OfType<ComboBox>().ToArray();
@@ -560,6 +674,9 @@ internal static class UiLayoutSmokeTests
                 CheckWizardFooter(form, profile.Name);
                 CheckUpdaterHeader(form, profile.Name);
                 CheckAdAdvancedOptions(form, profile.Name);
+                CheckDpiTableRows(form, profile.Name);
+                CheckTimeZoneDifference(form, profile.Name);
+                CheckScrollableUncPaths(form, profile.Name);
                 CheckTimeZoneSelectors(form, profile.Name);
                 if (window.Name is "Campaign Wizard - images" or "Campaign Wizard - arrange")
                 {
@@ -668,7 +785,7 @@ internal static class UiLayoutSmokeTests
             }
         }
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
-            "font profiles 100%, 125%, 150%, 187.5%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
+            "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
     }
 
