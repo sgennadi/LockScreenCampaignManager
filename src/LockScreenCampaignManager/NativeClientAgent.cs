@@ -348,6 +348,53 @@ internal static partial class NativeClientAgent
         return state;
     }
 
+    /// <summary>
+    /// Match the PS1 agent's fail-closed overlap guard, including campaigns
+    /// already staged on disk that have not yet claimed the registry.
+    /// </summary>
+    private static void AssertNoScheduleOverlap(Context ctx)
+    {
+        DateTime thisStart = TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(ctx.Starts[0], DateTimeKind.Unspecified), ctx.Zone);
+        DateTime thisEnd = TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(ctx.End, DateTimeKind.Unspecified), ctx.Zone);
+        foreach (string folder in Directory.EnumerateDirectories(ctx.Base))
+        {
+            string folderName = Path.GetFileName(folder);
+            if (string.Equals(folderName, ctx.Id, StringComparison.Ordinal) ||
+                string.Equals(folderName, "Completed", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Foreign campaign directory is a reparse point.");
+            string manifest = Path.Combine(folder, "campaign.json");
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(manifest); }
+            catch (FileNotFoundException) { continue; }
+            catch (DirectoryNotFoundException) { continue; }
+            if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                throw new InvalidDataException("Foreign campaign manifest is unsafe.");
+            VerifyFileAttributes(manifest, 1_048_576);
+            CampaignConfig other = JsonSerializer.Deserialize<CampaignConfig>(
+                File.ReadAllBytes(manifest), CampaignExporter.JsonOptions) ??
+                throw new InvalidDataException("Foreign campaign manifest is invalid.");
+            if (!string.Equals(other.CampaignId, folderName, StringComparison.Ordinal) ||
+                other.Slides is null || other.Slides.Count == 0)
+                throw new InvalidDataException("Foreign campaign manifest identity is invalid.");
+            TimeZoneInfo zone = TimeZoneInfo.FindSystemTimeZoneById(other.TimeZoneId);
+            DateTime otherStart = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(ParseLocal(other.Slides[0].AtLocal),
+                    DateTimeKind.Unspecified), zone);
+            DateTime otherEnd = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(ParseLocal(other.EndLocal),
+                    DateTimeKind.Unspecified), zone);
+            if (otherStart >= otherEnd)
+                throw new InvalidDataException("Foreign campaign schedule is invalid.");
+            if (thisStart < otherEnd && otherStart < thisEnd)
+                throw new InvalidOperationException(
+                    "The planned campaign overlaps an already installed campaign.");
+        }
+    }
+
     private static void Install(Context ctx)
     {
         VerifySupportedWindows();
@@ -363,6 +410,7 @@ internal static partial class NativeClientAgent
             return;
         }
         EnsureNoOtherOwner(ctx);
+        AssertNoScheduleOverlap(ctx);
 
         SourceRecord? prior = GetState(ctx);
         string source = ctx.Here.Equals(ctx.Local, StringComparison.OrdinalIgnoreCase)
