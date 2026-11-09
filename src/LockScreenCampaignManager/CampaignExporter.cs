@@ -70,7 +70,7 @@ public static class CampaignExporter
                 // Do not publish a non-functional EXE startup path. Enable
                 // only once native Install/Apply/Repair/Cleanup and health
                 // checks pass the dedicated endpoint test suite.
-                if (!NativeClientAgent.IsReadyForProduction && !forReadOnlyPreview)
+                if (!NativeClientAgent.CanDeployNativeClient && !forReadOnlyPreview)
                     throw new NotSupportedException(
                         "Native EXE production deployment is disabled until real Windows client canary tests pass.");
                 // The portable manager contains the independent, headless
