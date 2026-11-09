@@ -512,7 +512,10 @@ public sealed partial class MainForm : Form
         });
         AddActionMenu(actions, "AD / GPO", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Connect AD account...", ConnectAndReadAd, null),
-            ("Deploy GPO...", () => OpenDomainDeployment(true), () => AdReady && _project.ImagePaths.Count > 0),
+            ("Deploy GPO...", () => OpenDomainDeployment(true),
+                () => AdReady && (_project.ImagePaths.Count > 0 ||
+                    _project.TargetAssignments is { Count: > 0 } &&
+                    _project.TargetAssignments.All(x => x.UsesScreenSaver))),
             ("Agent Management / Live...", OpenAgentManagement, null),
             ("Client feedback...", OpenFeedbackSettings, null)
         });
@@ -1240,6 +1243,14 @@ public sealed partial class MainForm : Form
                 EnableFeedback = _project.EnableFeedback, FeedbackShare = _project.FeedbackShare,
                 FeedbackIntervalMinutes = _project.FeedbackIntervalMinutes,
                 ImagePaths = new List<string>(_project.ImagePaths),
+                TargetAssignments = (_project.TargetAssignments ?? [])
+                    .Select(x => x.Clone()).ToList(),
+                ScreenSaver = new CampaignScreenSaverSettings {
+                    Executable = _project.ScreenSaver.Executable,
+                    IdleSeconds = _project.ScreenSaver.IdleSeconds,
+                    PasswordOnResume = _project.ScreenSaver.PasswordOnResume
+                },
+                ClientType = _project.ClientType,
                 ScheduleMode = _project.ScheduleMode,
                 WeekdayMask = _project.WeekdayMask,
                 SpecificDatesLocal = new List<DateTime>(_project.SpecificDatesLocal),
@@ -1249,6 +1260,17 @@ public sealed partial class MainForm : Form
             using var wizard = new DomainDeploymentForm(snapshot, _company, _adSnapshot,
                 advanced, _sessionAdCredentials);
             wizard.ShowDialog(CampaignDialogOwner);
+            // The deployment wizard owns a clone of the editor model.
+            // Persist group-mode edits back to the local project explicitly.
+            _project.TargetAssignments = snapshot.TargetAssignments
+                .Select(row => row.Clone()).ToList();
+            _project.ScreenSaver = new CampaignScreenSaverSettings {
+                Executable = snapshot.ScreenSaver.Executable,
+                IdleSeconds = snapshot.ScreenSaver.IdleSeconds,
+                PasswordOnResume = snapshot.ScreenSaver.PasswordOnResume
+            };
+            _project.ClientType = snapshot.ClientType;
+            _projectDirty = true;
         }
         catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
         catch (FileNotFoundException) {
