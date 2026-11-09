@@ -238,7 +238,9 @@ public static class CampaignSchedule
             project.TargetAssignments.Any(x => x.UsesLockScreen);
         if (requireImages && needsImages && project.ImagePaths.Count == 0)
             throw new CampaignValidationException(
-                "Lock Screen assignments need at least one image.");
+                project.TargetAssignments.Count == 0
+                    ? "Add at least one image."
+                    : "Lock Screen assignments need at least one image.");
         if (project.EnableFeedback)
         {
             FeedbackPath.ValidateRoot(project.FeedbackShare);
