@@ -206,7 +206,7 @@ internal sealed partial class GpoOperationsForm
 
     private static bool MatchesAdActivity(PcRow row, string activity, DateTimeOffset utc)
     {
-        if (activity == "All AD computers") return true;
+        if (activity == "All eligible") return true;
         if (activity == "Never / unknown") return row.AdLastSeenUtc is null;
         if (activity == "Disabled computers") return row.AdDisabled == true;
         if (activity == "Older than 90 days")
