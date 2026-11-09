@@ -933,12 +933,37 @@ internal sealed class DomainDeploymentForm : Form
     private async Task DeployAsync()
     {
         if (_running) return;
+        if (_project.ClientType == CampaignClientType.Executable &&
+            !NativeClientAgent.CanDeployNativeClient)
+        {
+            _progress.Text = "EXE Deploy locked. Restart this preview with --native-exe-lab for isolated canaries.";
+            return;
+        }
         var plan = await PlanAsync();
         if (plan is null) return;
         try
         {
             var x = Selection();
             if (_lastPlanKey != PlanKey()) throw new InvalidOperationException("Scope changed. Preview again.");
+            if (_project.ClientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction)
+            {
+                int count = plan.Value.GetProperty("directGroupMembers").GetInt32();
+                if (count is < 1 or > 5)
+                    throw new InvalidOperationException(
+                        "EXE canary requires 1-5 direct computer accounts in an isolated lab group.");
+                if (MessageBox.Show(this,
+                        "NATIVE EXE CLIENT - LAB CANARY ONLY\n\n" +
+                        $"Writable DC: {x.dc}\nTarget OU: {x.ou.Dn}\n" +
+                        $"Computer group: {x.group.Dn}\nDirect members: {count} (maximum 5)\n\n" +
+                        "Real GPO/endpoint acceptance tests have not been completed. " +
+                        "Use only an isolated lab OU and flat test-computer group. " +
+                        "Native deployment verifies group members before GPO creation and linking.\n\n" +
+                        "Create this TEST GPO?",
+                        "Native EXE laboratory confirmation",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            }
             if (_lastConflictHigh > 0 && MessageBox.Show(this,
                     $"Detected {_lastConflictHigh} potentially conflicting Lock Screen policy settings.\n" +
                     "Do not deploy without confirming resultant policy on a test computer. Continue anyway?",
@@ -946,7 +971,7 @@ internal sealed class DomainDeploymentForm : Form
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (MessageBox.Show(this,
                     $"CREATE A NEW GPO AND COPY IMAGES INTO SYSVOL?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
-                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\n\n" +
+                    $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\nClient: {_project.ClientType}\n\n" +
                     "No changes are made to other GPOs. Confirm you have a tested campaign and delegated rights.",
                     "Confirm Active Directory deployment", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
@@ -957,7 +982,8 @@ internal sealed class DomainDeploymentForm : Form
                 var response = await RunBusy("Creating GPO, uploading files to DC and applying OU / security filters...", () =>
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Deploy", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
-                        groupDn = x.group.Dn, gpoName = x.gpoName, packagePath = package
+                        groupDn = x.group.Dn, gpoName = x.gpoName,
+                        clientType = _project.ClientType.ToString(), packagePath = package
                     }, creds, timeoutMilliseconds: 300000));
                 var data = response.GetProperty("data");
                 string gpoId = data.GetProperty("gpoId").GetString()!;
