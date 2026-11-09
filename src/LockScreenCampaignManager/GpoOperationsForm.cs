@@ -51,6 +51,7 @@ internal sealed partial class GpoOperationsForm : Form
     }
     private sealed record PcRow(string Name, string Sam,
         bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
+        DateTimeOffset? AdLastSeenUtc = null, bool? AdDisabled = null,
         AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null)
     {
         public override string ToString() =>
@@ -597,20 +598,41 @@ internal sealed partial class GpoOperationsForm : Form
         InvalidatePlans();
         try
         {
-            var data = await ExecuteAsync(DomainOperation.Immediate, "List", new {
+            var data = await ExecuteAsync(DomainOperation.Immediate, "Inventory", new {
                 domain = _domain, dc = _dc, ouDn = _ouDn, groupDn = _groupDn
             });
-            _agentInventoryGeneration++;
+            ++_agentInventoryGeneration;
+            ++_agentEvidenceGeneration;
             _agentInventory.Clear();
-            foreach (JsonElement e in data.EnumerateArray())
+            _adOuComputerTotal = data.GetProperty("ouTotal").GetInt32();
+            int matched = data.GetProperty("groupEligible").GetInt32();
+            foreach (JsonElement e in data.GetProperty("computers").EnumerateArray())
+            {
+                DateTimeOffset? adSeen = e.TryGetProperty("adLastSeenUtc", out var last) &&
+                    last.ValueKind == JsonValueKind.String &&
+                    last.TryGetDateTimeOffset(out var timestamp)
+                        ? timestamp : null;
+                bool? adDisabled = e.TryGetProperty("adDisabled", out var disabled) &&
+                    disabled.ValueKind is JsonValueKind.True or JsonValueKind.False
+                        ? disabled.GetBoolean() : null;
                 _agentInventory.Add(new PcRow(e.GetProperty("name").GetString() ?? "",
-                    e.GetProperty("sam").GetString() ?? ""));
+                    e.GetProperty("sam").GetString() ?? "",
+                    AdLastSeenUtc: adSeen, AdDisabled: adDisabled));
+            }
+            if (matched != _agentInventory.Count || _adOuComputerTotal < matched)
+                throw new InvalidDataException("AD OU and group inventory counts do not match.");
+            _agentShareAvailable = false;
+            _agentValidReportCount = 0;
+            _agentInvalidReportCount = 0;
+            _agentReportsCheckedUtc = null;
+            _agentEvidenceNotice = "Agent reports not checked. Choose a managed GPO and refresh feedback.";
             DrawAgentInventory();
             UiStyle.ApplyStatus(_agentProbeStatus,
                 "Loaded " + _agentInventory.Count +
                 " AD-verified computers. Check RPC reachability to find contactable endpoints.",
                 UiStatusKind.Neutral);
-            _status.Text = $"Eligible computers: {_agentInventory.Count} (nested group membership).";
+            _status.Text = $"AD OU: {_adOuComputerTotal} computers; OU + campaign group: {_agentInventory.Count}. " +
+                "Last logon is approximate. Filters do not change AD or the GPO target scope.";
             // Entering Agent Management performs an explicitly scoped,
             // read-only RPC reachability sample without waiting for the user
             // to navigate to another panel. No remote task is created.
@@ -623,7 +645,17 @@ internal sealed partial class GpoOperationsForm : Form
                 _ = ProbeVisibleAgentHostsAsync();
             }
         }
-        catch (Exception ex) { Fail(ex, "List eligible computers"); }
+        catch (Exception ex)
+        {
+            ++_agentInventoryGeneration;
+            ++_agentEvidenceGeneration;
+            _agentInventory.Clear();
+            _adOuComputerTotal = 0;
+            _agentShareAvailable = false;
+            _agentEvidenceNotice = "AD inventory unavailable; all computer and report counts are UNKNOWN.";
+            DrawAgentInventory();
+            Fail(ex, "List eligible computers");
+        }
     }
     private async Task RepairFromHealthAsync(IReadOnlyList<string> shortNames)
     {
