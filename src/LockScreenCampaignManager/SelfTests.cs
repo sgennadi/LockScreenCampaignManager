@@ -279,8 +279,11 @@ internal static class SelfTests
                 StringComparison.Ordinal),
             "User GPO GPT upgrade preserves following lines and sections");
         bool gptDenied = false;
-        try { NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(
-            "[General]\r\nVersion=0\r\nVersion=0\r\n"); }
+        try
+        {
+            _ = NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(
+                "[General]\r\nVersion=0\r\nVersion=0\r\n");
+        }
         catch (InvalidDataException) { gptDenied = true; }
         Check(gptDenied, "Duplicate fresh user GPT Version rows must fail closed.");
 
