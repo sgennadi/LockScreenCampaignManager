@@ -45,6 +45,7 @@ internal static class SelfTests
         TestNativeImmediateActionsContracts();
         TestNativeRemoteCleanupContracts();
         TestNativeGpoDeploymentPlanContracts();
+        TestSmbCampaignContentSource();
         TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
@@ -226,6 +227,46 @@ internal static class SelfTests
             old72.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver,
             "Pre-mode preview.72 user target is inferred as Screen Saver.");
         CampaignSchedule.Validate(old72, true);
+    }
+
+    private static void TestSmbCampaignContentSource()
+    {
+        Check(new CampaignProject().ContentSource == CampaignContentSource.Sysvol,
+            "Existing campaigns keep SYSVOL as their default content source.");
+        Check(CampaignPayloadLocation.Parse("") == CampaignContentSource.Sysvol &&
+            CampaignPayloadLocation.Parse("Sysvol") == CampaignContentSource.Sysvol &&
+            CampaignPayloadLocation.Parse("SmbShare") == CampaignContentSource.SmbShare,
+            "Native deploy preflight selects exactly SYSVOL or SMB content.");
+        const string root = @"\\files.example.com\Campaigns";
+        Check(CampaignPayloadLocation.ValidateRoot(root) == root &&
+            CampaignPayloadLocation.TargetPath(root, "test-202611091200") ==
+                root + @"\test-202611091200",
+            "SMB target is an immutable campaign-specific UNC subdirectory.");
+        foreach (string invalid in new[] {
+            @"C:\Campaigns", @"\\?\UNC\server\share",
+            @"\\server\SYSVOL\Campaigns", @"\\server\NETLOGON",
+            @"\\server\C$\Campaigns", @"\\server\share\..\oops",
+            @"\\server\share\content..bad", @"\\server\share\semi;colon"
+        })
+        {
+            bool rejected = false;
+            try { _ = CampaignPayloadLocation.ValidateRoot(invalid); }
+            catch (CampaignValidationException) { rejected = true; }
+            Check(rejected, "Unsafe SMB content roots must fail closed: " + invalid);
+        }
+        bool invalidSourceRejected = false;
+        try { _ = CampaignPayloadLocation.Parse("WebServer"); }
+        catch (InvalidDataException) { invalidSourceRejected = true; }
+        Check(invalidSourceRejected, "Unknown storage modes cannot silently fall back to SYSVOL.");
+        var newProject = new CampaignProject {
+            ContentSource = CampaignContentSource.SmbShare,
+            ContentShareRoot = root
+        };
+        var saved = System.Text.Json.JsonSerializer.Deserialize<CampaignProject>(
+            System.Text.Json.JsonSerializer.Serialize(newProject));
+        Check(saved?.ContentSource == CampaignContentSource.SmbShare &&
+            saved.ContentShareRoot == root,
+            "SMB content selection persists in existing campaign project JSON.");
     }
 
     private static void TestPhotoJpegSaverLocal()
