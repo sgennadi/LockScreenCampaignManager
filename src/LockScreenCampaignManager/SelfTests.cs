@@ -27,6 +27,7 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
         TestFlexibleSchedules();
+        TestNativeClientImageOrder();
         TestFilenameScheduleInference();
         TestExpectedCampaignValidation();
         TestAdDirectorySnapshot();
@@ -949,6 +950,26 @@ StartExecutePSFirst=true
             try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
             catch { }
         }
+    }
+
+    private static void TestNativeClientImageOrder()
+    {
+        // The fixture is the SHA256(hash + original index) ordering used by
+        // the previously published PowerShell client, NOT a new random shuffle.
+        string[] slides = ["01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg"];
+        int[] actual = NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "TEST-PC-01", slides);
+        Check(actual.SequenceEqual(new[] { 1, 2, 3, 0, 4 }),
+            "native EXE image mapping matches PS1 SHA256 fixture");
+        Check(actual.Distinct().Count() == slides.Length &&
+              actual.All(x => x >= 0 && x < slides.Length),
+            "native EXE image mapping is a full deterministic permutation");
+        Check(actual.SequenceEqual(NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "test-pc-01", slides)),
+            "PS1 device image ordering is computer-name case insensitive");
+        Check(NativeClientAgent.DeviceImageOrder(
+            "native-ci-20261109", "TEST-PC-01", ["01.jpg"]).SequenceEqual([0]),
+            "native image order handles single-image campaign");
     }
 
     private static void TestFlexibleSchedules()
