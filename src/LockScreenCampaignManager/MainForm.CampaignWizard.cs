@@ -427,8 +427,11 @@ public sealed partial class MainForm
                 _subheading.Text = "Step " + (_step + 1) + " of 7  -  " + StepNames[_step][3..];
                 for (int i = 0; i < _rail.Length; i++)
                 {
+                    bool skippedForSaver = !NeedsLockImages && i is >= 2 and <= 4;
+                    _rail[i].Text = skippedForSaver ? StepNames[i] + " (skip)" : StepNames[i];
                     _rail[i].BackColor = i == _step ? UiStyle.Accent : UiStyle.SoftBlue;
                     _rail[i].ForeColor = i == _step ? Color.White :
+                        skippedForSaver ? UiStyle.Muted :
                         i < _step ? UiStyle.Green : UiStyle.Navy;
                 }
 
