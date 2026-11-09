@@ -74,6 +74,8 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('UiStyle.ApplyStatus(_rightsBanner', form)
         self.assertIn('_targetSplit.Panel2Collapsed = true', form)
         self.assertIn('_targetSplit.Panel1Collapsed = true', form)
+        self.assertIn('_connectionPanel.Visible = connectionVisible', form)
+        self.assertIn('connectionVisible ? 222 : 0', form)
         self.assertIn('row.Dn.Contains(query', form)
         self.assertIn('ShowDirectoryTooltip', form)
         self.assertIn('fullPermissionVerified = false', native)
