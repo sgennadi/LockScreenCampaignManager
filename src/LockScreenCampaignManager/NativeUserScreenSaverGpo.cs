@@ -160,10 +160,15 @@ internal static class NativeUserScreenSaverGpo
                     throw new InvalidDataException("New GPO GPT state is not empty.");
                 Directory.CreateDirectory(user);
                 byte[] registry = BuildRegistryPol(saver, seconds, secure);
+                VerifyScreenSaverRegistryPol(registry, saver, seconds, secure);
                 File.WriteAllBytes(pol, registry);
-                if (!SHA256.HashData(File.ReadAllBytes(pol))
+                byte[] actualPolicyBytes = File.ReadAllBytes(pol);
+                if (!SHA256.HashData(actualPolicyBytes)
                     .SequenceEqual(SHA256.HashData(registry)))
                     throw new IOException("Screen Saver Registry.pol read-back mismatch.");
+                // A matching hash is not enough: the MS-GPREG file must also
+                // contain four structurally valid UTF-16LE user policy records.
+                VerifyScreenSaverRegistryPol(actualPolicyBytes, saver, seconds, secure);
 
                 string gptText = File.ReadAllText(gpt, Encoding.ASCII);
                 File.WriteAllText(gpt, ZeroVersion.Replace(gptText,
@@ -257,7 +262,11 @@ internal static class NativeUserScreenSaverGpo
         void Value(string key, string field, string value)
         {
             byte[] data = Encoding.Unicode.GetBytes(value + "\0");
-            Text("[" + key + ";" + field + ";");
+            // Both UTF-16LE identifiers MUST include a U+0000 terminator
+            // BEFORE their semicolon delimiter (MS-GPREG 2.2.1).
+            // A plain "[key;value;..." passes string scans but Windows may
+            // silently ignore the malformed registry policy.
+            Text("[" + key + "\0;" + field + "\0;");
             writer.Write((uint)1); // REG_SZ
             Text(";");
             writer.Write((uint)data.Length);
@@ -272,6 +281,107 @@ internal static class NativeUserScreenSaverGpo
         Value(PolicyKey, "ScreenSaverIsSecure", secure ? "1" : "0");
         writer.Flush();
         return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Strict independent binary parse of a user-scoped MS-GPREG v1 policy.
+    /// This validates the actual bytes that the Windows Registry CSE reads;
+    /// a case-insensitive substring search is NOT a valid integrity check.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ParseUserRegistryPol(byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        if (bytes.Length is < 10 or > 65535 ||
+            !bytes.AsSpan(0, 4).SequenceEqual("PReg"u8) ||
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(
+                bytes.AsSpan(4, 4)) != 1)
+            throw new InvalidDataException("Invalid Registry.pol signature or version.");
+
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        int offset = 8;
+        void RequireUtf16(char expected)
+        {
+            if (offset + 2 > bytes.Length ||
+                System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(
+                    bytes.AsSpan(offset, 2)) != expected)
+                throw new InvalidDataException("Malformed Registry.pol delimiter.");
+            offset += 2;
+        }
+
+        string ReadNullTerminatedUnicode()
+        {
+            int start = offset;
+            while (offset + 2 <= bytes.Length)
+            {
+                ushort ch = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(
+                    bytes.AsSpan(offset, 2));
+                offset += 2;
+                if (ch == 0)
+                {
+                    if (offset - start <= 2)
+                        throw new InvalidDataException("Empty Registry.pol identifier.");
+                    return Encoding.Unicode.GetString(bytes, start, offset - start - 2);
+                }
+                if (offset - start > 8192)
+                    throw new InvalidDataException("Registry.pol identifier too long.");
+            }
+            throw new InvalidDataException("Registry.pol identifier lacks UTF-16 NUL.");
+        }
+
+        uint ReadUInt32()
+        {
+            if (offset + 4 > bytes.Length)
+                throw new InvalidDataException("Truncated Registry.pol DWORD.");
+            uint value = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(
+                bytes.AsSpan(offset, 4));
+            offset += 4;
+            return value;
+        }
+
+        while (offset < bytes.Length)
+        {
+            RequireUtf16('[');
+            string key = ReadNullTerminatedUnicode();
+            RequireUtf16(';');
+            string name = ReadNullTerminatedUnicode();
+            RequireUtf16(';');
+            uint kind = ReadUInt32();
+            RequireUtf16(';');
+            uint dataSize = ReadUInt32();
+            RequireUtf16(';');
+            if (kind != 1 || dataSize is < 2 or > 65534 ||
+                (dataSize % 2) != 0 || dataSize > bytes.Length - offset - 2)
+                throw new InvalidDataException("Registry.pol REG_SZ kind/size is invalid.");
+            string data = Encoding.Unicode.GetString(bytes, offset, (int)dataSize);
+            offset += (int)dataSize;
+            RequireUtf16(']');
+            if (data.Length == 0 || data[^1] != '\0' ||
+                data.AsSpan(0, data.Length - 1).Contains('\0') ||
+                !key.Equals(PolicyKey, StringComparison.Ordinal))
+                throw new InvalidDataException("Registry.pol key or REG_SZ terminator is invalid.");
+            if (!values.TryAdd(name, data[..^1]))
+                throw new InvalidDataException("Duplicate Registry.pol policy value.");
+        }
+
+        if (values.Count != 4 ||
+            !values.ContainsKey("ScreenSaveActive") ||
+            !values.ContainsKey("SCRNSAVE.EXE") ||
+            !values.ContainsKey("ScreenSaveTimeOut") ||
+            !values.ContainsKey("ScreenSaverIsSecure"))
+            throw new InvalidDataException("Registry.pol must contain exactly four Screen Saver values.");
+        return values;
+    }
+
+    internal static void VerifyScreenSaverRegistryPol(
+        byte[] bytes, string saver, int seconds, bool secure)
+    {
+        var values = ParseUserRegistryPol(bytes);
+        if (values["ScreenSaveActive"] != "1" ||
+            !values["SCRNSAVE.EXE"].Equals(saver, StringComparison.OrdinalIgnoreCase) ||
+            values["ScreenSaveTimeOut"] != seconds.ToString(CultureInfo.InvariantCulture) ||
+            values["ScreenSaverIsSecure"] != (secure ? "1" : "0"))
+            throw new InvalidDataException(
+                "Registry.pol does not match the approved Screen Saver policy.");
     }
 
     private static JsonElement Reply(bool success, string message, object data) =>
