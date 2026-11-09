@@ -1211,5 +1211,6 @@ public sealed partial class MainForm
             // schedule. Skip these pages and restore Type with Back.
             _step = _step == 1 && !NeedsLockImages ? 5 : Math.Min(6, _step + 1);
             RenderPage();
-        }    }
+        }
+    }
 }
