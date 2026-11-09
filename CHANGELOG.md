@@ -1,3 +1,10 @@
+## 0.4.0-preview.67 — AD OU activity filters and trustworthy Client Health counts (2026-11-09)
+- Agent Management distinguishes three populations: all AD computer objects in selected OU/sub-OUs, verified OU + campaign security-group targets, and those targets with a valid same-campaign SMB report. Reports are non-cryptographic hints, not proof of presence or permissions.
+- Read-only native LDAP Inventory queries replicated lastLogonTimestamp and userAccountControl; by default show computers active within the last 90 days and not disabled, with All / 30 / 60 / 90 / 180 / 365 / older-than-90 / never / disabled filters. No AD write, move or delete; Run Now still independently rechecks exact OU+group scope without using age as authorization.
+- Present separate readable OU/group/visible/disabled/inactive counters and SMB report/recent/missing/invalid counters. SMB inaccessible is UNKNOWN, never reported as zero. Client rows also include agent-reported stage/version/timestamp and the latest per-host Task Scheduler submission result.
+- Campaign Wizard Schedule now includes Client Health / Feedback settings and clearly shows the SMB UNC root and reporting interval; company defaults continue to work.
+- Test validation for AD FILETIME, disabled bit, missing/forged/stale SMB evidence, and x86/x64 GUI smoke. No live writable DC, real Windows endpoints or authenticated agent delivery is proven by GitHub CI. The EXE endpoint agent remains gated in the separate lab-only draft PR.
+
 ## 0.4.0-preview.66 — Agent Management and live RPC reachability (2026-11-09)
 - Consolidate existing secured Push / Repair / Report / Cleanup actions in the renamed Agent Management / Live tab, with AD-scoped computer list and search.
 - Add bounded asynchronous TCP/135 reachability checks for verified OU + computer-group hosts, auto-run on opening the tab, optional 60-second refresh, and reachable-only filter / select up to 25.
