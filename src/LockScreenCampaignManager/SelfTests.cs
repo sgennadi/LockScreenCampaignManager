@@ -271,8 +271,14 @@ internal static class SelfTests
                 labScript.Contains("$campaignId = '" +
                     CampaignSchedule.BuildId(project) + "'", StringComparison.Ordinal) &&
                 labScript.Contains("$slideSeconds = [int]'10'", StringComparison.Ordinal) &&
-                !labScript.Contains("__LSCM_", StringComparison.Ordinal),
-                "JPG GPO lab kit generated pinned, parseable Startup script and verified offline package.");
+                !labScript.Contains("__LSCM_", StringComparison.Ordinal) &&
+                labScript.Contains("C:\\ProgramData\\LSCM-PhotoSaver", StringComparison.Ordinal) &&
+                !labScript.Contains("Set-ItemProperty", StringComparison.OrdinalIgnoreCase) &&
+                labScript.Contains(Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(
+                        File.ReadAllBytes(Path.Combine(package, "slideshow.json")))),
+                    StringComparison.OrdinalIgnoreCase),
+                "JPG GPO lab kit generated SHA256-pinned startup and verified offline package.");
             bool duplicateKitBlocked = false;
             try { _ = PhotoSaverGpoPilotKit.Export(project, package, root); }
             catch (IOException) { duplicateKitBlocked = true; }
@@ -289,41 +295,6 @@ internal static class SelfTests
             catch (InvalidDataException) { badKitHashBlocked = true; }
             Check(badKitHashBlocked, "JPG GPO startup template rejects invalid digest evidence.");
 
-            string gpoKit = PhotoSaverGpoPilotKit.Export(project, package, root);
-            string startup = File.ReadAllText(Path.Combine(gpoKit,
-                "PhotoSaver-StartupInstall.ps1"));
-            string kitPhoto = Path.Combine(gpoKit,
-                "JPG-ScreenSaver-" + CampaignSchedule.BuildId(project));
-            var verifiedKit = PhotoJpegSaver.Verify(kitPhoto, true);
-            string originalManifest = Convert.ToHexString(
-                System.Security.Cryptography.SHA256.HashData(
-                    File.ReadAllBytes(Path.Combine(package, "slideshow.json"))));
-            Check(verifiedKit.Images.Length == 1 &&
-                verifiedKit.IntervalSeconds == 10 &&
-                startup.Contains(CampaignSchedule.BuildId(project),
-                    StringComparison.Ordinal) &&
-                startup.Contains(originalManifest, StringComparison.OrdinalIgnoreCase) &&
-                startup.Contains("C:\\ProgramData\\LSCM-PhotoSaver",
-                    StringComparison.Ordinal) &&
-                !startup.Contains("__LSCM_", StringComparison.Ordinal) &&
-                !startup.Contains("Set-ItemProperty", StringComparison.OrdinalIgnoreCase),
-                "JPG GPO lab kit has pinned local photo contents, safe startup template and no user policy writes.");
-            bool duplicateKitRejected = false;
-            try { _ = PhotoSaverGpoPilotKit.Export(project, package, root); }
-            catch (IOException) { duplicateKitRejected = true; }
-            Check(duplicateKitRejected, "JPG GPO pilot kit refuses accidental overwrite.");
-            bool badTemplateRejected = false;
-            try
-            {
-                _ = PhotoSaverGpoPilotKit.RenderStartupScript(
-                    PhotoSaverGpoPilotKit.LoadTemplate() + "\n__LSCM_CAMPAIGN_ID__",
-                    CampaignSchedule.BuildId(project),
-                    "JPG-ScreenSaver-" + CampaignSchedule.BuildId(project),
-                    new string('a', 64), new string('b', 64), 10);
-            }
-            catch (InvalidDataException) { badTemplateRejected = true; }
-            Check(badTemplateRejected,
-                "JPG GPO startup generator rejects duplicate/unexpanded identity tokens.");
             using (var child = System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo {
                     FileName = Path.Combine(package, "PhotoScreenSaver.scr"),
