@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    Universal Lock Screen Campaign Agent (schema 1, agent 0.4.0-preview.69).
+    Universal Lock Screen Campaign Agent (schema 1, agent 0.4.0-preview.70).
 .DESCRIPTION
     -Mode Install from GPO Computer Startup stages and verifies the campaign.
     -Mode Apply runs from the local SYSTEM task at each image change, daily and at startup.
@@ -46,7 +46,7 @@ if (Test-Path -LiteralPath $EarlySourceRecord -PathType Leaf) {
         # Diagnostic modes must never modify a damaged local manifest.
         if ($Mode -eq 'Status') {
             [pscustomobject]@{
-                AgentVersion='0.4.0-preview.69';CampaignId=[string]$early.CampaignId
+                AgentVersion='0.4.0-preview.70';CampaignId=[string]$early.CampaignId
                 Health='CorruptManifest';ConfigHashOK=$false;Installed=$true
                 RepairAction='Run -Mode Repair from verified SYSVOL source.'
             }
@@ -207,7 +207,7 @@ function Get-FeedbackRecord {
     return [ordered]@{
         schemaVersion=1;campaignId=$CampaignId;computerName=$env:COMPUTERNAME.ToUpperInvariant()
         timestampUtc=[DateTime]::UtcNow.ToString('o')
-        agentVersion='0.4.0-preview.69';clientType='PowerShell';stage=$stage;health=$health
+        agentVersion='0.4.0-preview.70';clientType='PowerShell';stage=$stage;health=$health
         expectedImage=$expected;imageMatches=$imageOk;registryMatches=$registryOk
         taskPresent=$taskPresent;missingFiles=$missing;corruptFiles=$corrupt
     }
@@ -827,7 +827,7 @@ function Show-Status {
         elseif (@($missing.ToArray()).Count -gt 0 -or @($corrupt.ToArray()).Count -gt 0 -or -not $cfgOk -or -not $agentOk) { 'RepairNeeded' }
         else { 'Healthy' }
     [pscustomobject]@{
-        AgentVersion='0.4.0-preview.69'; CampaignId=$CampaignId; Health=$health
+        AgentVersion='0.4.0-preview.70'; CampaignId=$CampaignId; Health=$health
         TimeZone=[string]$Config.timeZoneId
         NowInCampaignTimeZone=(Get-NowInCampaignZone)
         Start=[string]$Slides[0].atLocal; End=[string]$Config.endLocal
