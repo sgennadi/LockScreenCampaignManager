@@ -35,6 +35,9 @@ internal static class UiLayoutSmokeTests
             new[] { "Lock Screen / Screen Saver / Both", "Next", "Back" }),
         ("Campaign Wizard - Screen Saver-only save", () => CreateWizardPage(-1),
             new[] { "Validate campaign", "Save project...", "Back" }),
+        ("Campaign Wizard - JPG pilot install", () => CreatePhotoWizardSave(),
+            new[] { "Export JPG .scr pilot...", "Install local JPG pilot...",
+                "Validate campaign", "Back" }),
         ("Campaign Wizard - images", () => CreateWizardPage(2),
             new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
         ("Campaign Wizard - arrange", () => CreateWizardPage(3),
@@ -261,6 +264,33 @@ internal static class UiLayoutSmokeTests
         var form = new MainForm();
         form.ShowSimulatedUpdateNoticeForLayoutTest();
         return form;
+    }
+
+    private static Form CreatePhotoWizardSave()
+    {
+        var editor = new MainForm();
+        try
+        {
+            // Toggle JPG mode through the real wizard controls, not internal
+            // project shortcuts, and never install or change any Windows setting.
+            using (var selection = editor.CreateCampaignWizardForSmokeTest(1))
+            {
+                var type = Descendants(selection).OfType<ComboBox>()
+                    .Single(x => x.Name == "WizardCampaignType");
+                var photo = Descendants(selection).OfType<CheckBox>()
+                    .Single(x => x.Name == "WizardScreenSaverJpegMode");
+                type.SelectedItem = CampaignTargetMode.ScreenSaver;
+                photo.Checked = true;
+            }
+            var wizard = editor.CreateCampaignWizardForSmokeTest(5);
+            wizard.Disposed += (_, _) => editor.Dispose();
+            return wizard;
+        }
+        catch
+        {
+            editor.Dispose();
+            throw;
+        }
     }
 
     private static Form CreateWizardPage(int page)
