@@ -873,6 +873,14 @@ public sealed partial class MainForm
                 _saved = false;
                 RenderPage();
             }, 207, true);
+            Action(actions, "Client Health / Feedback...", () =>
+            {
+                using var feedback = new FeedbackSettingsDialog(_owner._project);
+                if (feedback.ShowDialog(this) != DialogResult.OK) return;
+                _owner._projectDirty = true;
+                _saved = false;
+                RenderPage();
+            }, 264);
             // Time zone is a first-class editable field in the guided
             // schedule step. The previous version only displayed it in a
             // status line, requiring a hidden trip to the Advanced editor.
@@ -930,10 +938,14 @@ public sealed partial class MainForm
             }
             schedule.Controls.Add(list, 0, 2);
             body.Controls.Add(schedule);
-            status.Text = "Time zone: " + _owner._project.TimeZoneId +
+            var feedbackSummary = _owner._project.EnableFeedback
+                ? "Client Health: ENABLED | " + _owner._project.FeedbackShare +
+                    " | every " + _owner._project.FeedbackIntervalMinutes + " min"
+                : "Client Health: DISABLED | no status reports from clients";
+            status.Text = feedbackSummary + " | Time zone: " + _owner._project.TimeZoneId +
                 (_everConfiguredSchedule || _owner._wizardScheduleConfigured
-                    ? "  -  Schedule edited. Continue to Save."
-                    : "  -  Select a time zone and review scheduled changes.");
+                    ? " | Schedule edited. Continue to Save."
+                    : " | Select a time zone and review scheduled changes.");
         }
 
         private void RenderSave(FlowLayoutPanel actions, Panel body, Label status)
