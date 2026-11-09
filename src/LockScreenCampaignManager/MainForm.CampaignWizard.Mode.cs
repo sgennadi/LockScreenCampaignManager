@@ -41,9 +41,38 @@ public sealed partial class MainForm
             }
         }
 
+        // New campaigns have no chosen mode. Historical projects with saved
+        // images/target rows may infer their legacy mode without changing JSON.
+        private bool HasChosenCampaignType =>
+            _owner._project.CampaignModeExplicit ||
+            _owner._project.ImagePaths.Count > 0 ||
+            _owner._project.TargetAssignments.Count > 0;
+
         private bool NeedsLockImages =>
             _owner._project.EffectiveCampaignMode is
                 CampaignTargetMode.LockScreen or CampaignTargetMode.Both;
+
+        // Track only the name the wizard itself generated. A manually typed
+        // name is never silently replaced when the user changes mode.
+        private string? _suggestedCampaignName;
+
+        private void SuggestCampaignName(CampaignTargetMode selected)
+        {
+            var currentName = _owner._name.Text.Trim();
+            if (currentName.Length > 0 &&
+                !string.Equals(currentName, _suggestedCampaignName,
+                    StringComparison.Ordinal))
+                return;
+            string suggestion = selected switch
+            {
+                CampaignTargetMode.LockScreen => "Lock Screen Campaign",
+                CampaignTargetMode.ScreenSaver => "Screen Saver Campaign",
+                _ => "Lock Screen and Screen Saver Campaign"
+            };
+            _suggestedCampaignName = suggestion;
+            _owner._name.Text = suggestion;
+            _owner._project.Name = suggestion;
+        }
 
         private void RenderCampaignType(
             FlowLayoutPanel actions, Panel body, Label status)
@@ -82,7 +111,10 @@ public sealed partial class MainForm
             };
             mode.Items.AddRange(Enum.GetValues<CampaignTargetMode>()
                 .Cast<object>().ToArray());
-            mode.SelectedItem = _owner._project.EffectiveCampaignMode;
+            if (HasChosenCampaignType)
+                mode.SelectedItem = _owner._project.EffectiveCampaignMode;
+            else
+                mode.SelectedIndex = -1; // Never preselect a new campaign.
             details.Controls.Add(mode, 0, 1);
 
             var message = new Label
@@ -155,7 +187,14 @@ public sealed partial class MainForm
 
             void RefreshDescription(bool persist)
             {
-                if (mode.SelectedItem is not CampaignTargetMode selected) return;
+                if (mode.SelectedItem is not CampaignTargetMode selected)
+                {
+                    saver.Enabled = idle.Enabled = password.Enabled = false;
+                    message.Text = "Choose a campaign type to continue. No images or schedule steps are skipped yet.";
+                    status.Text = "No campaign type selected. Choose Lock Screen, Screen Saver or Both.";
+                    _next.Enabled = false;
+                    return;
+                }
                 bool saverEnabled = selected != CampaignTargetMode.LockScreen;
                 saver.Enabled = idle.Enabled = password.Enabled = saverEnabled;
                 message.Text = selected switch
@@ -173,7 +212,19 @@ public sealed partial class MainForm
                 status.Text = "Selected type: " + selected +
                     (saverEnabled ? " | idle " + idle.Value + " s" : "") +
                     " | no AD changes made.";
+                _next.Enabled = true;
                 if (!persist) return;
+                // Repaint the rail as soon as the operator changes the type.
+                // Only Screen Saver-only skips image pages. Both never skips.
+                for (int i = 2; i <= 4; i++)
+                {
+                    bool skip = selected == CampaignTargetMode.ScreenSaver;
+                    _rail[i].Text = skip ? StepNames[i] + " (skip)" : StepNames[i];
+                    _rail[i].ForeColor = skip ? UiStyle.Muted : UiStyle.Navy;
+                }
+                _footnote.Text = selected == CampaignTargetMode.ScreenSaver
+                    ? "Screen Saver: images not needed" : "All image stages are available";
+                SuggestCampaignName(selected);
                 _owner._project.CampaignMode = selected;
                 _owner._project.CampaignModeExplicit = true;
                 _owner._project.ScreenSaver.Executable =
