@@ -21,6 +21,15 @@ internal static partial class NativeClientAgent
     // tests pass (including the GPO startup, scheduled transitions and cleanup).
     internal const bool IsReadyForProduction = false;
 
+    // Explicit opt-in for operator-controlled isolated testing. Ordinary
+    // application launches, scheduled clients and production installations
+    // NEVER enable this path implicitly. It does not enable production.
+    internal static bool IsLabCanaryOptIn =>
+        Environment.GetCommandLineArgs().Skip(1).Contains(
+            "--native-exe-lab", StringComparer.OrdinalIgnoreCase);
+    internal static bool CanDeployNativeClient =>
+        IsReadyForProduction || IsLabCanaryOptIn;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
