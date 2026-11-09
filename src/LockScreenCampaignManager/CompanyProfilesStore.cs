@@ -220,7 +220,7 @@ internal static class CompanyProfilesStore
         DateTime inCompanyZone = TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(zone));
         return new CampaignProject {
-            Name = "Lock Screen Campaign",
+            Name = "", // New projects are untitled until the operator chooses a campaign type.
             CompanyProfileId = company?.Id ?? "",
             TimeZoneId = zone,
             EnableFeedback = company?.EnableFeedback ?? false,
