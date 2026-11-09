@@ -1033,11 +1033,8 @@ public sealed partial class MainForm
                         if (select.ShowDialog(this) != DialogResult.OK) return;
                         string exported = PhotoJpegSaver.Export(_owner._project, select.SelectedPath);
                         MessageBox.Show(this,
-                            "JPG Screen Saver package exported locally:
-" + exported +
-                            "
-
-Test PhotoScreenSaver.scr /s on an isolated client. " +
+                            "JPG Screen Saver package exported locally:\r\n" + exported +
+                            "\r\n\r\nTest PhotoScreenSaver.scr /s on an isolated client. " +
                             "This does NOT deploy GPO or install anything.",
                             "JPG Screen Saver pilot ready",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
