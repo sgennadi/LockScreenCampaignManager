@@ -1,4 +1,4 @@
-# Dual client deployment — PS1 and native EXE (draft)
+# Dual client deployment — PS1 production and native EXE laboratory canary (preview.68)
 
 ## Selector in AD / GPO Deployment Wizard
 
@@ -19,7 +19,7 @@ The native client is an independent headless mode of the portable application ex
 
 ## Current limitations — EXE must not be deployed to production
 
-**`NativeClientAgent.IsReadyForProduction = false`.** The EXE option is visible in the Deployment Wizard and can participate in read-only Preview, but normal EXE export/deployment remains disabled until real-domain endpoint testing and approval. The default PowerShell option remains functional.
+**`NativeClientAgent.IsReadyForProduction = false`.** The EXE option is visible in the current Deployment Wizard and can participate in read-only Preview, but normal EXE export/deployment remains disabled until real-domain endpoint testing and approval. The default PowerShell option remains functional.
 
 For **explicit, limited lab canaries only**, start the PR's Windows build from an interactive administrator workstation using:
 
