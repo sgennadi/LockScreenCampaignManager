@@ -25,6 +25,9 @@ internal sealed class AdAlternateAccountWizard : Form
     private readonly string _dc;
     private readonly string _initialUser;
     private readonly bool _allowSaving;
+    private readonly Action? _forgetSavedLogin;
+    private readonly Button _forgetSaved = new();
+    private string _lastPasswordAccount;
     private readonly TextBox _search = new();
     private readonly ListBox _results = new();
     private readonly Label _searchStatus = new();
@@ -55,12 +58,14 @@ internal sealed class AdAlternateAccountWizard : Form
 
     internal AdAlternateAccountWizard(string domain, string dc, string username,
         string password, bool rememberUsername, bool saveEncryptedPassword,
-        bool allowSaving)
+        bool allowSaving, Action? forgetSavedLogin = null)
     {
         _domain = domain.Trim();
         _dc = dc.Trim();
         _initialUser = username.Trim();
+        _lastPasswordAccount = _initialUser;
         _allowSaving = allowSaving;
+        _forgetSavedLogin = forgetSavedLogin;
 
         Text = "LockScreen Campaign Manager - Select AD account";
         Font = new Font("Segoe UI", 9.5f);
@@ -117,6 +122,22 @@ internal sealed class AdAlternateAccountWizard : Form
         _savePassword.CheckedChanged += (_, _) =>
         {
             if (_savePassword.Checked) _remember.Checked = true;
+        };
+        _forgetSaved.Click += (_, _) =>
+        {
+            if (_forgetSavedLogin is null || MessageBox.Show(this,
+                "Remove credentials saved for the selected AD domain?",
+                "Forget saved AD login", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            _forgetSavedLogin();
+            _lastPasswordAccount = "";
+            _chosenUser = "";
+            _password.Clear();
+            _remember.Checked = false;
+            _savePassword.Checked = false;
+            _search.Clear();
+            ShowPage(0);
         };
         _manual.Click += (_, _) =>
         {
@@ -248,8 +269,9 @@ internal sealed class AdAlternateAccountWizard : Form
             Margin = new Padding(8, 0, 0, 0), DialogResult = DialogResult.Cancel
         };
         _next.Text = "Next >";
-        _next.Width = 172;
+        _next.Width = 215;
         _next.Height = 44;
+        _next.AutoEllipsis = true;
         _next.Tag = "PrimaryAction";
         _next.Margin = new Padding(8, 0, 0, 0);
         _back.Text = "< Back";
@@ -310,7 +332,8 @@ internal sealed class AdAlternateAccountWizard : Form
             UiStatusKind.Neutral);
         layout.Controls.Add(_searchStatus, 0, 2);
         _manual.Text = "Use typed login instead";
-        _manual.Width = 242;
+        _manual.Width = 282;
+        _manual.AutoEllipsis = true;
         _manual.Height = 43;
         _manual.Tag = "NoIcon";
         _manual.Margin = new Padding(0, 8, 0, 0);
@@ -372,6 +395,15 @@ internal sealed class AdAlternateAccountWizard : Form
         saving.Controls.Add(_remember, 0, 0);
         saving.Controls.Add(_savePassword, 1, 0);
         layout.Controls.Add(saving, 0, 2);
+        _forgetSaved.Text = "Forget saved login";
+        _forgetSaved.Tag = "NoIcon";
+        _forgetSaved.Width = 195;
+        _forgetSaved.Height = 40;
+        _forgetSaved.AutoEllipsis = true;
+        _forgetSaved.Visible = _allowSaving && _forgetSavedLogin is not null;
+        var passwordActions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 50, WrapContents = false };
+        passwordActions.Controls.Add(_forgetSaved);
+        layout.Controls.Add(passwordActions, 0, 3);
         layout.Controls.Add(new Label
         {
             Text = _allowSaving
@@ -449,8 +481,9 @@ internal sealed class AdAlternateAccountWizard : Form
                 }, entries.Length == 0 ? UiStatusKind.Warning : UiStatusKind.Success);
             UpdateButtons();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            AppLog.Write(ex, "Read-only AD account autocomplete");
             if (IsDisposed || Disposing || revision != _revision || _page != 0) return;
             _results.Items.Clear();
             UiStyle.ApplyStatus(_searchStatus,
@@ -465,8 +498,11 @@ internal sealed class AdAlternateAccountWizard : Form
         if (string.IsNullOrWhiteSpace(login)) return;
         _chosenUser = login.Trim();
         _selectedAccount.Text = description + Environment.NewLine + "Login: " + _chosenUser;
-        if (!string.Equals(_chosenUser, _initialUser, StringComparison.OrdinalIgnoreCase))
+        // Never carry a password from an earlier selection to a different
+        // principal, including after Back -> selecting the initial account.
+        if (!string.Equals(login.Trim(), _lastPasswordAccount, StringComparison.OrdinalIgnoreCase))
             _password.Clear();
+        _lastPasswordAccount = login.Trim();
         ShowPage(1);
         _password.Focus();
     }
