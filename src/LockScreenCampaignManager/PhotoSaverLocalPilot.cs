@@ -36,6 +36,8 @@ internal static class PhotoSaverLocalPilot
         public string ScrPath { get; set; } = "";
         public Dictionary<string, PriorValue> Previous { get; set; } =
             new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> Expected { get; set; } =
+            new(StringComparer.OrdinalIgnoreCase);
     }
 
     internal static string Root => Path.Combine(
@@ -88,7 +90,15 @@ internal static class PhotoSaverLocalPilot
             state = new LocalPilotState
             {
                 ScrPath = InstalledScr,
-                Previous = ReadPrevious(desktop)
+                Previous = ReadPrevious(desktop),
+                Expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["SCRNSAVE.EXE"] = InstalledScr,
+                    ["ScreenSaveActive"] = "1",
+                    ["ScreenSaveTimeOut"] =
+                        timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["ScreenSaverIsSecure"] = requirePassword ? "1" : "0"
+                }
             };
             // Persist the rollback record BEFORE the first registry write.
             // Do not replace an old state file or a foreign installation.
@@ -100,13 +110,8 @@ internal static class PhotoSaverLocalPilot
             Directory.Move(staging, package);
             PhotoJpegSaver.Verify(package, checkExecutable: true);
             ValidatePolicyNotManaged(); // Policy may have arrived during file copy.
-            desktop.SetValue("SCRNSAVE.EXE", InstalledScr, RegistryValueKind.String);
-            desktop.SetValue("ScreenSaveActive", "1", RegistryValueKind.String);
-            desktop.SetValue("ScreenSaveTimeOut",
-                timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                RegistryValueKind.String);
-            desktop.SetValue("ScreenSaverIsSecure", requirePassword ? "1" : "0",
-                RegistryValueKind.String);
+            foreach (string name in ScreenSaverNames)
+                desktop.SetValue(name, state.Expected[name], RegistryValueKind.String);
             NotifyDesktop();
             installed = true;
             return InstalledScr;
@@ -152,20 +157,36 @@ internal static class PhotoSaverLocalPilot
             throw new InvalidDataException("Local JPG pilot rollback file is empty.");
         if (state.Schema != Schema ||
             !string.Equals(state.ScrPath, InstalledScr, StringComparison.OrdinalIgnoreCase) ||
+            state.Previous is null || state.Expected is null ||
             state.Previous.Count != ScreenSaverNames.Length ||
-            ScreenSaverNames.Any(name => !state.Previous.ContainsKey(name)) ||
+            state.Expected.Count != ScreenSaverNames.Length ||
+            ScreenSaverNames.Any(name => !state.Previous.ContainsKey(name) ||
+                !state.Expected.ContainsKey(name)) ||
             state.Previous.Any(pair => !ScreenSaverNames.Contains(pair.Key,
-                StringComparer.OrdinalIgnoreCase) || pair.Value is null))
+                StringComparer.OrdinalIgnoreCase) || pair.Value is null) ||
+            state.Expected.Any(pair => !ScreenSaverNames.Contains(pair.Key,
+                StringComparer.OrdinalIgnoreCase) || pair.Value is null) ||
+            state.Expected["ScreenSaveActive"] != "1" ||
+            state.Expected["ScreenSaverIsSecure"] is not ("0" or "1") ||
+            !int.TryParse(state.Expected["ScreenSaveTimeOut"], out int timeout) ||
+            timeout is < 60 or > 86400 ||
+            !state.Expected["SCRNSAVE.EXE"].Equals(InstalledScr,
+                StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Local JPG pilot rollback data is invalid.");
 
         ValidatePolicyNotManaged();
         using var desktop = Registry.CurrentUser.OpenSubKey(DesktopKey, writable: true) ??
             throw new InvalidOperationException("Current user Desktop settings are missing.");
-        string active = desktop.GetValue("SCRNSAVE.EXE", "",
-            RegistryValueOptions.DoNotExpandEnvironmentNames) as string ?? "";
-        if (!active.Equals(InstalledScr, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "The selected screen saver changed since pilot installation; automatic rollback is blocked.");
+        foreach (string name in ScreenSaverNames)
+        {
+            if (desktop.GetValueKind(name) != RegistryValueKind.String ||
+                !string.Equals(desktop.GetValue(name, null,
+                    RegistryValueOptions.DoNotExpandEnvironmentNames) as string,
+                    state.Expected[name], StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "A current-user screen saver setting changed since pilot installation: " +
+                    name + ". Automatic rollback is blocked to protect that change.");
+        }
 
         Restore(desktop, state.Previous);
         NotifyDesktop();
