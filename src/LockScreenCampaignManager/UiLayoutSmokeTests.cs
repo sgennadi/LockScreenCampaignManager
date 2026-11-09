@@ -31,16 +31,20 @@ internal static class UiLayoutSmokeTests
             new[] { "Wizard", "Update available: 0.4.0-preview.53" }),
         ("Campaign Wizard - AD connection", () => CreateWizardPage(0),
             new[] { "AD Connection Wizard...", "Continue offline", "Continue", "Back", "Close Wizard" }),
-        ("Campaign Wizard - images", () => CreateWizardPage(1),
+        ("Campaign Wizard - campaign type", () => CreateWizardPage(1),
+            new[] { "Lock Screen / Screen Saver / Both", "Next", "Back" }),
+        ("Campaign Wizard - Screen Saver-only save", () => CreateWizardPage(-1),
+            new[] { "Validate campaign", "Save project...", "Back" }),
+        ("Campaign Wizard - images", () => CreateWizardPage(2),
             new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
-        ("Campaign Wizard - arrange", () => CreateWizardPage(2),
+        ("Campaign Wizard - arrange", () => CreateWizardPage(3),
             new[] { "Move up", "Move down", "Sort by filename", "Auto match names", "Next", "Back" }),
-        ("Campaign Wizard - schedule", () => CreateWizardPage(3),
+        ("Campaign Wizard - schedule", () => CreateWizardPage(4),
             new[] { "Edit schedule...", "Next", "Back" }),
-        ("Campaign Wizard - save", () => CreateWizardPage(4),
+        ("Campaign Wizard - save", () => CreateWizardPage(5),
             new[] { "Validate campaign", "Save project...",
                 "Skip saving & continue", "Save & Next", "Back" }),
-        ("Campaign Wizard - deploy", () => CreateWizardPage(5),
+        ("Campaign Wizard - deploy", () => CreateWizardPage(6),
             new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
         ("Agent Management - read-only desktop layout", () =>
             new GpoOperationsForm("example.com", "dc01.example.com",
@@ -254,7 +258,7 @@ internal static class UiLayoutSmokeTests
         // actual decoding and the selection/preview binding, not just a
         // PictureBox that exists but renders nothing.
         string? fixture = null;
-        if (page is 1 or 2)
+        if (page is 2 or 3)
         {
             fixture = Path.Combine(Path.GetTempPath(),
                 "lscm-preview-smoke-" + Guid.NewGuid().ToString("N") + ".png");
@@ -282,7 +286,7 @@ internal static class UiLayoutSmokeTests
                 catch (UnauthorizedAccessException) { }
             }
         };
-        if (page == 3)
+        if (page == 4)
         {
             var picker = Descendants(wizard).OfType<ComboBox>()
                 .Single(x => x.Name == "WizardTimeZoneSelect");
@@ -682,8 +686,10 @@ internal static class UiLayoutSmokeTests
                 {
                     "Campaign editor - offline Wizard" or
                     "Campaign editor - update available" => "MainHeaderVersion",
-                    "Campaign Wizard - AD connection" or "Campaign Wizard - images" or
-                    "Campaign Wizard - arrange" or "Campaign Wizard - schedule" or
+                    "Campaign Wizard - AD connection" or "Campaign Wizard - campaign type" or
+                    "Campaign Wizard - Screen Saver-only save" or
+                    "Campaign Wizard - images" or "Campaign Wizard - arrange" or
+                    "Campaign Wizard - schedule" or
                     "Campaign Wizard - save" or "Campaign Wizard - deploy" => "CampaignWizardVersion",
                     "Agent Management - read-only desktop layout" => "AgentManagementVersion",
                     "AD / GPO deployment - offline Wizard" => "DeploymentVersion",
@@ -728,6 +734,28 @@ internal static class UiLayoutSmokeTests
                         throw new InvalidOperationException(
                             "Campaign Lock Screen / Screen Saver / Both group targeting is unavailable at " +
                             profile.Name);
+                }
+                if (window.Name == "Campaign Wizard - campaign type")
+                {
+                    var all = Descendants(form).ToArray();
+                    var mode = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "WizardCampaignType");
+                    var saver = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "WizardScreenSaverExecutable");
+                    var timeout = all.OfType<NumericUpDown>()
+                        .SingleOrDefault(x => x.Name == "WizardScreenSaverIdleSeconds");
+                    var password = all.OfType<CheckBox>()
+                        .SingleOrDefault(x => x.Name == "WizardScreenSaverRequirePassword");
+                    if (mode is null || mode.Items.Count != 3 ||
+                        !mode.Items.Contains(CampaignTargetMode.ScreenSaver) ||
+                        !mode.Items.Contains(CampaignTargetMode.Both) ||
+                        saver is null || timeout is null || password is null)
+                        throw new InvalidOperationException(
+                            "Campaign type must be selected before images at " + profile.Name);
+                    mode.SelectedItem = CampaignTargetMode.ScreenSaver;
+                    if (!saver.Enabled || !timeout.Enabled || !password.Enabled)
+                        throw new InvalidOperationException(
+                            "Screen Saver controls not enabled before images at " + profile.Name);
                 }
                 CheckTimeZoneSelectors(form, profile.Name);
                 if (form is GpoOperationsForm)

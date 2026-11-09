@@ -448,7 +448,8 @@ internal sealed partial class DomainDeploymentForm : Form
     private bool HasSelectedTargets =>
         !string.IsNullOrWhiteSpace(_connectedDomain) && _connectedWritable &&
         (_project.TargetAssignments.Count > 0 ||
-            (_ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow)) &&
+            (_project.EffectiveCampaignMode == CampaignTargetMode.LockScreen &&
+             _ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow)) &&
         !string.IsNullOrWhiteSpace(_gpoBox.Text);
 
     private void SetDeploymentMode(bool advanced)
@@ -912,6 +913,12 @@ internal sealed partial class DomainDeploymentForm : Form
             await PlanTargetMatrixAsync();
             return null;
         }
+        if (_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+        {
+            _progress.Text = "Configure user/computer group assignments first. " +
+                "Screen Saver requires a user OU and security group.";
+            return null;
+        }
         try
         {
             var x = Selection();
@@ -1010,6 +1017,11 @@ internal sealed partial class DomainDeploymentForm : Form
         if (_project.TargetAssignments.Count > 0)
         {
             await DeployTargetMatrixAsync();
+            return;
+        }
+        if (_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+        {
+            _progress.Text = "Select Group assignments... and choose the user OU/group before Deploy.";
             return;
         }
         if (_project.ClientType == CampaignClientType.Executable &&

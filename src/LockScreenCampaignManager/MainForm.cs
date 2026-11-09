@@ -507,13 +507,15 @@ public sealed partial class MainForm : Form
             ("Auto match filenames...", AutoMatchImageNames, () => _project.ImagePaths.Count > 0)
         });
         AddActionMenu(actions, "Review / export", new (string Label, Action Execute, Func<bool>? Allowed)[] {
-            ("Validate campaign...", ValidateCurrent, () => _project.ImagePaths.Count > 0),
+            ("Validate campaign...", ValidateCurrent, () => _project.ImagePaths.Count > 0 ||
+                _project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver),
             ("Export package...", ExportPackage, () => _project.ImagePaths.Count > 0)
         });
         AddActionMenu(actions, "AD / GPO", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Connect AD account...", ConnectAndReadAd, null),
             ("Deploy GPO...", () => OpenDomainDeployment(true),
                 () => AdReady && (_project.ImagePaths.Count > 0 ||
+                    _project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver ||
                     _project.TargetAssignments is { Count: > 0 } &&
                     _project.TargetAssignments.All(x => x.UsesScreenSaver))),
             ("Agent Management / Live...", OpenAgentManagement, null),
@@ -1044,10 +1046,17 @@ public sealed partial class MainForm : Form
         {
             ReadControls();
             CampaignSchedule.Validate(_project, requireImages: true);
-            string first = CampaignSchedule.At(_project, 0).ToString("dd.MM.yyyy HH:mm");
-            string last = CampaignSchedule.End(_project).ToString("dd.MM.yyyy HH:mm");
+            string timing = _project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver
+                ? "Built-in Screen Saver: " + _project.ScreenSaver.Executable +
+                    "\nIdle seconds: " + _project.ScreenSaver.IdleSeconds +
+                    "\nPassword on resume: " + _project.ScreenSaver.PasswordOnResume
+                : "Images: " + _project.ImagePaths.Count +
+                    "\nStart: " + CampaignSchedule.At(_project, 0).ToString("dd.MM.yyyy HH:mm") +
+                    "\nCleanup: " + CampaignSchedule.End(_project).ToString("dd.MM.yyyy HH:mm") +
+                    "\nTime zone: " + _project.TimeZoneId;
             MessageBox.Show(this,
-                $"Configuration is valid.\n\nImages: {_project.ImagePaths.Count}\nStart: {first}\nCleanup: {last}\nTime zone: {_project.TimeZoneId}",
+                "Configuration is valid.\n\nType: " +
+                    _project.EffectiveCampaignMode + "\n" + timing,
                 "Campaign validation", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _status.Text = "Configuration validated";
         }
@@ -1245,6 +1254,8 @@ public sealed partial class MainForm : Form
                 ImagePaths = new List<string>(_project.ImagePaths),
                 TargetAssignments = (_project.TargetAssignments ?? [])
                     .Select(x => x.Clone()).ToList(),
+                CampaignMode = _project.CampaignMode,
+                CampaignModeExplicit = _project.CampaignModeExplicit,
                 ScreenSaver = new CampaignScreenSaverSettings {
                     Executable = _project.ScreenSaver.Executable,
                     IdleSeconds = _project.ScreenSaver.IdleSeconds,
@@ -1264,6 +1275,8 @@ public sealed partial class MainForm : Form
             // Persist group-mode edits back to the local project explicitly.
             _project.TargetAssignments = snapshot.TargetAssignments
                 .Select(row => row.Clone()).ToList();
+            _project.CampaignMode = snapshot.CampaignMode;
+            _project.CampaignModeExplicit = snapshot.CampaignModeExplicit;
             _project.ScreenSaver = new CampaignScreenSaverSettings {
                 Executable = snapshot.ScreenSaver.Executable,
                 IdleSeconds = snapshot.ScreenSaver.IdleSeconds,

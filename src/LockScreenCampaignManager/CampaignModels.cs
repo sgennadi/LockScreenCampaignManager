@@ -30,6 +30,24 @@ public sealed class CampaignProject
     // Empty list means legacy single-target Lock Screen deployment.
     // New projects can assign several computer/user groups independently.
     public List<CampaignGroupTarget> TargetAssignments { get; set; } = new();
+    // For new campaigns, the type is chosen BEFORE files in the guided wizard.
+    // Legacy projects without the field default to LockScreen.
+    public CampaignTargetMode CampaignMode { get; set; } = CampaignTargetMode.LockScreen;
+    // v0.4.0-preview.72 projects have group rows but no campaign type field.
+    // Infer their mode rather than misclassifying a saved user-only campaign.
+    public bool CampaignModeExplicit { get; set; } = false;
+    [JsonIgnore]
+    public CampaignTargetMode EffectiveCampaignMode
+    {
+        get
+        {
+            if (CampaignModeExplicit) return CampaignMode;
+            bool lockScreen = TargetAssignments?.Any(x => x.UsesLockScreen) == true;
+            bool screenSaver = TargetAssignments?.Any(x => x.UsesScreenSaver) == true;
+            return lockScreen && screenSaver ? CampaignTargetMode.Both :
+                screenSaver ? CampaignTargetMode.ScreenSaver : CampaignTargetMode.LockScreen;
+        }
+    }
     public CampaignScreenSaverSettings ScreenSaver { get; set; } = new();
     public DateTime StartLocal { get; set; } = DateTime.Today.AddDays(1).AddHours(14);
     public int LastImageHours { get; set; } = 24;
@@ -168,7 +186,13 @@ public static class CampaignSchedule
         ArgumentNullException.ThrowIfNull(project);
         string companySuffix = Guid.TryParse(project.CompanyProfileId, out Guid company)
             ? "-c" + company.ToString("N")[..8] : "";
-        return $"LockScreen - {project.StartLocal:yyyyMMdd-HHmm}{companySuffix}";
+        string product = project.EffectiveCampaignMode switch
+        {
+            CampaignTargetMode.ScreenSaver => "ScreenSaver",
+            CampaignTargetMode.Both => "LockScreen+ScreenSaver",
+            _ => "LockScreen"
+        };
+        return $"{product} - {project.StartLocal:yyyyMMdd-HHmm}{companySuffix}";
     }
 
     public static string BuildId(CampaignProject project)
@@ -234,13 +258,22 @@ public static class CampaignSchedule
             previous = date;
         }
         CampaignTargetAssignments.Validate(project);
-        bool needsImages = project.TargetAssignments is not { Count: > 0 } ||
+        if (!Enum.IsDefined(project.EffectiveCampaignMode))
+            throw new CampaignValidationException("Choose Lock Screen, Screen Saver or Both.");
+        var chosenMode = project.EffectiveCampaignMode;
+        if (project.CampaignModeExplicit && project.TargetAssignments.Any(row =>
+            (row.UsesLockScreen && chosenMode == CampaignTargetMode.ScreenSaver) ||
+            (row.UsesScreenSaver && chosenMode == CampaignTargetMode.LockScreen)))
+            throw new CampaignValidationException(
+                "Group assignments include a different target type. Choose Both or edit group assignments.");
+        bool needsImages = chosenMode is CampaignTargetMode.LockScreen or
+            CampaignTargetMode.Both ||
             project.TargetAssignments.Any(x => x.UsesLockScreen);
         if (requireImages && needsImages && project.ImagePaths.Count == 0)
             throw new CampaignValidationException(
-                project.TargetAssignments.Count == 0
-                    ? "Add at least one image."
-                    : "Lock Screen assignments need at least one image.");
+                project.TargetAssignments.Any(x => x.UsesLockScreen)
+                    ? "Lock Screen assignments need at least one image."
+                    : "Add at least one image.");
         if (project.EnableFeedback)
         {
             FeedbackPath.ValidateRoot(project.FeedbackShare);

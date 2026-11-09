@@ -27,6 +27,7 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
         TestGroupAssignmentMatrixAndScreenSaverPol();
+        TestCampaignModeBeforeImages();
         TestFlexibleSchedules();
         TestNativeClientImageOrder();
         TestFilenameScheduleInference();
@@ -151,6 +152,61 @@ internal static class SelfTests
         TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
         TestAlertsAndHistory();
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
+    }
+
+    private static void TestCampaignModeBeforeImages()
+    {
+        var legacy = new CampaignProject { Name = "Legacy computer-only" };
+        Check(!legacy.CampaignModeExplicit &&
+            legacy.EffectiveCampaignMode == CampaignTargetMode.LockScreen,
+            "Old campaign without mode is Lock Screen.");
+        bool missingImages = false;
+        try { CampaignSchedule.Validate(legacy, true); }
+        catch (CampaignValidationException) { missingImages = true; }
+        Check(missingImages, "Old Lock Screen requires images.");
+
+        var userOnly = new CampaignProject {
+            Name = "Screen Saver user-only",
+            TimeZoneId = "UTC",
+            CampaignMode = CampaignTargetMode.ScreenSaver,
+            CampaignModeExplicit = true,
+            ScreenSaver = new CampaignScreenSaverSettings {
+                Executable = "scrnsave.scr",
+                IdleSeconds = 660,
+                PasswordOnResume = true
+            }
+        };
+        CampaignSchedule.Validate(userOnly, true);
+        Check(userOnly.ImagePaths.Count == 0,
+            "Screen Saver-only validates with zero image files.");
+        var saved = System.Text.Json.JsonSerializer.Deserialize<CampaignProject>(
+            System.Text.Json.JsonSerializer.Serialize(userOnly))!;
+        Check(saved.CampaignModeExplicit &&
+            saved.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver &&
+            saved.ScreenSaver.IdleSeconds == 660,
+            "Wizard mode/settings survive JSON save and reopen.");
+
+        userOnly.CampaignMode = CampaignTargetMode.Both;
+        missingImages = false;
+        try { CampaignSchedule.Validate(userOnly, true); }
+        catch (CampaignValidationException) { missingImages = true; }
+        Check(missingImages, "Both requires Lock Screen images.");
+
+        var old72 = new CampaignProject {
+            Name = "Old preview.72 user-only group",
+            TimeZoneId = "UTC",
+            TargetAssignments = [
+                new CampaignGroupTarget {
+                    Mode = CampaignTargetMode.ScreenSaver,
+                    UserOuDn = "OU=Users,DC=example,DC=com",
+                    UserGroupDn = "CN=Users,OU=Groups,DC=example,DC=com"
+                }
+            ]
+        };
+        Check(!old72.CampaignModeExplicit &&
+            old72.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver,
+            "Pre-mode preview.72 user target is inferred as Screen Saver.");
+        CampaignSchedule.Validate(old72, true);
     }
 
     private static void TestGroupAssignmentMatrixAndScreenSaverPol()
@@ -2725,7 +2781,7 @@ StartExecutePSFirst=true
                 computerName = "PC003", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72-native",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.74-native",
                 clientType = "Executable"
             };
             File.WriteAllText(Path.Combine(root, "PC003.json"),
@@ -2741,7 +2797,7 @@ StartExecutePSFirst=true
                 computerName = "PC004", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.74",
                 clientType = "=HYPERLINK(\"http://untrusted\")"
             };
             File.WriteAllText(Path.Combine(root, "PC004.json"),

@@ -1,3 +1,12 @@
+## 0.4.0-preview.74 — Choose campaign type BEFORE images in seven-step Wizard (2026-11-09)
+- Add a first-class Campaign Type wizard step immediately after AD Connection: Lock Screen, Screen Saver, or Both.
+- Show built-in .scr selection, idle time (60–86400 seconds), and sign-in on resume directly on the Type step. Screen Saver-only skips JPEG selection, arrangement, and change schedule.
+- Keep all image steps for Lock Screen and Both. The Back button from a Screen Saver-only Save step returns to Type. Skipped steps are visibly identified.
+- Persist explicit CampaignMode and Screen Saver options in project JSON; infer modes for older preview.72 group assignments, and preserve legacy image-only projects as Lock Screen.
+- Support validation/AD-GPO menu for Screen Saver-only projects with no JPEGs; require a scoped user OU and security group before deployment; never create a computer GPO when Screen Saver targets are not configured.
+- Add UI smoke for all seven steps at 100–200% and direct Type-to-Save with zero images, plus self-test JSON roundtrip and mode/group conflicts.
+- Includes Screen Saver Registry.pol strict binary integrity fix merged separately in PR #14. First verify real user GPO settings in an isolated AD test OU.
+
 ## 0.4.0-preview.72 — Separate Lock Screen / Screen Saver / Both assignments per AD group (2026-11-09)
 - New per-campaign assignment matrix: up to 20 rows, each mode LockScreen, ScreenSaver or Both, independent computer OU/security group and user OU/security group. Existing projects preserve the legacy Lock Screen flow.
 - New native C# User Configuration GPO creates a Windows built-in Screen Saver configuration: selected standard .scr, idle timeout 60-86400 seconds, optional password on resume. No automatic loopback or domain-wide link.
