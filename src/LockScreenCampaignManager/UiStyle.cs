@@ -15,7 +15,7 @@ internal sealed class UiPreferences
     public UiPreferences Validate()
     {
         if (Density is not ("Auto" or "Compact" or "Comfortable")) Density = "Auto";
-        UiScalePercent = Math.Clamp(UiScalePercent, 100, 150);
+        UiScalePercent = Math.Clamp(UiScalePercent, 100, 200);
         FontScalePercent = Math.Clamp(FontScalePercent, 90, 125);
         return this;
     }

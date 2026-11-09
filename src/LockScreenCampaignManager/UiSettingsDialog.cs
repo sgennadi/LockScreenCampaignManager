@@ -31,7 +31,7 @@ internal sealed class UiSettingsDialog : Form
         density.SelectedItem = UiStyle.Preferences.Density;
         AddLabel(0, "UI density"); panel.Controls.Add(density, 1, 0);
         var scale = Combo();
-        scale.Items.AddRange(new object[] { "100%", "110%", "125%", "150%" });
+        scale.Items.AddRange(new object[] { "100%", "110%", "125%", "150%", "175%", "200%" });
         scale.SelectedItem = UiStyle.Preferences.UiScalePercent + "%";
         AddLabel(1, "UI scale"); panel.Controls.Add(scale, 1, 1);
         var fonts = Combo();

@@ -132,6 +132,23 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('var candidates = ProbeCandidates();', live)
         self.assertNotIn('_computers.Items.Cast<PcRow>().Select(x => x.Name).ToArray()', live)
 
+    def test_all_dialog_dpi_and_issue_11_contract(self):
+        style = read("UiStyle.cs")
+        preferences = read("UiSettingsDialog.cs")
+        layout = read("UiLayoutSmokeTests.cs")
+        manager = read("GpoOperationsForm.cs")
+        self.assertIn("UiScalePercent = Math.Clamp(UiScalePercent, 100, 200)", style)
+        self.assertIn('"175%", "200%"', preferences)
+        self.assertIn('("175%", new UiPreferences', layout)
+        self.assertIn('("200%", new UiPreferences', layout)
+        self.assertIn('CheckDpiTableRows(form, profile.Name)', layout)
+        self.assertIn('CheckTimeZoneDifference(form, profile.Name)', layout)
+        self.assertIn('CheckScrollableUncPaths(form, profile.Name)', layout)
+        self.assertIn('Name = "GpoLifecyclePreviewButton"', manager)
+        self.assertIn('_lifecyclePreview.Enabled = false;', manager)
+        self.assertIn('_status.Text = "Select a managed GPO first (no action performed).";', manager)
+        self.assertIn('Bug #11 regression: missing GPO selection', layout)
+
     def test_dpi_header_continue_and_ad_options_are_not_clipped(self):
         updater = read("UniversalUpdaterWindow.cs")
         wizard = read("MainForm.CampaignWizard.cs")

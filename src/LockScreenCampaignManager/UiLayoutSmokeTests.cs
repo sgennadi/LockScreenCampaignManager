@@ -678,6 +678,14 @@ internal static class UiLayoutSmokeTests
                 CheckTimeZoneDifference(form, profile.Name);
                 CheckScrollableUncPaths(form, profile.Name);
                 CheckTimeZoneSelectors(form, profile.Name);
+                if (form is GpoOperationsForm)
+                {
+                    var lifecycle = Descendants(form).OfType<Button>()
+                        .SingleOrDefault(x => x.Name == "GpoLifecyclePreviewButton");
+                    if (lifecycle is null || lifecycle.Enabled)
+                        throw new InvalidOperationException(
+                            "Bug #11 regression: missing GPO selection must disable lifecycle Preview.");
+                }
                 if (window.Name is "Campaign Wizard - images" or "Campaign Wizard - arrange")
                 {
                     var imageList = Descendants(form).OfType<ListBox>()
