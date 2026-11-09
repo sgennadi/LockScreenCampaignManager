@@ -21,7 +21,7 @@ internal static class NativeUserScreenSaverGpo
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex ZeroVersion = new(
-        @"(?m)^Version=0\s*$", RegexOptions.CultureInvariant,
+        @"(?mi)^Version=0[ \t]*(?=\r?$)", RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
     private const string UserExtension =
         "[{35378EAC-683F-11D2-A89A-00C04FBBCFA2}{0F6B957E-509E-11D1-A7CC-0000F87571E3}]";
@@ -171,8 +171,8 @@ internal static class NativeUserScreenSaverGpo
                 VerifyScreenSaverRegistryPol(actualPolicyBytes, saver, seconds, secure);
 
                 string gptText = File.ReadAllText(gpt, Encoding.ASCII);
-                File.WriteAllText(gpt, ZeroVersion.Replace(gptText,
-                    "Version=65536", 1), Encoding.ASCII);
+                File.WriteAllText(gpt, UpgradeFreshUserGptIni(gptText),
+                    Encoding.ASCII);
                 var edit = new ModifyRequest(gpoDn);
                 foreach (var (attribute, value) in new[] {
                     ("versionNumber", "65536"),
@@ -242,6 +242,22 @@ internal static class NativeUserScreenSaverGpo
             throw new Win32Exception(Marshal.GetLastWin32Error(),
                 "Cannot establish alternate network identity for Screen Saver GPO.");
         using (token) return WindowsIdentity.RunImpersonated(token, Run);
+    }
+
+    /// <summary>
+    /// Preserve CRLF, trailing newlines, and any subsequent GPT sections.
+    /// A regex based on \\s* may consume the Version line break and merge
+    /// the following key/section into Version=65536.
+    /// </summary>
+    internal static string UpgradeFreshUserGptIni(string original)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        if (!Regex.IsMatch(original, @"(?mi)^\[General\]\s*\r?$",
+                RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)) ||
+            ZeroVersion.Matches(original).Count != 1)
+            throw new InvalidDataException(
+                "New Screen Saver GPT must contain [General] and exactly one Version=0 line.");
+        return ZeroVersion.Replace(original, "Version=65536", 1);
     }
 
     /// <summary>
