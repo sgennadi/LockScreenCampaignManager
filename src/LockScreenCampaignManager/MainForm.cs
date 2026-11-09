@@ -496,6 +496,7 @@ public sealed partial class MainForm : Form
         AddActionMenu(actions, "AD / GPO", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Connect AD account...", ConnectAndReadAd, null),
             ("Deploy GPO...", () => OpenDomainDeployment(true), () => AdReady && _project.ImagePaths.Count > 0),
+            ("Agent Management / Live...", OpenAgentManagement, null),
             ("Client feedback...", OpenFeedbackSettings, null)
         });
         AddActionMenu(actions, "Tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
@@ -1160,6 +1161,47 @@ public sealed partial class MainForm : Form
             }
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Connect and read AD", ex); }
+    }
+
+    private void OpenAgentManagement()
+    {
+        if (!AdReady)
+        {
+            ConnectAndReadAd();
+            if (!AdReady) return;
+        }
+        if (_adSnapshot is null) return;
+        if (_company is null ||
+            string.IsNullOrWhiteSpace(_company.DefaultOuDn) ||
+            string.IsNullOrWhiteSpace(_company.DefaultGroupDn))
+        {
+            // Never infer a target OU/group from a generic directory inventory.
+            // Operators without saved company defaults must choose exact AD
+            // entries first in the deployment dialog.
+            if (_project.ImagePaths.Count > 0)
+            {
+                OpenDomainDeployment(true);
+                return;
+            }
+            MessageBox.Show(this,
+                "Select a company profile with a default OU and computer security group, " +
+                "or create a campaign and choose both targets in the AD/GPO Deployment Wizard. " +
+                "No AD changes were made.",
+                "Agent Management scope required", MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            using var console = new GpoOperationsForm(
+                _adSnapshot.Domain, _adSnapshot.Dc,
+                _company.DefaultOuDn, _company.DefaultGroupDn,
+                _sessionAdCredentials ?? new DomainCredentials(_adSnapshot.Domain, "", ""),
+                _project);
+            console.OpenAgentManagementInitially();
+            console.ShowDialog(CampaignDialogOwner);
+        }
+        catch (Exception ex) { UiErrorDialog.Show(this, "Agent Management", ex); }
     }
 
     private void OpenDomainDeployment(bool advanced = false)

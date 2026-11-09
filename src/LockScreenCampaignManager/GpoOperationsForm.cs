@@ -49,9 +49,14 @@ internal sealed partial class GpoOperationsForm : Form
     {
         public override string ToString() => $"{Name}  |  {CampaignId}  |  {Links} link(s)  |  {Id}";
     }
-    private sealed record PcRow(string Name, string Sam)
+    private sealed record PcRow(string Name, string Sam,
+        bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null)
     {
-        public override string ToString() => $"{Name}   ({Sam})";
+        public override string ToString() => $"{Name}   ({Sam})" +
+            (RpcReachable.HasValue
+                ? (RpcReachable.Value ? "   |   RPC 135: reachable" : "   |   RPC 135: not reachable") +
+                  "   |   checked " + CheckedUtc?.ToLocalTime().ToString("HH:mm:ss")
+                : "   |   RPC: not checked");
     }
 
     internal GpoOperationsForm(string domain, string dc, string ouDn, string groupDn,
@@ -72,7 +77,13 @@ internal sealed partial class GpoOperationsForm : Form
         BackColor = Color.FromArgb(247, 248, 251);
         Build();
         InitializeDeferred();
-        Shown += async (_, _) => await ReloadAsync();
+        Shown += async (_, _) =>
+        {
+            await ReloadAsync();
+            if (_openAgentManagementInitially && !IsDisposed && !Disposing &&
+                _agentTabControl is not null && _agentManagementTab is not null)
+                _agentTabControl.SelectedTab = _agentManagementTab;
+        };
         FormClosing += (_, e) => {
             if (!_busy) return;
             e.Cancel = true;
@@ -80,7 +91,7 @@ internal sealed partial class GpoOperationsForm : Form
                 "An AD or remote PC operation is still running. Check its result before closing.",
                 "GPO Operations", MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
-        FormClosed += (_, _) => { CloseDeferred(); RemoveTempPackage(); };
+        FormClosed += (_, _) => { CloseDeferred(); StopAgentManagement(); RemoveTempPackage(); };
         // Centralized UI font/DPI and Windows 11 styling; same tokens as the main window.
         UiStyle.Apply(this);
         UiWindowPlacement.Attach(this, "gpo-operations");
@@ -129,6 +140,8 @@ internal sealed partial class GpoOperationsForm : Form
         root.Controls.Add(headline, 0, 0);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(15, 7) };
+        _agentTabControl = tabs;
+        tabs.SelectedIndexChanged += (_, _) => OnAgentManagementTabChanged();
         root.Controls.Add(tabs, 0, 1);
         tabs.TabPages.Add(BuildLifecycleTab());
         tabs.TabPages.Add(BuildConflictTab());
@@ -147,6 +160,7 @@ internal sealed partial class GpoOperationsForm : Form
         tabs.TabPages.Add(_dcConsistency.AsTabPage());
         _clientHealth = new ClientFeedbackPanel(_domain, _dc, _ouDn, _groupDn, _credentials, _project, RepairFromHealthAsync);
         var clientHealthTab = _clientHealth.AsTabPage();
+        _agentHealthTab = clientHealthTab;
         _deviceDashboard = new DeviceRepairDashboard(
             _domain, _dc, _ouDn, _groupDn, _credentials, _project,
             () => _policies.SelectedItem is GpoRow policy
@@ -257,9 +271,10 @@ internal sealed partial class GpoOperationsForm : Form
 
     private TabPage BuildPushTab()
     {
-        var page = new TabPage("Run now on PCs") { BackColor = UiStyle.Canvas };
+        var page = new TabPage("Agent Management / Live") { BackColor = UiStyle.Canvas };
+        _agentManagementTab = page;
         var layout = Panel(4);
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 47));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 53));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 101));
@@ -274,21 +289,25 @@ internal sealed partial class GpoOperationsForm : Form
             for (int i = 0; i < _computers.Items.Count; i++) _computers.SetItemChecked(i, false);
             InvalidatePlans();
         }, 135));
-        toolbar.Controls.Add(Note("Select up to 25 PCs per run. Remote Task Scheduler RPC and endpoint administrator permissions are required."));
+        SetupAgentManagement(toolbar);
+        toolbar.Controls.Add(Note("Up to 25 PCs per run. RPC TCP/135 reachability is NOT proof of Task Scheduler access or agent health."));
         layout.Controls.Add(toolbar, 0, 0);
         _computers.Dock = DockStyle.Fill;
         _computers.IntegralHeight = false;
         _computers.CheckOnClick = true;
         _computers.HorizontalScrollbar = true;
         _computers.ItemCheck += (_, _) => BeginInvoke((Action)InvalidatePlans);
-        layout.Controls.Add(_computers, 0, 1);
+        layout.Controls.Add(AgentComputerList(), 0, 1);
         _pushInfo.Dock = DockStyle.Fill;
         _pushInfo.Multiline = true;
         _pushInfo.ReadOnly = true;
         _pushInfo.ScrollBars = ScrollBars.Both;
         _pushInfo.WordWrap = false;
         _pushInfo.Font = new Font("Consolas", 9.2f);
-        _pushInfo.Text = "Push: install the agent immediately (images follow the configured schedule).\r\n"+
+        _pushInfo.Text = "Agent Management: Run now acts only on verified AD OU/group computers.\r\n"+
+            "RPC reachability is a network hint; use Client Health / Report for actual agent evidence.\r\n"+
+            "The production client is PS1. Native EXE is still laboratory-only and cannot be launched here.\r\n\r\n"+
+            "Push: install the agent immediately (images follow the configured schedule).\r\n"+
             "Repair: verify and restore files from the trusted SYSVOL package using SHA-256.\r\n"+
             "Cleanup: restore previous settings and remove the local agent on selected PCs.\r\n"+
             "Report: request a fresh JSON status via RPC without modifying the registry.";
@@ -573,16 +592,23 @@ internal sealed partial class GpoOperationsForm : Form
             var data = await ExecuteAsync(DomainOperation.Immediate, "List", new {
                 domain = _domain, dc = _dc, ouDn = _ouDn, groupDn = _groupDn
             });
-            _computers.BeginUpdate();
-            try
-            {
-                _computers.Items.Clear();
-                foreach (JsonElement e in data.EnumerateArray())
-                    _computers.Items.Add(new PcRow(e.GetProperty("name").GetString() ?? "",
-                        e.GetProperty("sam").GetString() ?? ""));
-            }
-            finally { _computers.EndUpdate(); }
-            _status.Text = $"Eligible computers: {_computers.Items.Count} (nested group membership).";
+            _agentInventoryGeneration++;
+            _agentInventory.Clear();
+            foreach (JsonElement e in data.EnumerateArray())
+                _agentInventory.Add(new PcRow(e.GetProperty("name").GetString() ?? "",
+                    e.GetProperty("sam").GetString() ?? ""));
+            DrawAgentInventory();
+            UiStyle.ApplyStatus(_agentProbeStatus,
+                "Loaded " + _agentInventory.Count +
+                " AD-verified computers. Check RPC reachability to find contactable endpoints.",
+                UiStatusKind.Neutral);
+            _status.Text = $"Eligible computers: {_agentInventory.Count} (nested group membership).";
+            // Entering Agent Management performs an explicitly scoped,
+            // read-only RPC reachability sample without waiting for the user
+            // to navigate to another panel. No remote task is created.
+            if (_agentTabControl?.SelectedTab == _agentManagementTab &&
+                _agentInventory.Count > 0)
+                await ProbeVisibleAgentHostsAsync();
         }
         catch (Exception ex) { Fail(ex, "List eligible computers"); }
     }

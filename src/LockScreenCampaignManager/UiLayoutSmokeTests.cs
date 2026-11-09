@@ -40,6 +40,18 @@ internal static class UiLayoutSmokeTests
                 "Skip saving & continue", "Save & Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(5),
             new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
+        ("Agent Management - read-only desktop layout", () =>
+            new GpoOperationsForm("example.com", "dc01.example.com",
+                "OU=Computers,DC=example,DC=com",
+                "CN=Campaign-Clients,OU=Groups,DC=example,DC=com",
+                new DomainCredentials("example.com", "", ""),
+                new CampaignProject {
+                    Name = "layout-only", TimeZoneId = "UTC",
+                    StartLocal = new DateTime(2026, 11, 9, 14, 0, 0)
+                }),
+            new[] { "Computers from OU + group", "Check RPC reachability",
+                "Select reachable (max 25)", "Open Client Health", "Preview",
+                "Run on selected" }),
         ("AD / GPO deployment - offline Wizard", () => new DomainDeploymentForm(
             new CampaignProject {
                 Name = "layout-only", TimeZoneId = "UTC",
