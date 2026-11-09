@@ -186,7 +186,13 @@ public static class CampaignSchedule
         ArgumentNullException.ThrowIfNull(project);
         string companySuffix = Guid.TryParse(project.CompanyProfileId, out Guid company)
             ? "-c" + company.ToString("N")[..8] : "";
-        return $"LockScreen - {project.StartLocal:yyyyMMdd-HHmm}{companySuffix}";
+        string product = project.EffectiveCampaignMode switch
+        {
+            CampaignTargetMode.ScreenSaver => "ScreenSaver",
+            CampaignTargetMode.Both => "LockScreen+ScreenSaver",
+            _ => "LockScreen"
+        };
+        return $"{product} - {project.StartLocal:yyyyMMdd-HHmm}{companySuffix}";
     }
 
     public static string BuildId(CampaignProject project)
