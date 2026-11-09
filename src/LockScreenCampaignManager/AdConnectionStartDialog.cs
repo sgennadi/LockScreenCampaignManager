@@ -388,20 +388,27 @@ internal sealed class AdConnectionStartDialog : Form
         root.Controls.Add(_stepHost, 1, 1);
 
         _connectionPage.Dock = DockStyle.Fill;
+        // The connection contents can exceed the viewport at 150–200% DPI.
+        // Keep every row scrollable instead of letting the bottom lines clip.
+        _connectionPage.AutoScroll = true;
         var connection = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5
+            Name = "AdConnectionScrollableContent",
+            Dock = DockStyle.Top, ColumnCount = 1, RowCount = 5,
+            Height = 675, AutoSize = false
         };
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 226));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 153));
-        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
-        connection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        connection.Controls.Add(new Label {
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
+        connection.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        var connectionIntro = new Label {
+            Name = "AdConnectionIntro",
             Text = "Connect to Active Directory" + Environment.NewLine +
                 "Choose your Windows account or sign in with another AD user. Domain controllers are detected automatically.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
-        }, 0, 0);
+        };
+        connection.Controls.Add(connectionIntro, 0, 0);
         // Current Windows identity is visible; alternate credentials are
         // entered in a separate, DPI-safe dialog rather than cramped inline fields.
         var authentication = new TableLayoutPanel {
@@ -480,10 +487,12 @@ internal sealed class AdConnectionStartDialog : Form
         _serverOptions.SetColumnSpan(_dcDiscoveryStatus, 2);
 
 
+        _advancedDc.Name = "AdAdvancedConnectionOptions";
         _advancedDc.Text = "Advanced connection options  •  Specify domain controller";
-        _advancedDc.AutoSize = true;
-        _advancedDc.Dock = DockStyle.Left;
-        _advancedDc.Margin = new Padding(10, 9, 0, 4);
+        _advancedDc.AutoSize = false;
+        _advancedDc.Dock = DockStyle.Fill;
+        _advancedDc.AutoEllipsis = false;
+        _advancedDc.Margin = new Padding(10, 2, 8, 2);
         _advancedDc.CheckedChanged += (_, _) => {
             _serverOptions.Visible = _advancedDc.Checked;
             if (_advancedDc.Checked && !_mutating)
@@ -505,12 +514,74 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
             BackColor = UiStyle.Surface
         };
-        serverPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        serverPanel.Name = "AdAdvancedConnectionPanel";
+        serverPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         serverPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         serverPanel.Controls.Add(_advancedDc, 0, 0);
         serverPanel.Controls.Add(_serverOptions, 0, 1);
         connection.Controls.Add(serverPanel, 0, 2);
         _serverOptions.Visible = false;
+
+        void FitAdvancedConnectionLayout()
+        {
+            if (IsDisposed || connection.IsDisposed || serverPanel.IsDisposed)
+                return;
+            static int TextHeight(Control control) =>
+                TextRenderer.MeasureText("Agpqy", control.Font,
+                    new Size(4096, 4096),
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+
+            int checkboxRow = Math.Max(54, TextHeight(_advancedDc) +
+                _advancedDc.Padding.Vertical + _advancedDc.Margin.Vertical + 17);
+            serverPanel.RowStyles[0].SizeType = SizeType.Absolute;
+            serverPanel.RowStyles[0].Height = checkboxRow;
+
+            int dcRow = Math.Max(78, TextHeight(_dc) + 58);
+            int dcStatusRow = Math.Max(46, TextHeight(_dcDiscoveryStatus) + 23);
+            _serverOptions.RowStyles[0].SizeType = SizeType.Absolute;
+            _serverOptions.RowStyles[0].Height = dcRow;
+            _serverOptions.RowStyles[1].SizeType = SizeType.Absolute;
+            _serverOptions.RowStyles[1].Height = dcStatusRow;
+
+            // Preserve the collapsed state without reserving invisible space.
+            // Expanding allocates both DC options rows and enough space below
+            // the checkbox descenders, even at large accessible text scales.
+            connection.RowStyles[2].Height = _advancedDc.Checked
+                ? checkboxRow + dcRow + dcStatusRow + _serverOptions.Padding.Vertical + 10
+                : checkboxRow + 12;
+
+            int authRadio = Math.Max(48, TextHeight(_current) + _current.Margin.Vertical + 14);
+            int authButton = Math.Max(76, TextHeight(_editOtherAccount) +
+                _editOtherAccount.Margin.Vertical + 19);
+            int authDomain = Math.Max(78, TextHeight(_domain) + 53);
+            authentication.RowStyles[0].Height = authRadio;
+            authentication.RowStyles[1].Height = authButton;
+            authentication.RowStyles[2].Height = authDomain;
+            connection.RowStyles[0].Height = Math.Max(92, TextHeight(connectionIntro) * 2 + 18);
+            connection.RowStyles[1].Height = Math.Max(230,
+                authRadio + authButton + authDomain + authentication.Padding.Vertical + 8);
+            connection.RowStyles[3].Height = Math.Max(95, TextHeight(_state) * 2 + 27);
+            connection.RowStyles[4].Height = Math.Max(110, TextHeight(_state) * 3 + 29);
+            connection.Height = connection.RowStyles.Cast<RowStyle>()
+                .Sum(row => (int)Math.Ceiling(row.Height)) +
+                connection.Padding.Vertical + 6;
+        }
+
+        _advancedDc.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        _advancedDc.CheckedChanged += (_, _) => FitAdvancedConnectionLayout();
+        _dc.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        _dcDiscoveryStatus.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        _current.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        _editOtherAccount.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        _domain.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        connectionIntro.FontChanged += (_, _) => FitAdvancedConnectionLayout();
+        Shown += (_, _) => FitAdvancedConnectionLayout();
+        DpiChanged += (_, _) =>
+        {
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(new Action(FitAdvancedConnectionLayout));
+        };
+        FitAdvancedConnectionLayout();
 
         _state.Dock = DockStyle.Fill;
         _state.TextAlign = ContentAlignment.MiddleLeft;
@@ -617,6 +688,15 @@ internal sealed class AdConnectionStartDialog : Form
         root.Controls.Add(footer, 0, 2);
         root.SetColumnSpan(footer, 2);
         ShowPage(0);
+    }
+
+    // UI smoke only. Do not trigger DC discovery when opening the advanced
+    // controls in offline layout tests.
+    internal void ShowAdvancedOptionsForSmokeTest()
+    {
+        _mutating = true;
+        try { _advancedDc.Checked = true; }
+        finally { _mutating = false; }
     }
 
     private void ShowPage(int page)
