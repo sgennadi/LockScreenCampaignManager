@@ -33,6 +33,8 @@ internal static class UiLayoutSmokeTests
             new[] { "AD Connection Wizard...", "Continue offline", "Continue", "Back", "Close Wizard" }),
         ("Campaign Wizard - campaign type", () => CreateWizardPage(1),
             new[] { "Lock Screen / Screen Saver / Both", "Next", "Back" }),
+        ("Campaign Wizard - Screen Saver-only save", () => CreateWizardPage(-1),
+            new[] { "Validate campaign", "Save project...", "Back" }),
         ("Campaign Wizard - images", () => CreateWizardPage(2),
             new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
         ("Campaign Wizard - arrange", () => CreateWizardPage(3),
@@ -685,6 +687,7 @@ internal static class UiLayoutSmokeTests
                     "Campaign editor - offline Wizard" or
                     "Campaign editor - update available" => "MainHeaderVersion",
                     "Campaign Wizard - AD connection" or "Campaign Wizard - campaign type" or
+                    "Campaign Wizard - Screen Saver-only save" or
                     "Campaign Wizard - images" or "Campaign Wizard - arrange" or
                     "Campaign Wizard - schedule" or
                     "Campaign Wizard - save" or "Campaign Wizard - deploy" => "CampaignWizardVersion",
