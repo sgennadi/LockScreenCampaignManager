@@ -95,6 +95,42 @@ public sealed class UpdateDownloader : IDisposable
     {
         // Private assets are obtained via the pinned GitHub API. Its 302
         // destination is a signed CDN URL that MUST NOT receive the bearer.
+        // An HTTP 504/502/503 is often a temporary CDN or proxy failure.
+        // Retry the complete, pinned URL chain (never an arbitrary redirect)
+        // a bounded number of times. Partial data from a failed attempt is
+        // deleted, not appended to a different response.
+        for (int attempt = 1; attempt <= 4; attempt++)
+        {
+            try
+            {
+                await DownloadAttemptAsync(release, destination, maximum,
+                    progress, ct, sessionToken);
+                return;
+            }
+            catch (HttpRequestException ex) when
+                (attempt < 4 && ex.StatusCode is { } status &&
+                 RetryableStatus(status))
+            {
+                if (File.Exists(destination)) File.Delete(destination);
+                progress?.Report(new UpdateProgress(UpdatePhase.Downloading,
+                    0, release.SizeBytes));
+                await Task.Delay(TimeSpan.FromMilliseconds(500 * (1 << (attempt - 1))), ct);
+            }
+        }
+    }
+
+    private static bool RetryableStatus(HttpStatusCode status) =>
+        status is HttpStatusCode.RequestTimeout or
+            HttpStatusCode.TooManyRequests or
+            HttpStatusCode.InternalServerError or
+            HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or
+            HttpStatusCode.GatewayTimeout;
+
+    private async Task DownloadAttemptAsync(UpdateRelease release,
+        string destination, long maximum, IProgress<UpdateProgress>? progress,
+        CancellationToken ct, string? sessionToken)
+    {
         Uri next = sessionToken is not null
             ? GitHubCredentialScope.AssetApiUri(release.Repository, release.AssetId!.Value)
             : release.AssetUrl;
