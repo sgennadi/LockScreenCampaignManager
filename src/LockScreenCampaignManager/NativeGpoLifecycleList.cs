@@ -273,6 +273,32 @@ internal static class NativeGpoLifecycleList
         return true;
     }
 
+    /// <summary>
+    /// Strict signature for managed classic Startup Scripts: no PowerShell,
+    /// additional script commands, parameters, or arbitrary startup EXE.
+    /// </summary>
+    internal static bool IsManagedExecutableStartup(string startup,
+        string domain, out string campaignId)
+    {
+        campaignId = "";
+        if (startup.Length > 1_048_576) return false;
+        var pathMatch = Regex.Match(startup,
+            @"(?im)^0CmdLine=(?<file>\\\\[^\r\n]+\\LockScreenCampaigns\\(?<id>[a-z0-9_-]+)\\LockScreen-Agent\.exe)\s*$",
+            RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        if (!pathMatch.Success) return false;
+        string proposed = pathMatch.Groups["id"].Value;
+        if (!NativeSysvolStorage.ValidCampaignId(proposed)) return false;
+        string exe = @"\\" + domain + @"\SYSVOL\" + domain +
+            @"\scripts\LockScreenCampaigns\" + proposed +
+            @"\LockScreen-Agent.exe";
+        string expected = "[Startup]\r\n0CmdLine=" + exe +
+            "\r\n0Parameters=--client-agent Install\r\n";
+        if (!startup.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            return false;
+        campaignId = proposed;
+        return true;
+    }
+
     private static bool ExistsStrict(string path)
     {
         try { _ = File.GetAttributes(path); return true; }
@@ -311,28 +337,8 @@ internal static class NativeGpoLifecycleList
             if (!IsManagedStartup(startup, domain, out campaignId))
                 return null;
         }
-        else
-        {
-            // scripts.ini names the executable directly with a separate,
-            // fixed --client-agent Install argument, as specified by
-            // Microsoft MS-GPSCR. No intermediate CMD is accepted.
-            var pathMatch = Regex.Match(startup,
-                @"(?im)^0CmdLine=(?<file>\\\\[^\r\n]+\\LockScreenCampaigns\\(?<id>[a-z0-9_-]+)\\LockScreen-Agent\.exe)\s*$",
-                RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-            if (!pathMatch.Success ||
-                !Regex.IsMatch(startup, @"(?im)^0Parameters=--client-agent Install\s*$"))
-                return null;
-            campaignId = pathMatch.Groups["id"].Value;
-            if (!NativeSysvolStorage.ValidCampaignId(campaignId))
-                return null;
-            string exe = @"\\" + domain + @"\SYSVOL\" + domain +
-                @"\scripts\LockScreenCampaigns\" + campaignId +
-                @"\LockScreen-Agent.exe";
-            string expectedIni = "[Startup]\r\n0CmdLine=" + exe +
-                "\r\n0Parameters=--client-agent Install\r\n";
-            if (!string.Equals(startup, expectedIni, StringComparison.OrdinalIgnoreCase))
-                return null;
-        }
+        else if (!IsManagedExecutableStartup(startup, domain, out campaignId))
+            return null;
 
         string root = @"\\" + dc + @"\SYSVOL\" + domain +
             @"\scripts\LockScreenCampaigns\" + campaignId;
