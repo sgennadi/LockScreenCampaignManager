@@ -1,3 +1,10 @@
+## 0.4.0-preview.65 — Shared two-step AD user search and sign-in Wizard (2026-11-09)
+- The startup AD Connection Wizard and the AD / GPO Deployment window now open the same two-step alternate-account Wizard: (1) live typeahead AD search by display name, username, account name, email or UPN, with a result list and exact-DN tooltips; (2) password entry after choosing the account, with Back to revise the choice.
+- Native C# LDAP lookup starts after the first character (debounced, capped at 75 matches, signed/sealed Windows account binding, no PowerShell). Stale search replies cannot replace later results. An explicitly chosen manual login remains available when Windows-domain read access is unavailable.
+- The selected account's password does not carry over when the user switches identities. Canceling a new alternate account selection restores the previous Windows account mode; no AD write occurs during lookup.
+- Preserve the startup Wizard's optional Credential Manager-backed remember/save/forget controls. Deployment credentials remain session-only; remove the extra inline password editor and older one-off Find User popup.
+- Add offline typeahead/security contracts and WinForms search/password page smoke across multiple font/DPI profiles; require GitHub Actions x86/x64 passes before shipping.
+
 ## 0.4.0-preview.64 — Deployment Wizard rights and readable targets (2026-11-09)
 - Make the read-only GPO/OU rights check advisory: unknown or unconfirmed ACL hints do not interrupt a safe Preview with a blocking confirmation. GPO creation and SYSVOL writes still require a separately confirmed deployment and fresh native checks.
 - Keep AD connection status distinct from color-coded permission hints (potential allow, possible deny, incomplete group token, no matching allow, unavailable). Explicitly mark SYSVOL and GPO COM write rights untested.
