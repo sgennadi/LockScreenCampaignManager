@@ -27,6 +27,12 @@ These values are REG_SZ. The GPO user extension uses the Microsoft-defined Regis
 
 **Important:** The built-in `scrnsave.scr` is the **blank** Windows screen saver; choosing ScreenSaver or Both does **not** yet turn campaign JPEGs into a photo slideshow. Windows screen savers are executable `.scr` programs, not lock-screen JPGs. A managed slideshow `.scr` must be built, signed and validated separately, not silently inferred from an arbitrary path or JPEG.
 
+## Conflict-scan Registry.pol validation (preview.78)
+
+The native read-only scanner now requires the MS-GPREG UTF-16LE **NUL-terminated key and value identifiers**, with a separate UTF-16 semicolon following each terminator. It rejects incomplete/malformed string values, incorrectly sized numeric values and truncated DWORD fields rather than treating them as clean policy evidence. Valid `User/Registry.pol` generated for Screen Saver and `Machine/Registry.pol` for Lock Screen remain supported.
+
+If an existing GPO contains malformed `Registry.pol` evidence, **Preview blocks Deploy** and reports the file error; it does not rewrite existing GPO files. Use GPMC and an isolated domain pilot to investigate before proceeding. The import is not a substitute for client `gpresult` and does not prove effective policy winning precedence.
+
 ## Batch safety
 
 Preview reads and validates **every** proposed computer or user policy separately, checks its exact OU, group, DC, GPO name, read-only source manifests and image hashes where needed, and does not change AD or SYSVOL. Starting in preview.76, each target also receives an independent read-only **OU/ancestor-linked GPO conflict audit** using the chosen DC:
