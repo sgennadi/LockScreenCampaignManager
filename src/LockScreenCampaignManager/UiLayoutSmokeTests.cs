@@ -746,12 +746,29 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "WizardScreenSaverIdleSeconds");
                     var password = all.OfType<CheckBox>()
                         .SingleOrDefault(x => x.Name == "WizardScreenSaverRequirePassword");
-                    if (mode is null || mode.Items.Count != 3 ||
+                    var next = all.OfType<Button>()
+                        .FirstOrDefault(x => x.Name == "CampaignWizardContinueAction");
+                    bool hasSkipped = all.OfType<Label>().Any(x =>
+                        x.Text.Contains("(skip)", StringComparison.Ordinal));
+                    if (mode is null || mode.SelectedIndex >= 0 ||
+                        next is null || next.Enabled || hasSkipped ||
+                        mode.Items.Count != 3 ||
                         !mode.Items.Contains(CampaignTargetMode.ScreenSaver) ||
                         !mode.Items.Contains(CampaignTargetMode.Both) ||
                         saver is null || timeout is null || password is null)
                         throw new InvalidOperationException(
                             "Campaign type must be selected before images at " + profile.Name);
+                    mode.SelectedItem = CampaignTargetMode.ScreenSaver;
+                    if (!next.Enabled ||
+                        !all.OfType<Label>().Any(x => x.Text.StartsWith("3  Images (skip)", StringComparison.Ordinal)) ||
+                        !all.OfType<Label>().Any(x => x.Text.StartsWith("4  Arrange (skip)", StringComparison.Ordinal)) ||
+                        !all.OfType<Label>().Any(x => x.Text.StartsWith("5  Schedule (skip)", StringComparison.Ordinal)))
+                        throw new InvalidOperationException(
+                            "Screen Saver-only must immediately skip three image steps at " + profile.Name);
+                    mode.SelectedItem = CampaignTargetMode.Both;
+                    if (all.OfType<Label>().Any(x => x.Text.Contains("(skip)", StringComparison.Ordinal)))
+                        throw new InvalidOperationException(
+                            "Both mode must not skip image steps at " + profile.Name);
                     mode.SelectedItem = CampaignTargetMode.ScreenSaver;
                     if (!saver.Enabled || !timeout.Enabled || !password.Enabled)
                         throw new InvalidOperationException(
