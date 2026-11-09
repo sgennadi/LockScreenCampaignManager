@@ -501,7 +501,6 @@ public sealed partial class MainForm
                 {
                     Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                     ForeColor = UiStyle.Navy,
-                    AutoEllipsis = false,
                     Font = new Font("Segoe UI", 9.5f),
                     Padding = new Padding(5, 7, 5, 9),
                     AutoEllipsis = false,
