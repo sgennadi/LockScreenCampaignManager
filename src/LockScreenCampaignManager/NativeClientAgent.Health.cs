@@ -87,7 +87,8 @@ internal static partial class NativeClientAgent
     private static void SaveBackup(Context ctx)
     {
         if (ReadBackup(ctx) is not null) return;
-        using var key = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+        using var hive = OpenNativeHive();
+        using var key = hive.OpenSubKey(RegistryPath, writable: false);
         var image = GetRegistryValue(key, "LockScreenImage");
         var flag = GetRegistryValue(key, "NoChangingLockScreen");
         var draft = new BackupRecord(2, ctx.Id, key is not null, image, flag, "");
@@ -105,7 +106,8 @@ internal static partial class NativeClientAgent
         }
         BackupRecord? backup = ReadBackup(ctx);
         EnsureNoOtherOwner(ctx);
-        using var current = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+        using var hive = OpenNativeHive();
+        using var current = hive.OpenSubKey(RegistryPath, writable: false);
         string currentImage = Convert.ToString(current?.GetValue("LockScreenImage", "",
             RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
         bool ownsImage = currentImage.StartsWith(ctx.Images + "\\",
@@ -118,7 +120,7 @@ internal static partial class NativeClientAgent
 
         if (ownsImage && backup is not null)
         {
-            using var key = Registry.LocalMachine.CreateSubKey(RegistryPath,
+            using var key = hive.CreateSubKey(RegistryPath,
                 writable: true) ?? throw new IOException("Registry policy unavailable.");
             RestoreRegistryValue(key, "LockScreenImage", backup.LockScreenImage);
             RegistryValueRecord currentFlag = GetRegistryValue(key,
@@ -207,7 +209,8 @@ internal static partial class NativeClientAgent
 
         if (restored && backup is not null)
         {
-            using var registry = Registry.LocalMachine.OpenSubKey(
+            using var hive = OpenNativeHive();
+            using var registry = hive.OpenSubKey(
                 RegistryPath, writable: false);
             if (!SameRegistryValue(GetRegistryValue(registry, "LockScreenImage"),
                     backup.LockScreenImage) ||
@@ -324,7 +327,8 @@ internal static partial class NativeClientAgent
             Verified(ctx.LocalManifest, state.ManifestSha256);
         bool agentOk = state is not null &&
             Verified(ctx.LocalExe, state.AgentSha256);
-        using var registry = Registry.LocalMachine.OpenSubKey(RegistryPath,
+        using var hive = OpenNativeHive();
+        using var registry = hive.OpenSubKey(RegistryPath,
             writable: false);
         bool registryOk = current >= 0 &&
             string.Equals(Convert.ToString(registry?.GetValue("LockScreenImage", "",
