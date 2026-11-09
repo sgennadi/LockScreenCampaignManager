@@ -17,9 +17,11 @@ internal static class AgentReachabilityProbe
     internal const int ConnectionTimeoutMilliseconds = 1350;
 
     internal static async Task<IReadOnlyList<Result>> CheckAsync(
-        IReadOnlyList<string> verifiedHosts, CancellationToken cancellationToken = default)
+        IReadOnlyList<string> verifiedHosts, string domain,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(verifiedHosts);
+        ArgumentException.ThrowIfNullOrWhiteSpace(domain);
         if (verifiedHosts.Count > MaximumPerScan)
             throw new ArgumentOutOfRangeException(nameof(verifiedHosts),
                 "Limit connectivity checks to 300 explicitly listed AD computers.");
@@ -32,7 +34,7 @@ internal static class AgentReachabilityProbe
             await limiter.WaitAsync(cancellationToken);
             try
             {
-                if (!NativeImmediateActions.ValidHostForReachability(hostname))
+                if (!NativeImmediateActions.ValidHost(hostname, domain))
                     return new Result(hostname, false, DateTimeOffset.UtcNow);
                 bool connected;
                 using (var client = new TcpClient())
