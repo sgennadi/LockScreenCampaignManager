@@ -41,6 +41,7 @@ internal static class SelfTests
         TestNativeImmediateActionsContracts();
         TestNativeRemoteCleanupContracts();
         TestNativeGpoDeploymentPlanContracts();
+        TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
@@ -390,6 +391,66 @@ StartExecutePSFirst=true
             Check(corruptDenied, "Native GPO preflight rejects modified campaign JPEGs");
         }
         finally { Directory.Delete(folder, true); }
+    }
+
+    private static void TestNativeExePreviewPackage()
+    {
+        // A real native EXE package must be inspectable without LDAP or
+        // deploying a GPO, yet default export must refuse an unvalidated
+        // production client. This test never executes the exported agent.
+        string root = Path.Combine(Path.GetTempPath(),
+            "LSCM-EXE-Preview-CI-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string image = Path.Combine(root, "input.jpg");
+            using (var bitmap = new System.Drawing.Bitmap(900, 500))
+                bitmap.Save(image, System.Drawing.Imaging.ImageFormat.Jpeg);
+            var project = new CampaignProject
+            {
+                Name = "Native Preview CI",
+                ClientType = CampaignClientType.Executable,
+                StartLocal = new DateTime(2027, 6, 1, 9, 0, 0),
+                TimeZoneId = "UTC", LastImageHours = 24,
+                ImagePaths = new List<string> { image }
+            };
+            bool blocked = false;
+            try { _ = CampaignExporter.Export(project, root); }
+            catch (NotSupportedException) { blocked = true; }
+            Check(blocked, "Unvalidated native agent cannot be exported for production");
+
+            string folder = CampaignExporter.Export(project, root, forReadOnlyPreview: true);
+            string exe = Path.Combine(folder, "LockScreen-Agent.exe");
+            Check(File.Exists(exe) && !File.Exists(
+                Path.Combine(folder, "LockScreen-Agent.ps1")),
+                "Read-only EXE Preview packages only the native executable");
+            using var document = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(folder, "campaign.json")));
+            var manifest = document.RootElement;
+            string expectedSha = manifest.GetProperty("agentSha256").GetString() ?? "";
+            string actualSha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(exe)));
+            Check(manifest.GetProperty("clientType").GetString() == "Executable" &&
+                expectedSha.Equals(actualSha, StringComparison.OrdinalIgnoreCase),
+                "Native Preview manifest pins the exact exported EXE SHA-256");
+            var local = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder);
+            Check(local.Count == 1 && local.Id == CampaignSchedule.BuildId(project),
+                "Native read-only GPO Plan validates the EXE package without AD writes");
+
+            using (var stream = new FileStream(exe, FileMode.Open,
+                FileAccess.ReadWrite, FileShare.None))
+            {
+                stream.Position = stream.Length - 1;
+                int previous = stream.ReadByte();
+                stream.Position = stream.Length - 1;
+                stream.WriteByte((byte)(previous ^ 1));
+            }
+            bool tampered = false;
+            try { _ = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder); }
+            catch (InvalidDataException) { tampered = true; }
+            Check(tampered, "Native GPO Plan refuses a modified EXE source");
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     private static void TestNativeRemoteCleanupContracts()
