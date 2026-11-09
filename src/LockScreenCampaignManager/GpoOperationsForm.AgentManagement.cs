@@ -10,6 +10,10 @@ internal sealed partial class GpoOperationsForm
     private readonly CheckBox _agentReachableOnly = new();
     private readonly CheckBox _agentAutoProbe = new();
     private readonly Label _agentProbeStatus = new();
+    private readonly TextBox _agentSelectedDetails = new();
+    private Button? _agentRefreshReportsButton;
+    private bool _agentEvidenceLoading;
+    private int _agentEvidenceGeneration;
     private readonly System.Windows.Forms.Timer _agentProbeTimer = new() { Interval = 60000 };
     private Button? _agentProbeButton;
     private TabPage? _agentManagementTab;
@@ -40,6 +44,9 @@ internal sealed partial class GpoOperationsForm
             "Check RPC reachability", () => _ = ProbeVisibleAgentHostsAsync(), 204);
         toolbar.Controls.Add(_agentProbeButton);
         toolbar.Controls.Add(ActionButton("Select reachable (max 25)", SelectReachableAgents, 243));
+        _agentRefreshReportsButton = ActionButton(
+            "Refresh Agent Reports", () => _ = RefreshAgentEvidenceAsync(), 210);
+        toolbar.Controls.Add(_agentRefreshReportsButton);
         toolbar.Controls.Add(ActionButton("Open Client Health", OpenAgentHealth, 187));
 
         _agentAutoProbe.Text = "Auto-check every 60 sec";
@@ -60,10 +67,11 @@ internal sealed partial class GpoOperationsForm
     {
         var panel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = Padding.Empty
+            Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = Padding.Empty
         };
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 49));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
         _agentProbeStatus.Dock = DockStyle.Fill;
         _agentProbeStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentProbeStatus.AutoEllipsis = true;
@@ -72,6 +80,14 @@ internal sealed partial class GpoOperationsForm
             UiStatusKind.Neutral);
         panel.Controls.Add(_agentProbeStatus, 0, 0);
         panel.Controls.Add(_computers, 0, 1);
+        _agentSelectedDetails.Dock = DockStyle.Fill;
+        _agentSelectedDetails.Multiline = true;
+        _agentSelectedDetails.ReadOnly = true;
+        _agentSelectedDetails.ScrollBars = ScrollBars.Vertical;
+        _agentSelectedDetails.BackColor = UiStyle.Surface;
+        _agentSelectedDetails.Font = new Font("Segoe UI", 9f);
+        _agentSelectedDetails.Text = "Select a verified computer to see RPC hints, client-reported health and latest command outcome.";
+        panel.Controls.Add(_agentSelectedDetails, 0, 2);
         return panel;
     }
 
@@ -108,6 +124,7 @@ internal sealed partial class GpoOperationsForm
         string query = _agentSearch.Text.Trim();
         var selected = _computers.CheckedItems.Cast<PcRow>()
             .Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string? highlighted = (_computers.SelectedItem as PcRow)?.Name;
         var visible = _agentInventory.Where(x =>
                 (query.Length == 0 || x.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                  x.Sam.Contains(query, StringComparison.OrdinalIgnoreCase)) &&
@@ -122,7 +139,16 @@ internal sealed partial class GpoOperationsForm
                 _computers.Items.Add(pc, selected.Contains(pc.Name));
         }
         finally { _computers.EndUpdate(); }
-        InvalidatePlans(); // Changing visible targets invalidates any earlier approval.
+        if (highlighted is not null)
+        {
+            for (int i = 0; i < _computers.Items.Count; i++)
+                if (_computers.Items[i] is PcRow row &&
+                    string.Equals(row.Name, highlighted, StringComparison.OrdinalIgnoreCase))
+                { _computers.SelectedIndex = i; break; }
+        }
+        if (!selected.SetEquals(_computers.CheckedItems.Cast<PcRow>().Select(x => x.Name)))
+            InvalidatePlans();
+        DisplaySelectedAgentDetails();
     }
 
     private void SelectReachableAgents()
