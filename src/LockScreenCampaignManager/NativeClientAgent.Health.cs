@@ -344,7 +344,7 @@ internal static partial class NativeClientAgent
         {
             schemaVersion = 1, campaignId = ctx.Id, computerName = machine,
             timestampUtc = DateTimeOffset.UtcNow.ToString("O"),
-            agentVersion = "0.4.0-preview.69-native", clientType = "Executable",
+            agentVersion = "0.4.0-preview.70-native", clientType = "Executable",
             stage, health,
             expectedImage = current >= 0 ? ctx.Config.Slides[current].FileName : "",
             imageMatches = missing + corrupt == 0,

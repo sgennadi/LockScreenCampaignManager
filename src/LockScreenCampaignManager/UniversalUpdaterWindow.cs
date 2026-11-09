@@ -66,7 +66,7 @@ internal sealed class UniversalUpdaterWindow : Form
             ColumnCount = 1, RowCount = 5, BackColor = UiStyle.Canvas
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
@@ -76,21 +76,34 @@ internal sealed class UniversalUpdaterWindow : Form
             Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
             BackColor = UiStyle.Navy, Padding = new Padding(19, 12, 19, 10)
         };
-        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
-        banner.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        banner.Controls.Add(new Label {
+        banner.Name = "UpdaterHeader";
+        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+        banner.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        var bannerTitle = new Label {
+            Name = "UpdaterHeaderTitle",
             Text = "Software updates",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(0, 5, 0, 6),
-            Font = new Font("Segoe UI Semibold", 17f), ForeColor = Color.White
-        }, 0, 0);
-        banner.Controls.Add(new Label {
+            Font = new Font("Segoe UI Semibold", 17f), ForeColor = Color.White,
+            AutoEllipsis = false
+        };
+        var bannerSubtitle = new Label {
+            Name = "UpdaterHeaderSubtitle",
             Text = "1  Check for updates     2  Install update",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 10f),
-            ForeColor = Color.FromArgb(224, 238, 255), AutoEllipsis = true
-        }, 0, 1);
+            ForeColor = Color.FromArgb(224, 238, 255), AutoEllipsis = false
+        };
+        banner.Controls.Add(bannerTitle, 0, 0);
+        banner.Controls.Add(bannerSubtitle, 0, 1);
         layout.Controls.Add(banner, 0, 0);
+
+        // Resize the outer banner too; growing only its label rows clips
+        // the "Check for updates / Install update" line at high DPI.
+        void FitUpdatesHeader() =>
+            UiStyle.FitWizardHeader(layout, banner, bannerTitle, bannerSubtitle, 116);
+        bannerTitle.FontChanged += (_, _) => FitUpdatesHeader();
+        bannerSubtitle.FontChanged += (_, _) => FitUpdatesHeader();
 
         var config = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
@@ -243,6 +256,12 @@ internal sealed class UniversalUpdaterWindow : Form
         };
         FormClosed += (_, _) => _sessionToken.Clear();
         UiStyle.Apply(this);
+        FitUpdatesHeader();
+        DpiChanged += (_, _) =>
+        {
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(new Action(FitUpdatesHeader));
+        };
         UiWindowPlacement.Attach(this, "updater");
         if (checkOnOpen)
         {

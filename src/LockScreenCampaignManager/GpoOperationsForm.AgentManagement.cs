@@ -64,17 +64,36 @@ internal sealed partial class GpoOperationsForm
         toolbar.Controls.Add(_agentRefreshReportsButton);
         toolbar.Controls.Add(ActionButton("Open Client Health", OpenAgentHealth, 187));
 
-        _agentAutoProbe.Text = "Auto-check every 60 sec";
+        _agentAutoProbe.Text = "Auto-refresh RPC + SMB (60 sec)";
         _agentAutoProbe.AutoSize = true;
         _agentAutoProbe.Margin = new Padding(4, 14, 7, 0);
         _agentAutoProbe.CheckedChanged += (_, _) => UpdateAgentProbeTimer();
         toolbar.Controls.Add(_agentAutoProbe);
 
-        _agentProbeTimer.Tick += (_, _) =>
+        // Auto-refresh is opt-in and active only while this tab is visible.
+        // Never confuse an RPC connection with client-reported health.
+        _agentProbeTimer.Tick += async (_, _) =>
         {
-            if (!_busy && !_agentProbing && _agentInventory.Count > 0 &&
-                _agentTabControl?.SelectedTab == _agentManagementTab)
-                _ = ProbeVisibleAgentHostsAsync();
+            if (_busy || _agentProbing || _agentEvidenceLoading ||
+                _agentInventory.Count == 0 ||
+                _agentTabControl?.SelectedTab != _agentManagementTab)
+                return;
+            _agentProbeTimer.Stop(); // Prevent overlapping SMB reads / network scans.
+            try
+            {
+                await RefreshAgentEvidenceAsync();
+                if (!IsDisposed && !Disposing &&
+                    _agentTabControl?.SelectedTab == _agentManagementTab)
+                    await ProbeVisibleAgentHostsAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write(ex, "Agent Management periodic read-only refresh");
+            }
+            finally
+            {
+                if (!IsDisposed && !Disposing) UpdateAgentProbeTimer();
+            }
         };
     }
 
@@ -207,12 +226,34 @@ internal sealed partial class GpoOperationsForm
             : "Selected " + count + " RPC-reachable AD computers. Preview and confirm any remote action.";
     }
 
+    private PcRow[] ProbeCandidates()
+    {
+        string query = _agentSearch.Text.Trim();
+        string activity = _agentActivityFilter.SelectedItem as string ?? "Active <= 90 days";
+        DateTimeOffset observedUtc = DateTimeOffset.UtcNow;
+
+        // Deliberately ignore the reachable-only DISPLAY filter: an endpoint
+        // that was unreachable before must be eligible for the next probe.
+        // Oldest checks first distribute the bounded scan fairly beyond 300 PCs.
+        return _agentInventory.Where(pc =>
+                (query.Length == 0 ||
+                 pc.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                 pc.Sam.Contains(query, StringComparison.OrdinalIgnoreCase)) &&
+                MatchesAdActivity(pc, activity, observedUtc))
+            .GroupBy(pc => pc.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(pc => pc.CheckedUtc ?? DateTimeOffset.MinValue)
+            .ThenBy(pc => pc.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private async Task ProbeVisibleAgentHostsAsync()
     {
         if (_busy || _agentProbing || _agentInventory.Count == 0 || IsDisposed || Disposing)
             return;
-        var visible = _computers.Items.Cast<PcRow>().Select(x => x.Name).ToArray();
-        var hosts = visible.Take(AgentReachabilityProbe.MaximumPerScan).ToArray();
+        var candidates = ProbeCandidates();
+        var hosts = candidates.Take(AgentReachabilityProbe.MaximumPerScan)
+            .Select(pc => pc.Name).ToArray();
         int generation = _agentInventoryGeneration;
         _agentProbing = true;
         if (_agentProbeButton is not null) _agentProbeButton.Enabled = false;
@@ -235,8 +276,9 @@ internal sealed partial class GpoOperationsForm
             }
             DrawAgentInventory();
             int reachable = status.Count(x => x.RpcEndpointReachable);
-            string limit = visible.Length > hosts.Length
-                ? " | " + (visible.Length - hosts.Length) + " not checked; filter to check other PCs" : "";
+            string limit = candidates.Length > hosts.Length
+                ? " | " + (candidates.Length - hosts.Length) +
+                  " deferred to next scan (oldest checked first)" : "";
             UiStyle.ApplyStatus(_agentProbeStatus,
                 "RPC TCP/135 reachable: " + reachable + "/" + hosts.Length +
                 " | checked " + DateTime.Now.ToString("HH:mm:ss") + limit +

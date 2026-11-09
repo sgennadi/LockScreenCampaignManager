@@ -115,6 +115,46 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertNotIn('Schedule.Service', probe)
         self.assertNotIn('RegisterTaskDefinition', probe)
 
+    def test_agent_auto_refresh_reads_smb_and_rechecks_hidden_rpc_candidates(self):
+        live = read("GpoOperationsForm.AgentManagement.cs")
+        # Auto-refresh must not mistake TCP/135 for an agent heartbeat.
+        self.assertIn('Auto-refresh RPC + SMB (60 sec)', live)
+        self.assertIn('await RefreshAgentEvidenceAsync();', live)
+        self.assertIn('await ProbeVisibleAgentHostsAsync();', live)
+        self.assertIn('_agentProbeTimer.Stop(); // Prevent overlapping SMB reads', live)
+        self.assertIn('if (!IsDisposed && !Disposing) UpdateAgentProbeTimer();', live)
+        # Filtering the view to reachable PCs must not remove previously
+        # unreachable PCs from the next read-only reachability check.
+        self.assertIn('private PcRow[] ProbeCandidates()', live)
+        self.assertIn('MatchesAdActivity(pc, activity, observedUtc)', live)
+        self.assertIn('.OrderBy(pc => pc.CheckedUtc ?? DateTimeOffset.MinValue)', live)
+        self.assertIn('.GroupBy(pc => pc.Name, StringComparer.OrdinalIgnoreCase)', live)
+        self.assertIn('var candidates = ProbeCandidates();', live)
+        self.assertNotIn('_computers.Items.Cast<PcRow>().Select(x => x.Name).ToArray()', live)
+
+    def test_dpi_header_continue_and_ad_options_are_not_clipped(self):
+        updater = read("UniversalUpdaterWindow.cs")
+        wizard = read("MainForm.CampaignWizard.cs")
+        ad = read("AdConnectionStartDialog.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        self.assertIn('Name = "UpdaterHeaderSubtitle"', updater)
+        self.assertIn('UiStyle.FitWizardHeader(layout, banner', updater)
+        self.assertIn('FitUpdatesHeader()', updater)
+        self.assertIn('Name = "CampaignWizardContinueAction"', wizard)
+        self.assertIn('_next.AutoEllipsis = false', wizard)
+        self.assertIn('int next = Math.Clamp(RequiredWidth(_next, 36), 125, 360)', wizard)
+        self.assertIn('Name = "AdAdvancedConnectionOptions"', ad)
+        self.assertIn('_advancedDc.AutoEllipsis = false', ad)
+        self.assertIn('_advancedDc.Dock = DockStyle.Fill', ad)
+        self.assertIn('_connectionPage.AutoScroll = true', ad)
+        self.assertIn('FitAdvancedConnectionLayout()', ad)
+        self.assertIn('captionLabel.FontChanged += (_, _) => FitCaption()', ad)
+        self.assertIn('ShowAdvancedOptionsForSmokeTest()', ad)
+        self.assertIn('CheckUpdaterHeader(form, profile.Name)', smoke)
+        self.assertIn('CheckAdAdvancedOptions(form, profile.Name)', smoke)
+        self.assertIn('Campaign Wizard Continue text clipped', smoke)
+        self.assertIn('Advanced connection options lower line clipped', smoke)
+
     def test_ad_activity_inventory_and_feedback_reporters_are_scoped(self):
         native = read("NativeImmediateActions.cs")
         runner = read("DomainPowerShellRunner.cs")
@@ -173,8 +213,8 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("AppVersion.Current", ad_user)
         self.assertIn("CheckMainEditorHeader", smoke)
         self.assertIn("Missing/clipped live version", smoke)
-        self.assertIn("agentVersion='0.4.0-preview.69';clientType='PowerShell'", ps1)
-        self.assertIn('agentVersion = "0.4.0-preview.69-native", clientType = "Executable"', native)
+        self.assertIn("agentVersion='0.4.0-preview.70';clientType='PowerShell'", ps1)
+        self.assertIn('agentVersion = "0.4.0-preview.70-native", clientType = "Executable"', native)
         self.assertIn("ValidClientType", reader)
         self.assertIn("NormalizedClientType", reader)
         self.assertIn('Stale report', reader)
