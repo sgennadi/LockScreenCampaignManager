@@ -780,6 +780,10 @@ public sealed partial class MainForm
                     Environment.NewLine + path;
                 if (placeholder is { IsDisposed: false })
                     placeholder.Visible = false;
+                // Put the bitmap above the placeholder after successful
+                // decoding. Repaint explicitly after layout/DPI changes.
+                preview.BringToFront();
+                preview.Invalidate();
             }
             catch (Exception ex)
             {
