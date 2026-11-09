@@ -136,14 +136,14 @@ internal sealed partial class GpoOperationsForm : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
             RowCount = 3, Padding = new Padding(16), BackColor = UiStyle.Canvas };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         Controls.Add(root);
         var headline = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
         headline.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         headline.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        headline.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        headline.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         headline.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         headline.Controls.Add(new Label { Text = "Domain campaign management", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 17f), ForeColor = UiStyle.Foreground }, 0, 0);
@@ -153,9 +153,19 @@ internal sealed partial class GpoOperationsForm : Form
             ForeColor = UiStyle.Accent, AutoEllipsis = true,
             Font = new Font("Segoe UI Semibold", 10f)
         }, 1, 0);
-        var scopeLabel = Note("Domain: " + _domain + "  |  DC: " + _dc + "  |  OU: " + _ouDn);
-        headline.Controls.Add(scopeLabel, 0, 1);
-        headline.SetColumnSpan(scopeLabel, 2);
+        var scopePath = new TextBox
+        {
+            Name = "GpoScopePathViewer",
+            Text = "Domain: " + _domain + "  |  DC: " + _dc +
+                Environment.NewLine + "OU: " + _ouDn,
+            Dock = DockStyle.Fill, Multiline = true,
+            WordWrap = false, ScrollBars = ScrollBars.Horizontal,
+            ReadOnly = true, BorderStyle = BorderStyle.None,
+            BackColor = UiStyle.Canvas, ForeColor = UiStyle.Muted,
+            Margin = new Padding(2, 5, 2, 3)
+        };
+        headline.Controls.Add(scopePath, 0, 1);
+        headline.SetColumnSpan(scopePath, 2);
         root.Controls.Add(headline, 0, 0);
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(15, 7) };
@@ -194,7 +204,8 @@ internal sealed partial class GpoOperationsForm : Form
         _status.Text = "Read-only until explicit Preview + Apply. No automatic AD changes.";
         _status.Dock = DockStyle.Fill;
         _status.ForeColor = UiStyle.Muted;
-        _status.AutoEllipsis = true;
+        _status.Padding = new Padding(8, 10, 8, 12);
+        _status.AutoEllipsis = false;
         root.Controls.Add(_status, 0, 2);
     }
 

@@ -112,18 +112,18 @@ internal sealed class DeviceRepairDashboard : UserControl
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
             Padding = new Padding(12), BackColor = UiStyle.Canvas, AutoScroll = true
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         Controls.Add(layout);
 
         var title = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
         };
-        title.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        title.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         title.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         title.Controls.Add(new Label {
             Text = "Device & Repair Dashboard", Dock = DockStyle.Fill,
@@ -177,6 +177,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         layout.Controls.Add(commands, 0, 1);
 
         _summary.Dock = DockStyle.Fill;
+        _summary.AutoEllipsis = false;
+        _summary.Padding = new Padding(5, 8, 5, 10);
         _summary.ForeColor = UiStyle.Foreground;
         _summary.Text = "Load verified AD devices. This view never sends RPC automatically.";
         layout.Controls.Add(_summary, 0, 2);
@@ -189,6 +191,9 @@ internal sealed class DeviceRepairDashboard : UserControl
         _grid.MultiSelect = true;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _grid.ColumnHeadersHeight = Math.Max(_grid.ColumnHeadersHeight, 45);
+        _grid.RowTemplate.Height = Math.Max(_grid.RowTemplate.Height, 39);
+        _grid.ScrollBars = ScrollBars.Both;
         _grid.Columns.Add(new DataGridViewTextBoxColumn {
             HeaderText = "Computer", FillWeight = 140
         });
@@ -213,6 +218,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         _grid.Columns.Add(new DataGridViewTextBoxColumn {
             HeaderText = "Repair queue", FillWeight = 152
         });
+        foreach (DataGridViewColumn column in _grid.Columns)
+            column.MinimumWidth = Math.Max(100, (int)column.FillWeight);
         _grid.SelectionChanged += (_, _) => {
             SetButtons();
             if (!_drawing) _ = LoadSelectedDetailsAsync();
@@ -230,6 +237,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         layout.Controls.Add(_details, 0, 4);
 
         _status.Dock = DockStyle.Fill;
+        _status.AutoEllipsis = false;
+        _status.Padding = new Padding(5, 9, 5, 12);
         _status.ForeColor = UiStyle.Muted;
         _status.Text = "No automatic Repair. A manual Repair always uses Preview and full GPO GUID confirmation.";
         layout.Controls.Add(_status, 0, 5);
