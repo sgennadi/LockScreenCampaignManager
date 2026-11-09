@@ -613,6 +613,26 @@ internal sealed partial class DomainDeploymentForm : Form
         UpdateDeploymentSteps();
     }
 
+    private bool HasValidContentSource
+    {
+        get
+        {
+            if (_project.ContentSource == CampaignContentSource.Sysvol) return true;
+            try { _ = CampaignPayloadLocation.ValidateRoot(_project.ContentShareRoot); return true; }
+            catch (CampaignValidationException) { return false; }
+        }
+    }
+
+    private void UpdateContentSourceControls()
+    {
+        bool smb = _project.ContentSource == CampaignContentSource.SmbShare;
+        _contentShareBox.Enabled = smb && !_running;
+        _contentShareBrowse.Enabled = smb && !_running;
+        _contentSourceHint.Text = smb
+            ? "GPO metadata stays in SYSVOL. SMB campaign files: computers READ, trusted admins WRITE."
+            : "SYSVOL stores both GPO metadata and the original immutable campaign package.";
+    }
+
     private void UpdateDeploymentSteps()
     {
         if (_deploymentActionRow is null) return;
@@ -654,6 +674,10 @@ internal sealed partial class DomainDeploymentForm : Form
         _connectButton.Enabled = credentialsStep && !_running;
         _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
         _clientTypeBox.Enabled = targetStep && !_running;
+        _contentSourceBox.Enabled = targetStep && !_running;
+        _contentShareBox.Enabled = targetStep && !_running &&
+            _project.ContentSource == CampaignContentSource.SmbShare;
+        _contentShareBrowse.Enabled = _contentShareBox.Enabled;
         if (_groupAssignmentsButton is not null)
         {
             _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
@@ -666,18 +690,18 @@ internal sealed partial class DomainDeploymentForm : Form
         _wizardBack.Enabled = !_running;
         _wizardNext.Enabled = !_running && (_wizardStep == 0
             ? !string.IsNullOrEmpty(_connectedDomain) && _connectedWritable
-            : HasSelectedTargets);
+            : HasSelectedTargets && HasValidContentSource);
         _rightsButton.Visible = _advancedMode || _wizardStep >= 1;
         _rightsButton.Enabled = !_running && HasSelectedTargets;
         _planButton.Visible = _advancedMode || _wizardStep == 2;
-        _planButton.Enabled = !_running && HasSelectedTargets;
+        _planButton.Enabled = !_running && HasSelectedTargets && HasValidContentSource;
         _fullConflictButton.Visible = _advancedMode || _wizardStep == 2;
         _fullConflictButton.Enabled = !_running &&
             _project.TargetAssignments.Count > 0 &&
             _conflictReports.Count > 0 && _lastPlanKey is not null &&
             _lastPlanKey == PlanKey();
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
-        _deployButton.Enabled = !_running && HasSelectedTargets &&
+        _deployButton.Enabled = !_running && HasSelectedTargets && HasValidContentSource &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
             (_project.TargetAssignments.Count > 0 &&
                 _project.TargetAssignments.All(x => x.UsesScreenSaver) ||
@@ -703,6 +727,7 @@ internal sealed partial class DomainDeploymentForm : Form
                 Name = _project.Name, CompanyProfileId = _project.CompanyProfileId,
                 StartLocal = _project.StartLocal,
                 LastImageHours = _project.LastImageHours, TimeZoneId = _project.TimeZoneId,
+                ContentSource = _project.ContentSource, ContentShareRoot = _project.ContentShareRoot,
                 EnableFeedback = _project.EnableFeedback, FeedbackShare = _project.FeedbackShare,
                 FeedbackIntervalMinutes = _project.FeedbackIntervalMinutes,
                 ImagePaths = new List<string>(_project.ImagePaths),
@@ -957,12 +982,13 @@ internal sealed partial class DomainDeploymentForm : Form
         if (_project.TargetAssignments.Count > 0)
             return string.Join("|", _connectedDomain, _connectedDc,
                 _gpoBox.Text.Trim(), CampaignSchedule.BuildId(_project),
-                _project.ClientType,
+                _project.ClientType, _project.ContentSource, _project.ContentShareRoot,
                 System.Text.Json.JsonSerializer.Serialize(_project.TargetAssignments),
                 System.Text.Json.JsonSerializer.Serialize(_project.ScreenSaver));
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
             CampaignSchedule.BuildId(_project), _project.ClientType,
+            _project.ContentSource, _project.ContentShareRoot,
             System.Text.Json.JsonSerializer.Serialize(_project.TargetAssignments),
             System.Text.Json.JsonSerializer.Serialize(_project.ScreenSaver));
     }
@@ -1008,7 +1034,9 @@ internal sealed partial class DomainDeploymentForm : Form
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Plan", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
                         groupDn = x.group.Dn, gpoName = x.gpoName,
-                        clientType = _project.ClientType.ToString(), packagePath = package
+                        clientType = _project.ClientType.ToString(), packagePath = package,
+                        contentSource = _project.ContentSource.ToString(),
+                        contentShareRoot = _project.ContentShareRoot
                     }, creds, timeoutMilliseconds: 240000));
                 var d = result.GetProperty("data");
                 // Fail closed: deployment preview must also perform a read-only
@@ -1057,11 +1085,11 @@ internal sealed partial class DomainDeploymentForm : Form
                     $"Direct group members: {d.GetProperty("directGroupMembers").GetInt32()}\r\n" +
                     $"GPO: {x.gpoName}\r\nClient: {_project.ClientType}\r\n" +
                     $"GPO method: {(_project.ClientType == CampaignClientType.PowerShell ? "PowerShell Startup Scripts" : "Classic Startup Scripts (direct EXE)")}\r\nImages: {d.GetProperty("imageCount").GetInt32()}\r\n" +
-                    $"Files on DC: {d.GetProperty("sysvolOnDc").GetString()}\r\n" +
+                    $"Campaign files: {d.GetProperty("packageStoragePath").GetString()} ({d.GetProperty("contentSource").GetString()})\r\n" +
                     $"Client startup: {d.GetProperty("clientScriptPath").GetString()}\r\n" +
                     $"Security filtering: selected group receives Apply; Authenticated Users retains Read only.\r\n" +
                     $"GPO is linked to the OU. No GPO domain-wide link.\r\n" +
-                    $"Cleaning up: local agent restores registry; domain GPO and SYSVOL require administrator removal.\r\n" +
+                    $"Cleanup: administrator removes the GPO and its immutable source package (SYSVOL or SMB).\r\n" +
                     $"\r\nCONFLICT AUDIT: {_lastConflictHigh} high-risk, {_lastConflictWarnings} warning matches.\r\n" +
                     $"{conflictSummary}\r\n" +
                     $"\r\nSMART SYSVOL STORAGE:\r\n{storageSummary}\r\n" +
@@ -1132,7 +1160,7 @@ internal sealed partial class DomainDeploymentForm : Form
                     "Conflicting GPOs detected", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (MessageBox.Show(this,
-                    $"CREATE A NEW GPO AND COPY IMAGES INTO SYSVOL?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
+                    $"CREATE A NEW GPO AND COPY CAMPAIGN FILES TO {_project.ContentSource}?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
                     $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\nClient: {_project.ClientType}\n\n" +
                     "No changes are made to other GPOs. Confirm you have a tested campaign and delegated rights.",
                     "Confirm Active Directory deployment", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
@@ -1145,7 +1173,9 @@ internal sealed partial class DomainDeploymentForm : Form
                     DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Deploy", new {
                         domain = x.domain, dc = x.dc, ouDn = x.ou.Dn,
                         groupDn = x.group.Dn, gpoName = x.gpoName,
-                        clientType = _project.ClientType.ToString(), packagePath = package
+                        clientType = _project.ClientType.ToString(), packagePath = package,
+                        contentSource = _project.ContentSource.ToString(),
+                        contentShareRoot = _project.ContentShareRoot
                     }, creds, timeoutMilliseconds: 300000));
                 var data = response.GetProperty("data");
                 string gpoId = data.GetProperty("gpoId").GetString()!;
@@ -1155,7 +1185,7 @@ internal sealed partial class DomainDeploymentForm : Form
                 File.WriteAllText(receipt, data.GetRawText(), new UTF8Encoding(false));
                 _details.Text = $"DEPLOYMENT SUCCESS\r\n\r\nDomain: {x.domain}\r\nGPO: {x.gpoName}\r\nGPO ID: {gpoId}\r\n" +
                     $"OU: {x.ou.Dn}\r\nComputer group: {x.group.Sam}\r\n" +
-                    $"Source: {data.GetProperty("sysvolOnDc").GetString()}\r\n" +
+                    $"Source: {data.GetProperty("packageStoragePath").GetString()}\r\n" +
                     $"Receipt: {receipt}\r\n\r\n" +
                     "NEXT: Verify GPO in GPMC and test a single Windows 11 Enterprise/Education computer.\r\n";
                 _progress.Text = "GPO created through Windows native COM/LDAP. Test on a single computer first.";
