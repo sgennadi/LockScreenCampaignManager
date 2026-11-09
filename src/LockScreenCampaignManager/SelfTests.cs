@@ -37,6 +37,7 @@ internal static class SelfTests
         TestNativeDcConsistencyContracts();
         TestNativeComputerGroupAssignmentContracts();
         TestNativeGpoConflictScanContracts();
+        TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
         TestNativeGpoLifecyclePreviewContracts();
@@ -1084,6 +1085,33 @@ StartExecutePSFirst=true
         Check(NativeGpoConflictScan.SafeComputerName("pc01.example.com", "example.com") &&
             !NativeGpoConflictScan.SafeComputerName("pc01.other.test", "example.com"),
             "Native remote HKLM target stays in selected DNS domain");
+    }
+
+    private static void TestFullGroupConflictReport()
+    {
+        var findings = Enumerable.Range(0, 25).Select(i =>
+            new GroupConflictFinding("Pilot group", i % 2 == 0 ? "User" : "Computer",
+                "Conflicting policy " + i, Guid.NewGuid().ToString("D"),
+                i == 0 ? "High" : "Warning", "ScreenSaveTimeOut",
+                i == 0 ? "=HYPERLINK(\"http://bad\")" : "900",
+                "Registry.pol", @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                "OU=Users,DC=example,DC=com", "Not effective RSoP")
+        ).ToArray();
+        var csv = GroupConflictReportDialog.BuildCsv(findings);
+        Check(csv.Split('\n').Length == 27 &&
+            csv.Contains("\"'=HYPERLINK(", StringComparison.Ordinal) &&
+            csv.Contains("Conflicting policy 24", StringComparison.Ordinal) &&
+            csv.Contains("OU=Users,DC=example,DC=com", StringComparison.Ordinal),
+            "Complete conflict report CSV includes all 25 findings beyond Preview limit, " +
+            "with formula injection prevented and target provenance preserved.");
+        var multiline = GroupConflictReportDialog.BuildCsv([
+            new GroupConflictFinding("Group \"A\"", "User", "GPO", "g",
+                "High", "Policy", "\n+SUM(1)", "Registry.pol", "Key", "Link", "unknown")
+        ]);
+        Check(multiline.Contains("\"Group \"\"A\"\"\"", StringComparison.Ordinal) &&
+            !multiline.Contains("\n+SUM(1)", StringComparison.Ordinal) &&
+            multiline.Contains("' +SUM(1)", StringComparison.Ordinal),
+            "CSV export escapes embedded quotes/newline and leading formula operators.");
     }
 
     private static void TestNativeComputerGroupAssignmentContracts()

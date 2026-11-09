@@ -27,6 +27,7 @@ internal sealed partial class DomainDeploymentForm : Form
     private readonly TextBox _details = new();
     private readonly Button _connectButton = new();
     private Button _planButton = new();
+    private Button _fullConflictButton = new();
     private Button _deployButton = new();
     private Button _rightsButton = new();
     private string _rightsStatus = "NOT_CHECKED";
@@ -405,6 +406,9 @@ internal sealed partial class DomainDeploymentForm : Form
         _rightsButton = Button("Check GPO rights", 178, () => _ = CheckRightsAsync());
         buttons.Controls.Add(_rightsButton);
         buttons.Controls.Add(_planButton);
+        _fullConflictButton = Button("Full conflict report...", 198, OpenFullConflictReport);
+        _fullConflictButton.Name = "DeploymentFullConflictReport";
+        buttons.Controls.Add(_fullConflictButton);
         buttons.Controls.Add(_deployButton);
         _groupAssignmentsButton = Button("Group assignments...", 202, OpenTargetAssignments);
         _groupAssignmentsButton.Name = "GroupAssignmentsButton";
@@ -606,6 +610,11 @@ internal sealed partial class DomainDeploymentForm : Form
         _rightsButton.Enabled = !_running && HasSelectedTargets;
         _planButton.Visible = _advancedMode || _wizardStep == 2;
         _planButton.Enabled = !_running && HasSelectedTargets;
+        _fullConflictButton.Visible = _advancedMode || _wizardStep == 2;
+        _fullConflictButton.Enabled = !_running &&
+            _project.TargetAssignments.Count > 0 &&
+            _conflictReports.Count > 0 && _lastPlanKey is not null &&
+            _lastPlanKey == PlanKey();
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
@@ -682,6 +691,7 @@ internal sealed partial class DomainDeploymentForm : Form
     private void InvalidatePlan()
     {
         _lastPlanKey = null;
+        _conflictReports.Clear();
         _rightsStatus = "NOT_CHECKED";
         UiStyle.ApplyStatus(_rightsBanner,
             "GPO RIGHTS: Not checked. Preview does not change Active Directory.",
