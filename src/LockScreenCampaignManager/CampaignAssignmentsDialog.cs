@@ -113,7 +113,17 @@ internal sealed class CampaignAssignmentsDialog : Form
 
         var split = new SplitContainer {
             Dock = DockStyle.Fill, Orientation = Orientation.Vertical,
-            SplitterWidth = 8, SplitterDistance = 375
+            SplitterWidth = 8
+        };
+        Shown += (_, _) =>
+        {
+            if (split.Width >= 850)
+            {
+                split.Panel1MinSize = 280;
+                split.Panel2MinSize = 400;
+                split.SplitterDistance = Math.Clamp(375, split.Panel1MinSize,
+                    split.Width - split.Panel2MinSize - split.SplitterWidth);
+            }
         };
         root.Controls.Add(split, 0, 1);
         var left = new TableLayoutPanel { Dock = DockStyle.Fill,
@@ -143,8 +153,10 @@ internal sealed class CampaignAssignmentsDialog : Form
         var details = new Panel { Dock = DockStyle.Fill, AutoScroll = true,
             BackColor = UiStyle.Surface, Padding = new Padding(14, 10, 14, 10) };
         var fields = new TableLayoutPanel {
-            Dock = DockStyle.Top, Height = 710, RowCount = 11,
-            ColumnCount = 1, Padding = new Padding(5)
+            Name = "AssignmentScrollableFields",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            RowCount = 11, ColumnCount = 1, Padding = new Padding(5)
         };
         foreach (int h in new[] { 75, 75, 74, 74, 75, 74, 75, 60, 62, 84, 50 })
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
