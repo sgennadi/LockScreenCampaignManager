@@ -375,10 +375,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             lines.Add(target.Name + " = " + target.Mode);
             if (target.UsesLockScreen)
                 lines.Add("  Computer OU: " + target.ComputerOuDn +
-                    " | Group: " + target.ComputerGroupDn);
+                    " | Computer group: " + target.ComputerGroupDn);
             if (target.UsesScreenSaver)
                 lines.Add("  User OU: " + target.UserOuDn +
-                    " | Group: " + target.UserGroupDn);
+                    " | User group: " + target.UserGroupDn);
         }
         lines.Add("Screen Saver: " + _saver.Text +
             " | idle " + _idle.Value + " sec | password " + _password.Checked);
