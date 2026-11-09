@@ -113,6 +113,18 @@ internal static class PhotoSaverGpoPilotKit
             images.Length != project.ImagePaths.Count)
             throw new InvalidDataException(
                 "JPG package no longer matches the campaign image count or slide interval.");
+        // This is staged into a manually configured TEST GPO's SYSVOL.
+        // Refuse an unbounded payload that could saturate replication.
+        const long maxPilotBytes = 256L * 1024 * 1024;
+        long packageBytes = new FileInfo(Path.Combine(photoPackage,
+            "PhotoScreenSaver.scr")).Length +
+            new FileInfo(Path.Combine(photoPackage, "slideshow.json")).Length +
+            images.Sum(image => new FileInfo(image).Length);
+        if (packageBytes > maxPilotBytes)
+            throw new CampaignValidationException(
+                "JPG GPO LAB package exceeds 256 MiB. Reduce the pilot photos " +
+                "or use a separately approved content distribution system; " +
+                "do not copy large image campaigns to SYSVOL.");
 
         string manifestHash = Hash(Path.Combine(photoPackage, "slideshow.json"));
         string scrHash = Hash(Path.Combine(photoPackage, "PhotoScreenSaver.scr"));
