@@ -115,6 +115,23 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertNotIn('Schedule.Service', probe)
         self.assertNotIn('RegisterTaskDefinition', probe)
 
+    def test_agent_auto_refresh_reads_smb_and_rechecks_hidden_rpc_candidates(self):
+        live = read("GpoOperationsForm.AgentManagement.cs")
+        # Auto-refresh must not mistake TCP/135 for an agent heartbeat.
+        self.assertIn('Auto-refresh RPC + SMB (60 sec)', live)
+        self.assertIn('await RefreshAgentEvidenceAsync();', live)
+        self.assertIn('await ProbeVisibleAgentHostsAsync();', live)
+        self.assertIn('_agentProbeTimer.Stop(); // Prevent overlapping SMB reads', live)
+        self.assertIn('if (!IsDisposed && !Disposing) UpdateAgentProbeTimer();', live)
+        # Filtering the view to reachable PCs must not remove previously
+        # unreachable PCs from the next read-only reachability check.
+        self.assertIn('private PcRow[] ProbeCandidates()', live)
+        self.assertIn('MatchesAdActivity(pc, activity, observedUtc)', live)
+        self.assertIn('.OrderBy(pc => pc.CheckedUtc ?? DateTimeOffset.MinValue)', live)
+        self.assertIn('.GroupBy(pc => pc.Name, StringComparer.OrdinalIgnoreCase)', live)
+        self.assertIn('var candidates = ProbeCandidates();', live)
+        self.assertNotIn('_computers.Items.Cast<PcRow>().Select(x => x.Name).ToArray()', live)
+
     def test_ad_activity_inventory_and_feedback_reporters_are_scoped(self):
         native = read("NativeImmediateActions.cs")
         runner = read("DomainPowerShellRunner.cs")
