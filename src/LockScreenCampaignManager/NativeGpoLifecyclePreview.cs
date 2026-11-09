@@ -110,7 +110,10 @@ internal static class NativeGpoLifecyclePreview
                 @"\Policies\{" + gpoId.ToString("D").ToUpperInvariant() + "}";
             string psScriptFile = Path.Combine(gpt, "Machine", "Scripts", "psscripts.ini");
             string classicScriptFile = Path.Combine(gpt, "Machine", "Scripts", "scripts.ini");
-            bool nativeClient = !File.Exists(psScriptFile) && File.Exists(classicScriptFile);
+            // ReadManagedGpo has already verified the exact startup method
+            // and immutable campaign identity; do not re-infer a method from
+            // File.Exists, which hides SYSVOL ACL/network failures.
+            bool nativeClient = managed.clientType == CampaignClientType.Executable;
             string scriptFile = nativeClient ? classicScriptFile : psScriptFile;
             if (action == "Reuse" && nativeClient)
                 throw new NotSupportedException(
