@@ -236,18 +236,23 @@ internal sealed partial class GpoOperationsForm
         string reported = _agentShareAvailable ? _agentValidReportCount.ToString() : "?";
         string noReport = _agentShareAvailable
             ? (eligible - _agentValidReportCount).ToString() : "?";
-        string summary = "OU: " + _adOuComputerTotal +
-            " | OU + group: " + eligible +
-            " | Visible after AD filters: " + visible +
+        string scopeSummary = "AD OU: " + _adOuComputerTotal +
+            " | OU + security group: " + eligible +
+            " | Visible after filters: " + visible +
             " | Disabled: " + disabled +
-            " | AD inactive / unknown >90d: " + inactive +
-            " | Sent a valid report: " + reported +
-            " | Recent reports: " + (_agentShareAvailable ? fresh.ToString() : "?") +
-            " | No report: " + noReport;
-        UiStyle.ApplyStatus(_agentReportsStatus, summary,
+            " | AD inactive / unknown >90d: " + inactive;
+        UiStyle.ApplyStatus(_agentScopeStatus, scopeSummary, UiStatusKind.Neutral);
+        _agentScopeStatus.AccessibleDescription = scopeSummary +
+            ". AD lastLogonTimestamp is replicated, approximate and not live online status.";
+        string checkedAt = _agentReportsCheckedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "Not checked";
+        string feedbackSummary = "SMB reports: " + reported + " / " + eligible +
+            " eligible | Recent: " + (_agentShareAvailable ? fresh.ToString() : "?") +
+            " | No report: " + noReport +
+            " | Invalid files: " + (_agentShareAvailable ? _agentInvalidReportCount.ToString() : "?") +
+            " | Checked: " + checkedAt;
+        UiStyle.ApplyStatus(_agentReportsStatus, feedbackSummary,
             _agentShareAvailable ? UiStatusKind.Success : UiStatusKind.Warning);
-        _agentReportsStatus.AccessibleDescription = summary + ". " + _agentEvidenceNotice +
-            " Invalid report files: " + _agentInvalidReportCount +
-            ". AD lastLogonTimestamp is approximate, not live presence.";
+        _agentReportsStatus.AccessibleDescription = feedbackSummary +
+            ". " + _agentEvidenceNotice + " Reports are untrusted diagnostic hints.";
     }
 }
