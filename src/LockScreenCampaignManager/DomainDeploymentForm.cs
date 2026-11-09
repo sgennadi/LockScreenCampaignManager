@@ -240,7 +240,7 @@ internal sealed class DomainDeploymentForm : Form
         {
             SetCredentialFields();
             if (_alternateRadio.Checked && !_suppressConnectionChanged)
-                EditAlternateAccount();
+                EditAlternateAccount(revertToCurrentOnCancel: true);
         };
         accounts.Controls.Add(_currentRadio, 0, 0);
         accounts.Controls.Add(_alternateRadio, 1, 0);
@@ -940,7 +940,7 @@ internal sealed class DomainDeploymentForm : Form
         catch (Exception ex) { DisplayError(ex); }
     }
 
-    private void EditAlternateAccount()
+    private void EditAlternateAccount(bool revertToCurrentOnCancel = false)
     {
         if (_running || IsDisposed || Disposing) return;
         string previous = _userBox.Text.Trim();
@@ -952,7 +952,7 @@ internal sealed class DomainDeploymentForm : Form
         {
             // Cancel must not leave a newly selected alternate account with
             // an empty password. An existing authenticated session survives.
-            if (_passwordBox.Text.Length == 0)
+            if (revertToCurrentOnCancel || _passwordBox.Text.Length == 0)
             {
                 _suppressConnectionChanged = true;
                 try { _currentRadio.Checked = true; }
