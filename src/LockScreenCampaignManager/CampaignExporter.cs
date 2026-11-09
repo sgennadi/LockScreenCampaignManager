@@ -94,8 +94,12 @@ public static class CampaignExporter
                 resource.CopyTo(destination);
             }
             else throw new InvalidOperationException("Unsupported client execution method.");
-            config.AgentSha256 = Convert.ToHexString(
-                SHA256.HashData(File.ReadAllBytes(agentFile))).ToLowerInvariant();
+            // Native portable clients may be hundreds of megabytes. Hash
+            // through a stream so preview does not allocate the entire EXE.
+            using (var readAgent = new FileStream(agentFile, FileMode.Open,
+                FileAccess.Read, FileShare.Read))
+                config.AgentSha256 = Convert.ToHexString(
+                    SHA256.HashData(readAgent)).ToLowerInvariant();
             string json = JsonSerializer.Serialize(config, JsonOptions);
             File.WriteAllText(Path.Combine(temp, "campaign.json"), json + Environment.NewLine, new UTF8Encoding(false));
 
