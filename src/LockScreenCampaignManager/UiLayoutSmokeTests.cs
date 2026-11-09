@@ -181,6 +181,8 @@ internal static class UiLayoutSmokeTests
             fixture = Path.Combine(Path.GetTempPath(),
                 "lscm-preview-smoke-" + Guid.NewGuid().ToString("N") + ".png");
             using var sample = new Bitmap(120, 68);
+            using (var brush = Graphics.FromImage(sample))
+                brush.Clear(Color.FromArgb(23, 201, 143));
             sample.Save(fixture, System.Drawing.Imaging.ImageFormat.Png);
         }
         var editor = new MainForm();
@@ -462,6 +464,20 @@ internal static class UiLayoutSmokeTests
                         throw new InvalidOperationException(
                             $"Wizard preview is visually collapsed at {profile.Name}: " +
                             $"{imagePreview.Width} x {imagePreview.Height}.");
+                    // A valid Image property does NOT prove that the control
+                    // actually paints image pixels rather than a blank panel.
+                    // Draw the real WinForms PictureBox to an offscreen bitmap.
+                    imagePreview.CreateControl();
+                    using var painted = new Bitmap(imagePreview.Width, imagePreview.Height);
+                    imagePreview.DrawToBitmap(painted,
+                        new Rectangle(0, 0, painted.Width, painted.Height));
+                    Color center = painted.GetPixel(painted.Width / 2, painted.Height / 2);
+                    if (Math.Abs(center.R - 23) > 10 ||
+                        Math.Abs(center.G - 201) > 10 ||
+                        Math.Abs(center.B - 143) > 10)
+                        throw new InvalidOperationException(
+                            $"Wizard preview did not PAINT selected PNG pixels at {profile.Name}: " +
+                            $"center={center.R},{center.G},{center.B}.");
                 }
                 if (window.Name == "AD / GPO Deployment - dual client")
                 {
