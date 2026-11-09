@@ -278,7 +278,7 @@ internal static class SelfTests
                     System.Security.Cryptography.SHA256.HashData(
                         File.ReadAllBytes(Path.Combine(package, "slideshow.json")))),
                     StringComparison.OrdinalIgnoreCase),
-                "JPG GPO lab kit generated SHA256-pinned startup and verified offline package.");
+                "JPG GPO lab kit generated pinned SHA256 startup and verified offline package.");
             bool duplicateKitBlocked = false;
             try { _ = PhotoSaverGpoPilotKit.Export(project, package, root); }
             catch (IOException) { duplicateKitBlocked = true; }
