@@ -11,6 +11,8 @@ internal sealed partial class GpoOperationsForm
     private readonly ComboBox _agentActivityFilter = new();
     private readonly CheckBox _agentAutoProbe = new();
     private readonly Label _agentProbeStatus = new();
+    private readonly Label _agentScopeStatus = new();
+    private readonly Label _agentReportsStatus = new();
     private readonly TextBox _agentSelectedDetails = new();
     private Button? _agentRefreshReportsButton;
     private bool _agentEvidenceLoading;
@@ -80,27 +82,35 @@ internal sealed partial class GpoOperationsForm
     {
         var panel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = Padding.Empty
+            Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = Padding.Empty
         };
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        _agentScopeStatus.Dock = DockStyle.Fill;
+        _agentScopeStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _agentScopeStatus.AutoEllipsis = true;
+        UiStyle.ApplyStatus(_agentScopeStatus,
+            "AD OU: not checked | Assigned to group: not checked | AD activity: not checked.",
+            UiStatusKind.Neutral);
+        panel.Controls.Add(_agentScopeStatus, 0, 0);
         _agentReportsStatus.Dock = DockStyle.Fill;
         _agentReportsStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentReportsStatus.AutoEllipsis = true;
         UiStyle.ApplyStatus(_agentReportsStatus,
             "OU / group / feedback statistics: load verified AD inventory.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentReportsStatus, 0, 0);
+        panel.Controls.Add(_agentReportsStatus, 0, 1);
         _agentProbeStatus.Dock = DockStyle.Fill;
         _agentProbeStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentProbeStatus.AutoEllipsis = true;
         UiStyle.ApplyStatus(_agentProbeStatus,
             "Load AD computers, then check RPC reachability. TCP/135 is not proof that the agent is running.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentProbeStatus, 0, 1);
-        panel.Controls.Add(_computers, 0, 2);
+        panel.Controls.Add(_agentProbeStatus, 0, 2);
+        panel.Controls.Add(_computers, 0, 3);
         _agentSelectedDetails.Dock = DockStyle.Fill;
         _agentSelectedDetails.Multiline = true;
         _agentSelectedDetails.ReadOnly = true;
@@ -108,7 +118,7 @@ internal sealed partial class GpoOperationsForm
         _agentSelectedDetails.BackColor = UiStyle.Surface;
         _agentSelectedDetails.Font = new Font("Segoe UI", 9f);
         _agentSelectedDetails.Text = "Select a verified computer to see RPC hints, client-reported health and latest command outcome.";
-        panel.Controls.Add(_agentSelectedDetails, 0, 3);
+        panel.Controls.Add(_agentSelectedDetails, 0, 4);
         return panel;
     }
 
