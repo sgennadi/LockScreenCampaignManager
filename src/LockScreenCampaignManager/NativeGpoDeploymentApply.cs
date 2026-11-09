@@ -64,6 +64,12 @@ internal static class NativeGpoDeploymentApply
                 Required(plan, "clientType"));
             if (NativeGpoDeploymentPlan.ParseClientType(Get(args, "clientType")) != clientType)
                 throw new InvalidOperationException("Client type changed after preflight.");
+            // Defense in depth: callers cannot bypass the UI and deploy an
+            // unvalidated native client through the operation dispatcher.
+            if (clientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction)
+                throw new NotSupportedException(
+                    "Native EXE GPO deployment is disabled pending endpoint acceptance.");
             int imageCount = plan.GetProperty("imageCount").GetInt32();
             if (!NativeSysvolStorage.ValidCampaignId(id) ||
                 imageCount is < 1 or > 30)
