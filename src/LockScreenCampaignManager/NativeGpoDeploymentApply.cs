@@ -27,7 +27,7 @@ internal static class NativeGpoDeploymentApply
         @"\A[0-9]{2}\.jpg\z", RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
     private static readonly Regex GptZero = new(
-        @"(?m)^Version=0\s*$", RegexOptions.CultureInvariant,
+        @"(?m)^Version=0[ \t]*\r?$", RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(2));
     private static readonly Guid ApplyPolicy = new(
         "edacfd8f-ffb3-11d1-b41d-00a0c968f939");
@@ -58,8 +58,11 @@ internal static class NativeGpoDeploymentApply
             var plan = fresh.GetProperty("data");
             string actualDc = Required(plan, "dc");
             string id = Required(plan, "campaignId");
-            string targetPath = Required(plan, "sysvolOnDc");
+            string targetPath = Required(plan, "packageStoragePath");
             string clientScript = Required(plan, "clientScriptPath");
+            CampaignContentSource contentSource = CampaignPayloadLocation.Parse(
+                Required(plan, "contentSource"));
+            string smbRoot = plan.GetProperty("contentShareRoot").GetString() ?? "";
             CampaignClientType clientType = NativeGpoDeploymentPlan.ParseClientType(
                 Required(plan, "clientType"));
             if (NativeGpoDeploymentPlan.ParseClientType(Get(args, "clientType")) != clientType)
@@ -131,13 +134,23 @@ internal static class NativeGpoDeploymentApply
             bool moved = false;
             try
             {
-                Directory.CreateDirectory(basePath);
+                if (contentSource == CampaignContentSource.SmbShare)
+                {
+                    if (!string.Equals(basePath, smbRoot, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Approved SMB root changed.");
+                    // An SMB share must already exist and be admin-controlled.
+                    // Do NOT create new shares or parent folders during Deploy.
+                    CampaignPayloadLocation.CheckShareReadOnly(smbRoot);
+                }
+                else Directory.CreateDirectory(basePath);
                 Directory.CreateDirectory(Path.Combine(stage, "images"));
                 CopyValidatedPackage(packageFolder, stage);
                 if (Directory.Exists(targetPath))
                     throw new IOException("Campaign target already appeared on SYSVOL.");
                 Directory.Move(stage, targetPath);
                 moved = true;
+                if (contentSource == CampaignContentSource.SmbShare)
+                    CampaignPayloadLocation.CheckShareReadOnly(targetPath);
 
                 // Create the new policy only after all source files are safely
                 // staged and hashes have been checked.
@@ -151,6 +164,8 @@ internal static class NativeGpoDeploymentApply
                     throw new InvalidDataException("New GPO already has machine extensions.");
 
                 RestrictApplyToGroup(ldap, gpoDn, selectedSid);
+                if (contentSource == CampaignContentSource.SmbShare)
+                    CampaignPayloadLocation.CheckShareReadOnly(targetPath);
                 RegisterStartup(ldap, gpoDn, actualDc, domain,
                     created.Value, clientScript, clientType);
                 // Membership can drift while files and GPO are being staged.
@@ -171,7 +186,10 @@ internal static class NativeGpoDeploymentApply
                         directGroupMembers = plan.GetProperty("directGroupMembers").GetInt32(),
                         gpoName = name, campaignId = id,
                         imageCount, imageBytes = plan.GetProperty("imageBytes").GetInt64(),
-                        sysvolOnDc = targetPath,
+                        sysvolOnDc = contentSource == CampaignContentSource.Sysvol ? targetPath : "",
+                        packageStoragePath = targetPath,
+                        contentSource = contentSource.ToString(),
+                        contentShareRoot = smbRoot,
                         clientScriptPath = clientScript,
                         clientType = clientType.ToString(),
                         gpoMethod = clientType == CampaignClientType.Executable
@@ -193,7 +211,7 @@ internal static class NativeGpoDeploymentApply
                     "Incomplete GPO deployment: " + ex.Message +
                     ". New GPO: " + (created?.ToString("D") ?? "(not created)") +
                     "; OU linked: " + linked +
-                    "; SYSVOL package: " + targetPath +
+                    "; campaign payload: " + targetPath +
                     ". Inspect before retry.", ex);
             }
             finally

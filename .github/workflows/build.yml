@@ -55,6 +55,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_manager_features.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_smb_campaign_source.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_dual_client.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_live_ad_lab_contracts.py
@@ -336,7 +338,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.82':
+          if version != '0.4.0-preview.83':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -368,22 +370,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.82 (no overwrite)
+      - name: Publish 0.4.0-preview.83 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.82'
+          tag='v0.4.0-preview.83'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.82' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW82.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.83' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW83.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -392,7 +394,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.82'
+          tag='v0.4.0-preview.83'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json

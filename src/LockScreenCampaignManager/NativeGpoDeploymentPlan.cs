@@ -40,6 +40,11 @@ internal static class NativeGpoDeploymentPlan
         string gpoName = String(args, "gpoName").Trim();
         string localPackage = String(args, "packagePath").Trim();
         CampaignClientType requestedClient = ParseClientType(String(args, "clientType"));
+        CampaignContentSource contentSource = CampaignPayloadLocation.Parse(
+            String(args, "contentSource"));
+        string smbRoot = contentSource == CampaignContentSource.SmbShare
+            ? CampaignPayloadLocation.ValidateRoot(String(args, "contentShareRoot"))
+            : string.Empty;
         NativeAdDiscovery.ValidateNames(domain, dc);
         if (dc.Length == 0)
             throw new ArgumentException("Select an explicit writable domain controller.");
@@ -95,17 +100,28 @@ internal static class NativeGpoDeploymentPlan
                 throw new InvalidDataException("Selected client does not match the immutable campaign package.");
             string dfsSource = @"\\" + domain + @"\SYSVOL\" + domain +
                 @"\scripts\LockScreenCampaigns\" + package.Id;
+            string dcCampaign = @"\\" + actualDc + @"\SYSVOL\" + domain +
+                @"\scripts\LockScreenCampaigns\" + package.Id;
+            if (contentSource == CampaignContentSource.SmbShare)
+            {
+                // No SYSVOL payload in SMB mode: the GPO GPT stays in SYSVOL.
+                // Inspect the selected dedicated SMB root without creating files.
+                CampaignPayloadLocation.CheckShareReadOnly(smbRoot);
+                dfsSource = CampaignPayloadLocation.TargetPath(smbRoot, package.Id);
+                dcCampaign = dfsSource;
+            }
+            else
+            {
+                string scriptsRoot = @"\\" + actualDc + @"\SYSVOL\" + domain + @"\scripts";
+                VerifyDirectory(scriptsRoot);
+            }
             string dfsScript = Path.Combine(dfsSource,
                 requestedClient == CampaignClientType.Executable
                     ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1");
-            string dcCampaign = @"\\" + actualDc + @"\SYSVOL\" + domain +
-                @"\scripts\LockScreenCampaigns\" + package.Id;
             if (dfsScript.Length >= 260)
                 throw new InvalidOperationException("Startup script UNC path exceeds policy limits.");
-            string scriptsRoot = @"\\" + actualDc + @"\SYSVOL\" + domain + @"\scripts";
-            VerifyDirectory(scriptsRoot);
             if (ExistsStrict(dcCampaign))
-                throw new InvalidOperationException("Campaign already exists on the selected DC SYSVOL.");
+                throw new InvalidOperationException("Campaign payload already exists; never overwrite it.");
 
             var existing = NativeGpoLifecycleList.SearchPaged(ldap,
                 "CN=Policies,CN=System," + baseDn,
@@ -125,7 +141,11 @@ internal static class NativeGpoDeploymentPlan
                     groupSam, directGroupMembers = memberCount,
                     gpoName, campaignId = package.Id,
                     imageCount = package.Count, imageBytes = package.Bytes,
-                    sysvolOnDc = dcCampaign,
+                    // sysvolOnDc is retained for the original SYSVOL path only.
+                    sysvolOnDc = contentSource == CampaignContentSource.Sysvol ? dcCampaign : "",
+                    packageStoragePath = dcCampaign,
+                    contentSource = contentSource.ToString(),
+                    contentShareRoot = smbRoot,
                     clientScriptPath = dfsScript,
                     clientType = requestedClient.ToString(),
                     gpoMethod = requestedClient == CampaignClientType.Executable

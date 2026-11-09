@@ -1,3 +1,11 @@
+## 0.4.0-preview.83 — Optional SMB network campaign source (2026-11-09)
+
+- Add **Campaign files: SYSVOL (default) / SMB network folder (UNC)** to the AD/GPO deployment Wizard. The selection persists in campaign projects, invalidates stale Preview evidence, and applies to single computer groups and per-group Lock Screen packages.
+- Keep the GPO AD/SYSVOL GPT, user/computer filtering and Startup registration unchanged; publish the immutable Lock Screen agent, campaign manifest and JPEGs to an **existing dedicated SMB folder** when selected. Both PS1 and restricted EXE client modes use the same source selection.
+- Fail closed on unsafe/linked UNC content roots, SYSVOL/NETLOGON, existing campaign folders, broad NTFS write rights, invalid paths, broken hashes or changed scope. Recheck source security immediately before staging and GPO link. No share is created automatically; computer-account SMB read permission and real startup behavior require pilot verification.
+- Preserve the published original SYSVOL mode for older campaigns. Existing GPO Operations SYSVOL cleanup does **not** remove external SMB files; remove them manually only after GPO unlink and verified endpoint cleanup.
+- Add package-model self-tests, multi-DPI Wizard selector smoke, offline safety tests and Windows x86/x64 release checks. JPG Photo Screen Saver automatic User GPO activation remains blocked pending isolated Windows/AD acceptance. See [SMB deployment guide](docs/SMB-CAMPAIGN-SOURCE.md).
+
 ## 0.4.0-preview.82 — JPG Screen Saver manual Computer GPO pilot kit (2026-11-09)
 
 - Add **Export GPO lab kit...** to Wizard Save for JPG Screen Saver / Both, after first creating the hash-verified .scr package. Keep built-in .scr User GPO and Lock Screen agent behavior unchanged.

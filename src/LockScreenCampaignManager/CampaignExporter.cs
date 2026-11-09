@@ -103,7 +103,9 @@ public static class CampaignExporter
             string json = JsonSerializer.Serialize(config, JsonOptions);
             File.WriteAllText(Path.Combine(temp, "campaign.json"), json + Environment.NewLine, new UTF8Encoding(false));
 
-            File.WriteAllText(Path.Combine(temp, "GPO-DEPLOY-RU.txt"), BuildInstructions(config), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(temp, "GPO-DEPLOY-RU.txt"),
+                BuildInstructions(config, project.ContentSource, project.ContentShareRoot),
+                new UTF8Encoding(false));
             if (config.Feedback?.Enabled == true)
                 File.WriteAllText(Path.Combine(temp, "CLIENT-FEEDBACK-SETUP.txt"),
                     "Feedback SMB root: " + config.Feedback.ShareRoot + "\r\n" +
@@ -174,8 +176,15 @@ public static class CampaignExporter
         result.Save(output, jpg, args);
     }
 
-    public static string BuildInstructions(CampaignConfig campaign)
+    public static string BuildInstructions(CampaignConfig campaign,
+        CampaignContentSource contentSource = CampaignContentSource.Sysvol,
+        string contentShareRoot = "")
     {
+        string sysvolPackage = @"\\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" +
+            campaign.CampaignId;
+        string packageLocation = contentSource == CampaignContentSource.SmbShare
+            ? CampaignPayloadLocation.TargetPath(contentShareRoot, campaign.CampaignId)
+            : sysvolPackage;
         var sb = new StringBuilder();
         sb.AppendLine("LOCK SCREEN CAMPAIGN — DEPLOYMENT");
         sb.AppendLine("====================================");
@@ -185,9 +194,18 @@ public static class CampaignExporter
         sb.AppendLine("Start: " + campaign.Slides[0].AtLocal);
         sb.AppendLine("End: " + campaign.EndLocal);
         sb.AppendLine();
-        sb.AppendLine("1. Replace ad.example.com below with your own AD DNS domain name.");
-        sb.AppendLine("   Copy the entire campaign folder into SYSVOL:");
-        sb.AppendLine(@"   \\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" + campaign.CampaignId);
+        sb.AppendLine(contentSource == CampaignContentSource.SmbShare
+            ? "1. Provision an EXISTING protected SMB folder; publish the immutable campaign payload:"
+            : "1. Replace ad.example.com below with your own AD DNS domain name.");
+        if (contentSource == CampaignContentSource.Sysvol)
+            sb.AppendLine("   Copy the entire campaign folder into SYSVOL:");
+        sb.AppendLine("   " + packageLocation);
+        if (contentSource == CampaignContentSource.SmbShare)
+        {
+            sb.AppendLine("   GPO policy metadata stays in SYSVOL; only client package is on SMB.");
+            sb.AppendLine("   NTFS and share ACL: Domain Computers READ; trusted admins WRITE.");
+            sb.AppendLine("   Verify SYSTEM/computer-account access on a pilot endpoint before rollout.");
+        }
         string agentName = campaign.ClientType == CampaignClientType.Executable
             ? "LockScreen-Agent.exe" : "LockScreen-Agent.ps1";
         sb.AppendLine("   Important: keep campaign.json, images/ and " + agentName + " together.");
@@ -197,14 +215,14 @@ public static class CampaignExporter
         {
             sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > PowerShell Scripts");
             sb.AppendLine("   Script Name:");
-            sb.AppendLine(@"   \\ad.example.com\SYSVOL\ad.example.com\scripts\LockScreenCampaigns\" + campaign.CampaignId + @"\LockScreen-Agent.ps1");
+            sb.AppendLine("   " + packageLocation + @"\LockScreen-Agent.ps1");
             sb.AppendLine("   Script Parameters: -Mode Install");
         }
         else
         {
             sb.AppendLine("   Computer Configuration > Policies > Windows Settings > Scripts > Startup > Scripts");
             sb.AppendLine("   Method: classic Startup Scripts (scripts.ini), direct EXE.");
-            sb.AppendLine("   Script: \\\\ad.example.com\\SYSVOL\\ad.example.com\\scripts\\LockScreenCampaigns\\" + campaign.CampaignId + "\\LockScreen-Agent.exe");
+            sb.AppendLine("   Script: " + packageLocation + @"\LockScreen-Agent.exe");
             sb.AppendLine("   Script parameters: --client-agent Install");
             sb.AppendLine("   No PowerShell or intermediate CMD launcher is required.");
         }
@@ -223,9 +241,10 @@ public static class CampaignExporter
         sb.AppendLine();
         sb.AppendLine("5. At completion, local images, script and task are removed,");
         sb.AppendLine("   and original registry settings are restored unless another policy replaced them.");
-        sb.AppendLine("   An ADMINISTRATOR then removes/unlinks the GPO and its source SYSVOL folder.");
+        sb.AppendLine("   An ADMINISTRATOR unlinks the GPO and only then removes its original package.");
+        sb.AppendLine("   Existing SYSVOL-only cleanup tools do not manage external SMB payloads.");
         sb.AppendLine();
-        sb.AppendLine("Requirements: Windows 11 Enterprise/Education and SYSVOL availability during setup.");
+        sb.AppendLine("Requirements: supported Windows client, domain GPO access and access to the selected content location at startup.");
         sb.AppendLine("The GUI application does not need to be installed on endpoints.");
         return sb.ToString();
     }

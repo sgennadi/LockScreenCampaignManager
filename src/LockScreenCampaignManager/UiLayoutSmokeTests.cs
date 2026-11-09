@@ -919,6 +919,20 @@ internal static class UiLayoutSmokeTests
                 {
                     var selector = Descendants(form).OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "DeploymentClientType");
+                    var content = Descendants(form).OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentContentSource");
+                    var unc = Descendants(form).OfType<TextBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentContentShareRoot");
+                    var browse = Descendants(form).OfType<Button>()
+                        .SingleOrDefault(x => x.Name == "DeploymentContentShareBrowse");
+                    if (content is null || unc is null || browse is null ||
+                        content.Items.Count != 2 || content.SelectedIndex != 0 ||
+                        content.Width < 220 || content.Height < content.PreferredHeight ||
+                        unc.Width < 190 ||
+                        !content.Items[0]!.ToString()!.Contains("SYSVOL", StringComparison.Ordinal) ||
+                        !content.Items[1]!.ToString()!.Contains("SMB", StringComparison.Ordinal))
+                        throw new InvalidOperationException(
+                            $"Deployment SYSVOL/SMB selector or UNC editor missing/clipped at {profile.Name}.");
                     if (selector is null ||
                         selector.DropDownStyle != ComboBoxStyle.DropDownList ||
                         selector.Items.Count != 2 || selector.SelectedIndex != 0 ||
