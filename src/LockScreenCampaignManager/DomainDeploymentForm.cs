@@ -17,6 +17,10 @@ internal sealed partial class DomainDeploymentForm : Form
     private readonly Label _otherAccountHint = new();
     private readonly TextBox _gpoBox = new();
     private readonly ComboBox _clientTypeBox = new();
+    private readonly ComboBox _contentSourceBox = new();
+    private readonly TextBox _contentShareBox = new();
+    private readonly Button _contentShareBrowse = new();
+    private readonly Label _contentSourceHint = new();
     private Button? _groupAssignmentsButton;
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
@@ -186,7 +190,7 @@ internal sealed partial class DomainDeploymentForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
         // Two status banners and the client/GPO-method selector must retain
         // independent height at 100%-200% scaling.
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 198));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
         Controls.Add(layout);
@@ -292,9 +296,10 @@ internal sealed partial class DomainDeploymentForm : Form
         connLayout.Controls.Add(accounts, 0, 1);
         layout.Controls.Add(connection, 0, 2);
 
-        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
+        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
         notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         notification.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _connectionStatus.Dock = DockStyle.Fill;
         _connectionStatus.AutoEllipsis = true;
@@ -335,6 +340,62 @@ internal sealed partial class DomainDeploymentForm : Form
             ForeColor = UiStyle.Muted, AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
         notification.Controls.Add(engineChoice, 0, 2);
+        var storage = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2
+        };
+        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+        storage.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        storage.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        storage.Controls.Add(new Label {
+            Text = "Campaign files", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy
+        }, 0, 0);
+        _contentSourceBox.Name = "DeploymentContentSource";
+        _contentSourceBox.Dock = DockStyle.Fill;
+        _contentSourceBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _contentSourceBox.Items.Add("SYSVOL (default)");
+        _contentSourceBox.Items.Add("SMB network folder (UNC)");
+        _contentSourceBox.SelectedIndex = _project.ContentSource ==
+            CampaignContentSource.SmbShare ? 1 : 0;
+        _contentSourceBox.SelectedIndexChanged += (_, _) => {
+            _project.ContentSource = _contentSourceBox.SelectedIndex == 1
+                ? CampaignContentSource.SmbShare : CampaignContentSource.Sysvol;
+            UpdateContentSourceControls();
+            InvalidatePlan();
+        };
+        storage.Controls.Add(_contentSourceBox, 1, 0);
+        _contentShareBox.Name = "DeploymentContentShareRoot";
+        _contentShareBox.PlaceholderText = @"\\files.example.com\Campaigns";
+        _contentShareBox.Dock = DockStyle.Fill;
+        _contentShareBox.Text = _project.ContentShareRoot;
+        _contentShareBox.TextChanged += (_, _) => {
+            _project.ContentShareRoot = _contentShareBox.Text.Trim();
+            InvalidatePlan();
+        };
+        storage.Controls.Add(_contentShareBox, 2, 0);
+        _contentShareBrowse.Text = "Browse...";
+        _contentShareBrowse.Name = "DeploymentContentShareBrowse";
+        _contentShareBrowse.Dock = DockStyle.Fill;
+        _contentShareBrowse.Click += (_, _) => {
+            using var choose = new FolderBrowserDialog {
+                Description = "Choose an EXISTING dedicated SMB UNC folder (Domain Computers READ; administrators WRITE)",
+                ShowNewFolderButton = false
+            };
+            if (choose.ShowDialog(this) == DialogResult.OK)
+                _contentShareBox.Text = choose.SelectedPath;
+        };
+        storage.Controls.Add(_contentShareBrowse, 3, 0);
+        _contentSourceHint.Dock = DockStyle.Fill;
+        _contentSourceHint.TextAlign = ContentAlignment.MiddleLeft;
+        _contentSourceHint.ForeColor = UiStyle.Muted;
+        _contentSourceHint.AutoEllipsis = true;
+        storage.Controls.Add(_contentSourceHint, 0, 1);
+        storage.SetColumnSpan(_contentSourceHint, 4);
+        notification.Controls.Add(storage, 0, 3);
+        UpdateContentSourceControls();
         layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
