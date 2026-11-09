@@ -222,7 +222,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("PhotoSaverStartupInstall.ps1", project)
         self.assertIn("Assets/PhotoSaver-StartupInstall.ps1", workflow)
         self.assertIn("TestPhotoJpegSaverLocal()", tests)
-        self.assertIn("JPG GPO lab kit generated pinned", tests)
+        self.assertIn("JPG GPO lab kit generated SHA256-pinned startup", tests)
         self.assertIn("[ValidateSet('Install','Verify')]", script)
         self.assertIn("$ErrorActionPreference = 'Stop'", script)
         self.assertIn("$sourcePath = Join-Path $PSScriptRoot $sourceFolder", script)
