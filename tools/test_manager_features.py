@@ -236,7 +236,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("C:\\ProgramData\\LSCM-PhotoSaver", script)
         self.assertIn("WindowsIdentity]::GetCurrent().User.Value -ne 'S-1-5-18'", script)
         self.assertIn("$slideSeconds = [int]'__LSCM_SLIDE_SECONDS__'", script)
-        self.assertIn("Lab only", kit.lower() if "Lab only" in kit else kit)
+        self.assertIn("MANUAL COMPUTER GPO LAB KIT ONLY", kit)
         # No automatic user GPO activation, remote task or SYSVOL modification.
         self.assertNotIn("Registry.CurrentUser.CreateSubKey", kit)
         self.assertNotIn("NativeGpoCom.CreateNewGpo", kit)
