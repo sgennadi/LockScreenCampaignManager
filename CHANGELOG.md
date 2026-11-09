@@ -1,4 +1,6 @@
 ## 0.4.0-preview.70 — Opt-in Agent Management auto-refresh and fair RPC fleet polling (2026-11-09)
+- Fix high-DPI clipping reported in three screens: make the Software updates subtitle/both header rows scale with the outer container, reserve the full Continue text in Campaign Wizard, and allocate scrollable/DPI-aware height to the Advanced connection options checkbox and its expanded DC controls.
+- Extend multi-font WinForms layout smoke to assert the exact affected labels, full Continue caption, and expanded Advanced connection controls.
 - Auto-refresh every 60 seconds now refreshes both selected-campaign SMB agent reports and separate RPC TCP/135 reachability hints while Agent Management is visible; the option is off by default and never performs remote writes.
 - Reachable-only is a display filter, not a sampling gate: previously unreachable or untested AD-verified computers remain eligible for the next probe, subject to the selected name/AD activity filters.
 - Rotate the bounded 300-host read-only reachability sample by oldest check time, so repeated scans progressively cover larger verified OUs instead of checking the same first 300 forever.

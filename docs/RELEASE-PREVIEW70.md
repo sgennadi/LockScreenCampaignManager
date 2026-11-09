@@ -7,6 +7,13 @@
 - **Fair scans for large OUs:** each read-only pass checks at most 300 distinct AD-verified hostnames, prioritizing never-checked and least-recently-checked entries. The scanner uses at most 12 parallel TCP connections with a 1.35-second per-host timeout.
 - **No overlapping refreshes.** Periodic checks stop when leaving Agent Management or closing the manager. If the SMB share cannot be reached, report coverage remains UNKNOWN (not zero).
 
+## Windows GUI clipping fixes
+
+- **Software updates:** the header and subtitle rows now grow with the actual text height; the two-step Check/Install explanation stays below the title at scaled DPI.
+- **Campaign Wizard → Continue:** the main navigation button is text-only (no icon stealing horizontal space), keeps a readable primary blue accent, and allocates up to 360 pixels when its caption grows.
+- **Connect to Active Directory → Advanced connection options:** the entire checkbox row and optional domain-controller controls get computed heights. The connection page scrolls vertically if the full content exceeds the desktop instead of losing the lowest line.
+- The Windows GUI smoke suite asserts these specific controls at 100%, 125%, 150%, and 187.5% font/UI profiles. Interactive 200% DPI verification remains an explicit lab acceptance step.
+
 ## Data sources, confidence and security
 
 AD lastLogonTimestamp is replicated and approximate. RPC/135 is only a reachability hint, and is not proof that the Task Scheduler interface is authorized or that an agent is running. The client's `<COMPUTERNAME>.json` file is unauthenticated self-reported diagnostic evidence. Client versions, reported PS1/EXE method, health and UTC timestamps remain separate from independently verified GPO delivery method and remote task-submission outcomes. No automatic refresh creates AD/GPO changes or launches a remote process.

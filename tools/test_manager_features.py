@@ -132,6 +132,28 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('var candidates = ProbeCandidates();', live)
         self.assertNotIn('_computers.Items.Cast<PcRow>().Select(x => x.Name).ToArray()', live)
 
+    def test_dpi_header_continue_and_ad_options_are_not_clipped(self):
+        updater = read("UniversalUpdaterWindow.cs")
+        wizard = read("MainForm.CampaignWizard.cs")
+        ad = read("AdConnectionStartDialog.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        self.assertIn('Name = "UpdaterHeaderSubtitle"', updater)
+        self.assertIn('UiStyle.FitWizardHeader(layout, banner', updater)
+        self.assertIn('FitUpdatesHeader()', updater)
+        self.assertIn('Name = "CampaignWizardContinueAction"', wizard)
+        self.assertIn('_next.AutoEllipsis = false', wizard)
+        self.assertIn('int next = Math.Clamp(RequiredWidth(_next, 36), 125, 360)', wizard)
+        self.assertIn('Name = "AdAdvancedConnectionOptions"', ad)
+        self.assertIn('_advancedDc.AutoEllipsis = false', ad)
+        self.assertIn('_advancedDc.Dock = DockStyle.Fill', ad)
+        self.assertIn('_connectionPage.AutoScroll = true', ad)
+        self.assertIn('FitAdvancedConnectionLayout()', ad)
+        self.assertIn('ShowAdvancedOptionsForSmokeTest()', ad)
+        self.assertIn('CheckUpdaterHeader(form, profile.Name)', smoke)
+        self.assertIn('CheckAdAdvancedOptions(form, profile.Name)', smoke)
+        self.assertIn('Campaign Wizard Continue text clipped', smoke)
+        self.assertIn('Advanced connection options lower line clipped', smoke)
+
     def test_ad_activity_inventory_and_feedback_reporters_are_scoped(self):
         native = read("NativeImmediateActions.cs")
         runner = read("DomainPowerShellRunner.cs")
