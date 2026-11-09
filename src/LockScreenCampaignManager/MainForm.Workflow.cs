@@ -43,7 +43,7 @@ public sealed partial class MainForm
         panel.Controls.Add(new Label
         {
             Text = "The Wizard first offers AD sign-in (or Skip AD), then guides you " +
-                "through images, ordering, schedule, saving, and optional GPO deployment. " +
+                "through campaign type, images, ordering, schedule, saving and optional GPO deployment. " +
                 "Deployment checks GPO permissions for your selected OU and group. " +
                 "Cancel leaves the editor available.",
             Dock = DockStyle.Fill,

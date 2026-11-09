@@ -1,3 +1,12 @@
+## 0.4.0-preview.75 — Explicit type selection, correct skip stages and matching campaign names (2026-11-09)
+
+- New Campaign Wizard sessions start with **no** selected campaign type; Next stays disabled until Lock Screen, Screen Saver or Both is chosen.
+- Images, Arrange and Schedule show "(skip)" **only** for Screen Saver, immediately on selection; switching to Lock Screen or Both removes all skip labels.
+- A new untitled draft gets a type-specific suggested name; manually entered names are not overwritten. The New campaign dialog permits an untitled draft and lets the Wizard supply the name.
+- New drafts remain type-gated even when images are imported through Advanced. Historical saved campaigns retain their inferred mode. This temporary state is never written into JSON or deployed client packages.
+- Correct the Wizard landing and main editor step summary from six to seven steps, including Campaign Type.
+- Windows x64/x86 automated builds and simulated DPI WinForms checks cover the selection and skip transitions. Actual 200% hardware DPI and AD user-policy application require separate testing.
+
 ## 0.4.0-preview.74 — Choose campaign type BEFORE images in seven-step Wizard (2026-11-09)
 - Add a first-class Campaign Type wizard step immediately after AD Connection: Lock Screen, Screen Saver, or Both.
 - Show built-in .scr selection, idle time (60–86400 seconds), and sign-in on resume directly on the Type step. Screen Saver-only skips JPEG selection, arrangement, and change schedule.

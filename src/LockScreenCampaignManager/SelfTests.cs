@@ -156,6 +156,23 @@ internal static class SelfTests
 
     private static void TestCampaignModeBeforeImages()
     {
+        var draft = CompanyProfilesStore.NewCampaign(null);
+        Check(draft.RequiresCampaignTypeChoice && !draft.CampaignModeExplicit &&
+            draft.Name.Length == 0,
+            "New drafts have no implicit campaign type or Lock Screen name.");
+        bool missingTypeDenied = false;
+        try {
+            CampaignSchedule.Validate(new CampaignProject {
+                Name = "Still unchosen", RequiresCampaignTypeChoice = true
+            }, false);
+        }
+        catch (CampaignValidationException) { missingTypeDenied = true; }
+        Check(missingTypeDenied,
+            "New campaign cannot validate even with a typed name until a mode is chosen.");
+        string serializedDraft = System.Text.Json.JsonSerializer.Serialize(draft);
+        Check(!serializedDraft.Contains("RequiresCampaignTypeChoice", StringComparison.Ordinal),
+            "Transient new-draft mode gate never enters saved JSON or client packages.");
+
         var legacy = new CampaignProject { Name = "Legacy computer-only" };
         Check(!legacy.CampaignModeExplicit &&
             legacy.EffectiveCampaignMode == CampaignTargetMode.LockScreen,

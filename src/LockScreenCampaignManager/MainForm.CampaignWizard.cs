@@ -52,7 +52,7 @@ public sealed partial class MainForm
         }
     }
 
-    // Allows offline UI smoke tests to validate all six wizard pages
+    // Allows offline UI smoke tests to validate all seven wizard pages
     // without ShowDialog, LDAP access or filesystem changes.
     internal Form CreateCampaignWizardForSmokeTest(int page = 0, string? imagePath = null)
     {
@@ -427,7 +427,7 @@ public sealed partial class MainForm
                 _subheading.Text = "Step " + (_step + 1) + " of 7  -  " + StepNames[_step][3..];
                 for (int i = 0; i < _rail.Length; i++)
                 {
-                    bool skippedForSaver = !NeedsLockImages && i is >= 2 and <= 4;
+                    bool skippedForSaver = HasChosenCampaignType && !NeedsLockImages && i is >= 2 and <= 4;
                     _rail[i].Text = skippedForSaver ? StepNames[i] + " (skip)" : StepNames[i];
                     _rail[i].BackColor = i == _step ? UiStyle.Accent : UiStyle.SoftBlue;
                     _rail[i].ForeColor = i == _step ? Color.White :
@@ -544,9 +544,14 @@ public sealed partial class MainForm
                     _step == 5 && _skipProjectSave ? "Continue (no save)" :
                     _step == 5 && !_saved ? "Save & Next" :
                     _step == 0 ? "Continue" : "Next";
-                _next.Enabled = _step is 0 or 1 or 6 || !NeedsLockImages ||
-                    _owner._project.ImagePaths.Count > 0;
+                _next.Enabled = _step switch
+                {
+                    1 => HasChosenCampaignType,
+                    0 or 6 => true,
+                    _ => !NeedsLockImages || _owner._project.ImagePaths.Count > 0
+                };
                 _footnote.Text = _step == 0 ? "AD sign-in is optional" :
+                    !HasChosenCampaignType ? "Choose a campaign type first" :
                     !NeedsLockImages ? "Screen Saver: images not needed" :
                     _step >= 5 && _skipProjectSave && !_saved
                         ? "Local project not saved"
@@ -1170,7 +1175,8 @@ public sealed partial class MainForm
                     }
                     break;
                 case 1:
-                    if (!Enum.IsDefined(_owner._project.EffectiveCampaignMode))
+                    if (!HasChosenCampaignType ||
+                        !Enum.IsDefined(_owner._project.EffectiveCampaignMode))
                     {
                         MessageBox.Show(this, "Choose Lock Screen, Screen Saver or Both.",
                             "Campaign Wizard", MessageBoxButtons.OK, MessageBoxIcon.Warning);
