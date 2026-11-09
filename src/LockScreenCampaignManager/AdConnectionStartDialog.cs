@@ -1109,8 +1109,9 @@ internal sealed class AdConnectionStartDialog : Form
 
     private void SetReviewText(string text)
     {
-        // Use RichTextBox for readable per-status emphasis without changing
-        // report wording or implying that an ACL hint is a write test.
+        // Only paint fields and *specific* permission status phrases.
+        // Broad Contains("Unknown") highlighting accidentally turned entire
+        // explanations orange and obscured which evidence was uncertain.
         _review.SuspendLayout();
         try
         {
@@ -1120,7 +1121,6 @@ internal sealed class AdConnectionStartDialog : Form
             var green = Color.FromArgb(20, 120, 78);
             var amber = Color.FromArgb(161, 95, 19);
             var red = Color.FromArgb(175, 47, 47);
-            var muted = UiStyle.Muted;
 
             void Paint(int index, int length, Color color)
             {
@@ -1129,44 +1129,61 @@ internal sealed class AdConnectionStartDialog : Form
                 _review.SelectionColor = color;
             }
 
-            int start = 0;
+            string[] caution =
+            [
+                "NOT CONFIRMED", "Unknown", "Not verified",
+                "No matching Allow ACE", "Requires", "Potential Allow",
+                "Incomplete / unknown", "not a proven denial"
+            ];
+            string[] danger = ["POSSIBLE DENY", "No (RODC verified)",
+                "Unavailable on confirmed read-only DC"];
+            string[] success = ["Loaded", "Yes (controller capability)"];
+            int cursor = 0;
             foreach (string line in _review.Lines)
             {
-                int index = contents.IndexOf(line, start, StringComparison.Ordinal);
-                if (index < 0) continue;
-                start = index + line.Length;
-                int colon = line.IndexOf(':');
-                if (colon is > 0 and < 38)
-                    Paint(index, colon + 1, navy);
+                int begin = contents.IndexOf(line, cursor, StringComparison.Ordinal);
+                if (begin < 0) continue;
+                cursor = begin + line.Length;
+
+                if (line.StartsWith("No changes have been made", StringComparison.Ordinal))
+                {
+                    Paint(begin, line.Length, green);
+                    continue;
+                }
                 if (line.StartsWith("PERMISSION ASSESSMENT", StringComparison.Ordinal) ||
                     line.StartsWith("Read-only inventory:", StringComparison.Ordinal))
-                    Paint(index, line.Length, navy);
-
-                Color? statusColor = null;
-                if (line.StartsWith("No changes have been made", StringComparison.Ordinal) ||
-                    line.Contains("Loaded", StringComparison.Ordinal) ||
-                    line.Contains("Yes (controller capability)", StringComparison.Ordinal))
-                    statusColor = green;
-                if (line.Contains("NOT CONFIRMED", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("Unknown", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("Not verified", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("Requires", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("not a proof", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("not proof", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("Potential Allow", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("No matching Allow", StringComparison.OrdinalIgnoreCase))
-                    statusColor = amber;
-                if (line.Contains("Deny", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("No (RODC verified)", StringComparison.Ordinal) ||
-                    line.Contains("Unavailable on confirmed read-only DC", StringComparison.Ordinal))
-                    statusColor = red;
-                if (statusColor is not null)
                 {
-                    int valueOffset = colon is >= 0 and < 38 ? colon + 1 : 0;
-                    Paint(index + valueOffset, line.Length - valueOffset, statusColor.Value);
+                    Paint(begin, line.Length, navy);
+                    continue;
                 }
-                else if (line.StartsWith("ACL hints", StringComparison.Ordinal))
-                    Paint(index, line.Length, muted);
+
+                int colon = line.IndexOf(':');
+                if (colon < 1 || colon > 35) continue;
+                Paint(begin, colon + 1, navy);
+                // Only the value of a known permission/readiness field gets a
+                // status color. Unrelated narrative paragraphs stay readable.
+                string field = line[..colon].Trim();
+                bool permissionField = field is
+                    "WRITE ACCESS" or "DC WRITABLE" or
+                    "ACCOUNT GROUP SIDs" or "GPO CREATE" or "OU LINK" or
+                    "DEFAULT OU LINK" or "GPO EDIT / DELETE" or "SYSVOL WRITE";
+                if (!permissionField) continue;
+                string value = line[(colon + 1)..];
+                foreach (string word in caution)
+                {
+                    int pos = value.IndexOf(word, StringComparison.OrdinalIgnoreCase);
+                    if (pos >= 0) Paint(begin + colon + 1 + pos, word.Length, amber);
+                }
+                foreach (string word in danger)
+                {
+                    int pos = value.IndexOf(word, StringComparison.OrdinalIgnoreCase);
+                    if (pos >= 0) Paint(begin + colon + 1 + pos, word.Length, red);
+                }
+                foreach (string word in success)
+                {
+                    int pos = value.IndexOf(word, StringComparison.Ordinal);
+                    if (pos >= 0) Paint(begin + colon + 1 + pos, word.Length, green);
+                }
             }
             _review.Select(0, 0);
             _review.ScrollToCaret();
