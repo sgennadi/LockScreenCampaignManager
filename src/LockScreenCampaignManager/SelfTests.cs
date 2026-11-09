@@ -26,6 +26,7 @@ internal static class SelfTests
         p.StartLocal = new DateTime(2028, 2, 28, 14, 0, 0);
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
+        TestGroupAssignmentMatrixAndScreenSaverPol();
         TestFlexibleSchedules();
         TestNativeClientImageOrder();
         TestFilenameScheduleInference();
@@ -150,6 +151,72 @@ internal static class SelfTests
         TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
         TestAlertsAndHistory();
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
+    }
+
+    private static void TestGroupAssignmentMatrixAndScreenSaverPol()
+    {
+        const string computerOu = "OU=Devices,DC=example,DC=com";
+        const string computerGroup = "CN=Students-PCs,OU=Groups,DC=example,DC=com";
+        const string userOu = "OU=Students,DC=example,DC=com";
+        const string userGroup = "CN=Students,OU=Groups,DC=example,DC=com";
+        var project = new CampaignProject
+        {
+            Name = "Group assignment test", TimeZoneId = "UTC",
+            TargetAssignments =
+            [
+                new CampaignGroupTarget {
+                    Name = "Computer lab", Mode = CampaignTargetMode.Both,
+                    ComputerOuDn = computerOu, ComputerGroupDn = computerGroup,
+                    UserOuDn = userOu, UserGroupDn = userGroup
+                },
+                new CampaignGroupTarget {
+                    Name = "Other user group", Mode = CampaignTargetMode.ScreenSaver,
+                    UserOuDn = userOu,
+                    UserGroupDn = "CN=Teachers,OU=Groups,DC=example,DC=com"
+                }
+            ],
+            ScreenSaver = new CampaignScreenSaverSettings {
+                Executable = "scrnsave.scr",
+                IdleSeconds = 660, PasswordOnResume = true
+            }
+        };
+        CampaignTargetAssignments.Validate(project);
+        Check(project.TargetAssignments[0].UsesLockScreen &&
+            project.TargetAssignments[0].UsesScreenSaver &&
+            !project.TargetAssignments[1].UsesLockScreen,
+            "Both preserves separate computer and user scopes");
+        string json = System.Text.Json.JsonSerializer.Serialize(project);
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<CampaignProject>(json)!;
+        Check(loaded.TargetAssignments.Count == 2 &&
+            loaded.TargetAssignments[0].Mode == CampaignTargetMode.Both &&
+            loaded.TargetAssignments[0].ComputerGroupDn == computerGroup &&
+            loaded.TargetAssignments[0].UserGroupDn == userGroup,
+            "group mode / distinct OU and group survive project roundtrip");
+
+        byte[] registry = NativeUserScreenSaverGpo.BuildRegistryPol(
+            loaded.ScreenSaver.Executable, loaded.ScreenSaver.IdleSeconds, true);
+        Check(registry.AsSpan(0, 4).SequenceEqual("PReg"u8) &&
+            BitConverter.ToUInt32(registry, 4) == 1, "Registry.pol MS-GPREG header");
+        string decoded = System.Text.Encoding.Unicode.GetString(registry, 8,
+            registry.Length - 8);
+        foreach (string key in new[] {
+            "ScreenSaveActive", "SCRNSAVE.EXE",
+            "ScreenSaveTimeOut", "ScreenSaverIsSecure"
+        })
+            Check(decoded.Contains(key, StringComparison.Ordinal),
+                "User Registry.pol entry " + key);
+        Check(decoded.Contains("scrnsave.scr", StringComparison.Ordinal) &&
+            decoded.Contains("660", StringComparison.Ordinal),
+            "Screen Saver timeout/program preserved");
+        bool denied = false;
+        try { NativeUserScreenSaverGpo.BuildRegistryPol("bad.exe", 600, true); }
+        catch (ArgumentException) { denied = true; }
+        Check(denied, "Unsafe Screen Saver executable is refused.");
+        denied = false;
+        project.TargetAssignments.Add(project.TargetAssignments[0].Clone());
+        try { CampaignTargetAssignments.Validate(project); }
+        catch (CampaignValidationException) { denied = true; }
+        Check(denied, "Duplicate Lock Screen and Screen Saver group assignment blocked.");
     }
 
     internal static void RunDiagnosticsOnly()
@@ -2579,7 +2646,7 @@ StartExecutePSFirst=true
                 computerName = "PC003", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.71-native",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72-native",
                 clientType = "Executable"
             };
             File.WriteAllText(Path.Combine(root, "PC003.json"),
@@ -2595,7 +2662,7 @@ StartExecutePSFirst=true
                 computerName = "PC004", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.71",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72",
                 clientType = "=HYPERLINK(\"http://untrusted\")"
             };
             File.WriteAllText(Path.Combine(root, "PC004.json"),

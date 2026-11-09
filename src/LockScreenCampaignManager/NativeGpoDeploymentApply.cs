@@ -284,7 +284,7 @@ internal static class NativeGpoDeploymentApply
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
-    private static void RestrictApplyToGroup(LdapConnection ldap, string gpoDn,
+    internal static void RestrictApplyToGroup(LdapConnection ldap, string gpoDn,
         SecurityIdentifier selectedSid)
     {
         var request = new SearchRequest(gpoDn, "(objectClass=groupPolicyContainer)",
@@ -448,7 +448,7 @@ internal static class NativeGpoDeploymentApply
             throw new IOException("GPO startup metadata was not verified.");
     }
 
-    private static void LinkNewGpo(LdapConnection ldap, string ouDn, string gpoDn)
+    internal static void LinkNewGpo(LdapConnection ldap, string ouDn, string gpoDn)
     {
         var original = NativeAdDiscovery.Attr(
             One(ldap, ouDn, "(objectClass=organizationalUnit)", "gPLink"), "gPLink");

@@ -27,6 +27,10 @@ public sealed class CampaignProject
     public string CompanyProfileId { get; set; } = string.Empty;
     // Existing projects remain PowerShell by default; chosen in Deploy.
     public CampaignClientType ClientType { get; set; } = CampaignClientType.PowerShell;
+    // Empty list means legacy single-target Lock Screen deployment.
+    // New projects can assign several computer/user groups independently.
+    public List<CampaignGroupTarget> TargetAssignments { get; set; } = new();
+    public CampaignScreenSaverSettings ScreenSaver { get; set; } = new();
     public DateTime StartLocal { get; set; } = DateTime.Today.AddDays(1).AddHours(14);
     public int LastImageHours { get; set; } = 24;
     public string TimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
@@ -229,8 +233,14 @@ public static class CampaignSchedule
                 throw new CampaignValidationException("Campaign schedule exceeds two years.");
             previous = date;
         }
-        if (requireImages && project.ImagePaths.Count == 0)
-            throw new CampaignValidationException("Add at least one image.");
+        CampaignTargetAssignments.Validate(project);
+        bool needsImages = project.TargetAssignments is not { Count: > 0 } ||
+            project.TargetAssignments.Any(x => x.UsesLockScreen);
+        if (requireImages && needsImages && project.ImagePaths.Count == 0)
+            throw new CampaignValidationException(
+                project.TargetAssignments.Count == 0
+                    ? "Add at least one image."
+                    : "Lock Screen assignments need at least one image.");
         if (project.EnableFeedback)
         {
             FeedbackPath.ValidateRoot(project.FeedbackShare);

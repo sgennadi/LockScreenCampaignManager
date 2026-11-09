@@ -1,3 +1,11 @@
+## 0.4.0-preview.72 — Separate Lock Screen / Screen Saver / Both assignments per AD group (2026-11-09)
+- New per-campaign assignment matrix: up to 20 rows, each mode LockScreen, ScreenSaver or Both, independent computer OU/security group and user OU/security group. Existing projects preserve the legacy Lock Screen flow.
+- New native C# User Configuration GPO creates a Windows built-in Screen Saver configuration: selected standard .scr, idle timeout 60-86400 seconds, optional password on resume. No automatic loopback or domain-wide link.
+- Both mode creates separate computer/user GPOs with distinct security filtering, individually verified read-only previews, explicit batch approval, independent receipts and clear partial-success warnings.
+- ScreenSaver-only campaigns need no JPEGs; LockScreen and Both retain validated JPEG schedules. The image slideshow is not yet a managed .scr and is not claimed to be.
+- Added six-scale WinForms smoke for the assignment wizard, MS-GPREG Registry.pol encoding tests, user/computer scope checks, project JSON roundtrip and rejection of duplicate assignments.
+- Batch native EXE agent deployment remains blocked; PS1 is the production Lock Screen client. Real AD user/computer pilot tests are still required.
+
 ## 0.4.0-preview.71 — DPI/Client Health/SMB usability + Bug Reports review (2026-11-09)
 - Fix clipped Campaign Wizard Schedule/Client Health and bottom helper text by allocating additional scrollable content and status space.
 - Show actual current UTC offset, PC UTC offset, difference in hours/minutes and DST state in both schedule editors. Preserve Windows time-zone IDs so future DST changes do not become fixed-offset schedules.

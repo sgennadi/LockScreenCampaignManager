@@ -96,6 +96,34 @@ internal static class UiLayoutSmokeTests
             return form;
         }, new[] { "Browse SMB...", "Copy path", "Load PCs from AD",
             "Refresh", "Export CSV", "Repair Selected" }),
+        ("Campaign assignment matrix", () =>
+            new CampaignAssignmentsDialog(
+                new CampaignProject { Name = "matrix-ci", TimeZoneId = "UTC",
+                    TargetAssignments = [
+                        new CampaignGroupTarget {
+                            Name = "Lab computers + pilot users",
+                            Mode = CampaignTargetMode.Both,
+                            ComputerOuDn = "OU=Devices,DC=example,DC=com",
+                            ComputerGroupDn = "CN=PCs,OU=Groups,DC=example,DC=com",
+                            UserOuDn = "OU=Users,DC=example,DC=com",
+                            UserGroupDn = "CN=Pilots,OU=Groups,DC=example,DC=com"
+                        }
+                    ] },
+                [
+                    new CampaignAssignmentsDialog.AdChoice("Devices",
+                        "OU=Devices,DC=example,DC=com"),
+                    new CampaignAssignmentsDialog.AdChoice("Users",
+                        "OU=Users,DC=example,DC=com")
+                ],
+                [
+                    new CampaignAssignmentsDialog.AdChoice("PCs",
+                        "CN=PCs,OU=Groups,DC=example,DC=com"),
+                    new CampaignAssignmentsDialog.AdChoice("Pilots",
+                        "CN=Pilots,OU=Groups,DC=example,DC=com")
+                ],
+                "OU=Devices,DC=example,DC=com",
+                "CN=PCs,OU=Groups,DC=example,DC=com"
+            ), new[] { "Add group...", "Remove", "Save assignments", "Cancel" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
             "example.com", "OU=Clients,DC=example,DC=com",
             "CN=Clients,OU=Groups,DC=example,DC=com"),
@@ -677,6 +705,30 @@ internal static class UiLayoutSmokeTests
                 CheckDpiTableRows(form, profile.Name);
                 CheckTimeZoneDifference(form, profile.Name);
                 CheckScrollableUncPaths(form, profile.Name);
+                if (window.Name == "Campaign assignment matrix")
+                {
+                    var all = Descendants(form).ToArray();
+                    var modes = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentTargetMode");
+                    var content = all.OfType<TableLayoutPanel>()
+                        .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
+                    var preview = all.OfType<TextBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentReadOnlyPreview");
+                    if (modes is null || modes.Items.Count != 3 ||
+                        !modes.Items.Contains(CampaignTargetMode.Both) ||
+                        !modes.Items.Contains(CampaignTargetMode.LockScreen) ||
+                        !modes.Items.Contains(CampaignTargetMode.ScreenSaver) ||
+                        content?.Parent is not Panel scroller || !scroller.AutoScroll ||
+                        preview is null || !preview.Text.Contains("Both",
+                            StringComparison.Ordinal) ||
+                        !preview.Text.Contains("Computer group:",
+                            StringComparison.Ordinal) ||
+                        !preview.Text.Contains("User group:",
+                            StringComparison.Ordinal))
+                        throw new InvalidOperationException(
+                            "Campaign Lock Screen / Screen Saver / Both group targeting is unavailable at " +
+                            profile.Name);
+                }
                 CheckTimeZoneSelectors(form, profile.Name);
                 if (form is GpoOperationsForm)
                 {

@@ -5,7 +5,7 @@ namespace LockScreenCampaignManager;
 internal enum DomainOperation
 {
     Discovery, Deployment, Lifecycle, ConflictScan,
-    Immediate, Assignment, Storage, DcConsistency
+    Immediate, Assignment, Storage, DcConsistency, ScreenSaver
 }
 
 internal sealed record DomainCredentials(string Domain, string UserName, string Password)
@@ -70,6 +70,10 @@ internal static class DomainPowerShellRunner
         if (operation == DomainOperation.Immediate &&
             mode is ("Push" or "Repair" or "Report" or "Cleanup"))
             return NativeImmediateApply.Execute(mode, request, credentials);
+
+        if (operation == DomainOperation.ScreenSaver &&
+            mode is ("Plan" or "Deploy"))
+            return NativeUserScreenSaverGpo.Execute(mode, request, credentials);
 
         if (operation == DomainOperation.Deployment && mode == "Plan")
             return NativeGpoDeploymentPlan.Execute(mode, request, credentials);

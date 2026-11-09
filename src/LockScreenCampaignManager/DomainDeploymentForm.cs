@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace LockScreenCampaignManager;
 
-internal sealed class DomainDeploymentForm : Form
+internal sealed partial class DomainDeploymentForm : Form
 {
     private readonly CampaignProject _project;
     private readonly CompanyProfile? _company;
@@ -17,6 +17,7 @@ internal sealed class DomainDeploymentForm : Form
     private readonly Label _otherAccountHint = new();
     private readonly TextBox _gpoBox = new();
     private readonly ComboBox _clientTypeBox = new();
+    private Button? _groupAssignmentsButton;
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
@@ -405,6 +406,9 @@ internal sealed class DomainDeploymentForm : Form
         buttons.Controls.Add(_rightsButton);
         buttons.Controls.Add(_planButton);
         buttons.Controls.Add(_deployButton);
+        _groupAssignmentsButton = Button("Group assignments...", 202, OpenTargetAssignments);
+        _groupAssignmentsButton.Name = "GroupAssignmentsButton";
+        buttons.Controls.Add(_groupAssignmentsButton);
         _gpoOperationsButton = Button("Agent Management / GPO...", 245, OpenGpoOperations);
         buttons.Controls.Add(_gpoOperationsButton);
         buttons.Controls.Add(Button("Close", 96, Close));
@@ -418,9 +422,33 @@ internal sealed class DomainDeploymentForm : Form
         layout.Controls.Add(footer, 0, 5);
     }
 
+    private void OpenTargetAssignments()
+    {
+        if (_running) return;
+        var ous = _allOus.Select(x =>
+            new CampaignAssignmentsDialog.AdChoice(x.Name, x.Dn)).ToList();
+        var groups = _allGroups.Select(x =>
+            new CampaignAssignmentsDialog.AdChoice(x.Name, x.Dn)).ToList();
+        if (ous.Count == 0 || groups.Count == 0)
+        {
+            _progress.Text = "Connect to AD and load OU/security groups before assigning modes.";
+            return;
+        }
+        using var editor = new CampaignAssignmentsDialog(_project,
+            ous, groups, (_ous.SelectedItem as DirectoryRow)?.Dn ?? "",
+            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "");
+        if (editor.ShowDialog(this) != DialogResult.OK) return;
+        InvalidatePlan();
+        _progress.Text = _project.TargetAssignments.Count +
+            " independent group assignment(s) saved locally. " +
+            "Preview validates exact computer and user scopes; no GPO changed.";
+        UpdateDeploymentSteps();
+    }
+
     private bool HasSelectedTargets =>
         !string.IsNullOrWhiteSpace(_connectedDomain) && _connectedWritable &&
-        _ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow &&
+        (_project.TargetAssignments.Count > 0 ||
+            (_ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow)) &&
         !string.IsNullOrWhiteSpace(_gpoBox.Text);
 
     private void SetDeploymentMode(bool advanced)
@@ -463,6 +491,15 @@ internal sealed class DomainDeploymentForm : Form
 
     private async Task CheckRightsAsync()
     {
+        if (_project.TargetAssignments.Count > 0)
+        {
+            UiStyle.ApplyStatus(_rightsBanner,
+                "GROUP MATRIX: Each user/computer OU, group, rights and GPO " +
+                "are independently checked by Preview. No writes are performed.",
+                UiStatusKind.Neutral);
+            _progress.Text = "Group assignment rights are verified per-target at Preview.";
+            return;
+        }
         if (_running || !HasSelectedTargets) return;
         try
         {
@@ -551,6 +588,12 @@ internal sealed class DomainDeploymentForm : Form
         _connectButton.Enabled = credentialsStep && !_running;
         _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
         _clientTypeBox.Enabled = targetStep && !_running;
+        if (_groupAssignmentsButton is not null)
+        {
+            _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
+            _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
+                _allGroups.Count > 0;
+        }
         _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
@@ -565,14 +608,17 @@ internal sealed class DomainDeploymentForm : Form
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
-            (_project.ClientType != CampaignClientType.Executable ||
+            (_project.TargetAssignments.Count > 0 &&
+                _project.TargetAssignments.All(x => x.UsesScreenSaver) ||
+             _project.ClientType != CampaignClientType.Executable ||
              NativeClientAgent.CanDeployNativeClient);
         if (_gpoOperationsButton is not null)
         {
             // Read-only inventory and remote actions are useful directly from
             // the last Wizard page, not only the Advanced editor.
             _gpoOperationsButton.Visible = _advancedMode || _wizardStep == 2;
-            _gpoOperationsButton.Enabled = !_running && HasSelectedTargets;
+            _gpoOperationsButton.Enabled = !_running && HasSelectedTargets &&
+                _project.TargetAssignments.Count == 0;
         }
     }
 
@@ -836,9 +882,17 @@ internal sealed class DomainDeploymentForm : Form
 
     private string PlanKey()
     {
+        if (_project.TargetAssignments.Count > 0)
+            return string.Join("|", _connectedDomain, _connectedDc,
+                _gpoBox.Text.Trim(), CampaignSchedule.BuildId(_project),
+                _project.ClientType,
+                System.Text.Json.JsonSerializer.Serialize(_project.TargetAssignments),
+                System.Text.Json.JsonSerializer.Serialize(_project.ScreenSaver));
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
-            CampaignSchedule.BuildId(_project), _project.ClientType);
+            CampaignSchedule.BuildId(_project), _project.ClientType,
+            System.Text.Json.JsonSerializer.Serialize(_project.TargetAssignments),
+            System.Text.Json.JsonSerializer.Serialize(_project.ScreenSaver));
     }
 
     private (string parent,string package) MakeTemporaryPackage(bool forReadOnlyPreview = false)
@@ -853,6 +907,11 @@ internal sealed class DomainDeploymentForm : Form
     private async Task<JsonElement?> PlanAsync()
     {
         if (_running) return null;
+        if (_project.TargetAssignments.Count > 0)
+        {
+            await PlanTargetMatrixAsync();
+            return null;
+        }
         try
         {
             var x = Selection();
@@ -948,6 +1007,11 @@ internal sealed class DomainDeploymentForm : Form
     private async Task DeployAsync()
     {
         if (_running) return;
+        if (_project.TargetAssignments.Count > 0)
+        {
+            await DeployTargetMatrixAsync();
+            return;
+        }
         if (_project.ClientType == CampaignClientType.Executable &&
             !NativeClientAgent.CanDeployNativeClient)
         {
