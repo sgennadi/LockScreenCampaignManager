@@ -58,7 +58,7 @@ class SmbSourceContracts(unittest.TestCase):
         exporter = read("CampaignExporter.cs")
         self.assertIn("BuildInstructions(config, project.ContentSource, project.ContentShareRoot)", exporter)
         self.assertIn("CampaignPayloadLocation.TargetPath(contentShareRoot, campaign.CampaignId)", exporter)
-        self.assertIn("Group Policy", read("NativeGpoDeploymentPlan.cs"))
+        self.assertIn("Native read-only preflight complete", read("NativeGpoDeploymentPlan.cs"))
         self.assertIn("JPG slideshow .scr is LOCAL PILOT ONLY", read("DomainDeploymentForm.AssignmentDeployment.cs"))
 
 if __name__ == "__main__":
