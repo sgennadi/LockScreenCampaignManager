@@ -10,9 +10,9 @@ internal static partial class NativeClientAgent
     private static void RegisterCampaignTask(Context ctx)
     {
         var triggers = new List<DateTime>(ctx.Starts) { ctx.End };
-        WithTaskScheduler(root =>
+        WithTaskScheduler((scheduler, root) =>
         {
-            dynamic definition = NewTask(root);
+            dynamic definition = scheduler.NewTask(0);
             try
             {
                 SetTaskPrincipalAndAction(definition, ctx.LocalExe,
@@ -50,9 +50,9 @@ internal static partial class NativeClientAgent
         var feedback = ctx.Config.Feedback;
         if (feedback is not { Enabled: true }) return;
         ValidateFeedback(ctx);
-        WithTaskScheduler(root =>
+        WithTaskScheduler((scheduler, root) =>
         {
-            dynamic definition = NewTask(root);
+            dynamic definition = scheduler.NewTask(0);
             try
             {
                 SetTaskPrincipalAndAction(definition, ctx.LocalExe,
@@ -74,7 +74,7 @@ internal static partial class NativeClientAgent
 
     private static void UnregisterCampaignTasks(Context ctx)
     {
-        WithTaskScheduler(root =>
+        WithTaskScheduler((scheduler, root) =>
         {
             DeleteTaskIfOwned(root, ctx.TaskName, ctx.LocalExe,
                 "--client-agent Apply");
@@ -86,7 +86,7 @@ internal static partial class NativeClientAgent
     private static bool TaskExists(Context ctx)
     {
         bool found = false;
-        WithTaskScheduler(root =>
+        WithTaskScheduler((scheduler, root) =>
         {
             object? task = GetTaskOrNull(root, ctx.TaskName);
             found = task is not null;
@@ -95,7 +95,24 @@ internal static partial class NativeClientAgent
         return found;
     }
 
-    private static void WithTaskScheduler(Action<dynamic> act)
+    private static bool CampaignTasksGone(Context ctx)
+    {
+        bool gone = false;
+        WithTaskScheduler((scheduler, root) =>
+        {
+            object? main = GetTaskOrNull(root, ctx.TaskName);
+            object? feedback = GetTaskOrNull(root, ctx.FeedbackTaskName);
+            try { gone = main is null && feedback is null; }
+            finally
+            {
+                ReleaseCom(main);
+                ReleaseCom(feedback);
+            }
+        });
+        return gone;
+    }
+
+    private static void WithTaskScheduler(Action<dynamic, dynamic> act)
     {
         Type type = Type.GetTypeFromProgID("Schedule.Service") ??
             throw new InvalidOperationException("Windows Task Scheduler COM is unavailable.");
@@ -106,24 +123,12 @@ internal static partial class NativeClientAgent
         {
             dynamic scheduler = service;
             scheduler.Connect();
-            root = scheduler.GetFolder("\\");
-            act((dynamic)root);
+            root = scheduler.GetFolder(@"\");
+            // Tasks must be created and registered using the SAME connected
+            // Task Scheduler service session, not an unrelated COM instance.
+            act(scheduler, (dynamic)root);
         }
         finally { ReleaseCom(root); ReleaseCom(service); }
-    }
-
-    private static dynamic NewTask(dynamic root)
-    {
-        // The Task Scheduler root does not expose NewTask. Use the connected
-        // service COM instance from root's parent (implemented below).
-        Type serviceType = Type.GetTypeFromProgID("Schedule.Service") ??
-            throw new InvalidOperationException("Task Scheduler COM missing.");
-        object service = Activator.CreateInstance(serviceType) ??
-            throw new InvalidOperationException("Cannot create scheduler.");
-        dynamic scheduler = service;
-        scheduler.Connect();
-        try { return scheduler.NewTask(0); }
-        finally { ReleaseCom(service); }
     }
 
     private static void SetTaskPrincipalAndAction(dynamic definition,
@@ -165,7 +170,8 @@ internal static partial class NativeClientAgent
     private static object? GetTaskOrNull(dynamic root, string name)
     {
         try { return root.GetTask(name); }
-        catch (COMException ex) when (unchecked((uint)ex.HResult) == 0x80070002u)
+        catch (COMException ex) when (unchecked((uint)ex.HResult) is
+            0x80070002u or 0x8004130Fu)
         { return null; }
     }
 
