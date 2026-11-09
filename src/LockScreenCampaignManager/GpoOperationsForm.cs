@@ -227,6 +227,7 @@ internal sealed partial class GpoOperationsForm : Form
         _policies.HorizontalScrollbar = true;
         _policies.SelectedIndexChanged += (_, _) => {
             InvalidatePlans();
+            _lifecyclePreview.Enabled = _policies.SelectedItem is GpoRow;
             var managed = _policies.SelectedItem as GpoRow;
             if (managed is not null && _clientHealth is not null)
                 _clientHealth.SetSelectedManagedCampaign(managed.CampaignId);
@@ -258,6 +259,8 @@ internal sealed partial class GpoOperationsForm : Form
         _lifecycleAction.SelectedIndexChanged += (_, _) => InvalidatePlans();
         actions.Controls.Add(_lifecycleAction);
         _lifecyclePreview = ActionButton("Preview", () => _ = PreviewLifecycleAsync(), 145);
+        // Never send a routine missing-selection prompt to universal diagnostics.
+        _lifecyclePreview.Enabled = false;
         actions.Controls.Add(_lifecyclePreview);
         _applyGpo = ActionButton("Apply", () => _ = ApplyLifecycleAsync(), 160, primary: true);
         _applyGpo.Enabled = false;
@@ -426,7 +429,10 @@ internal sealed partial class GpoOperationsForm : Form
                 if (_policies.Items.Count > 0) _policies.SelectedIndex = 0;
             }
             finally { _policies.EndUpdate(); }
-            _status.Text = "Managed GPOs: " + _policies.Items.Count;
+            _lifecyclePreview.Enabled = _policies.SelectedItem is GpoRow;
+            _status.Text = _policies.Items.Count == 0
+                ? "No managed GPOs found. Create/deploy a campaign before using lifecycle Preview."
+                : "Managed GPOs: " + _policies.Items.Count + ". Select a GPO to preview.";
         }
         catch (Exception ex) { Fail(ex, "List managed GPOs"); }
     }
@@ -454,9 +460,17 @@ internal sealed partial class GpoOperationsForm : Form
     {
         if (_busy) return;
         InvalidatePlans();
+        if (string.IsNullOrWhiteSpace(SelectedId))
+        {
+            // Issue #11: a routine incomplete form is not an exception.
+            // Keep the report dialog for actual failures only.
+            _lifecycleInfo.Text = "Choose a managed GPO in the list first. " +
+                "Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.";
+            _status.Text = "Select a managed GPO first (no action performed).";
+            return;
+        }
         try
         {
-            if (string.IsNullOrWhiteSpace(SelectedId)) throw new InvalidOperationException("Select a managed GPO first.");
             string action = SelectedAction;
             string package = action == "Reuse" ? CreateReusePackage() : "";
             var plan = await ExecuteAsync(DomainOperation.Lifecycle, "Preview",
@@ -779,10 +793,15 @@ internal sealed partial class GpoOperationsForm : Form
         if (_busy) return;
         _pushPlanHash = null;
         _push.Enabled = false;
+        string id = SelectedId;
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            _status.Text = "Select a managed GPO in the first tab before previewing a remote task.";
+            _pushInfo.Text = "No remote task requested. Select a managed GPO, then eligible computers.";
+            return;
+        }
         try
         {
-            string id = SelectedId;
-            if (string.IsNullOrWhiteSpace(id)) throw new InvalidOperationException("Choose a managed GPO in the first tab.");
             string[] hosts = SelectedComputerNames();
             string purpose = SelectedPushPurpose;
             var data = await ExecuteAsync(DomainOperation.Immediate, "Preview", new {
