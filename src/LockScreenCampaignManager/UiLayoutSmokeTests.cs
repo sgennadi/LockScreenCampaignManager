@@ -67,6 +67,12 @@ internal static class UiLayoutSmokeTests
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
+        ("AD first-step advanced options", () => {
+            var wizard = new AdConnectionStartDialog(null);
+            wizard.ShowAdvancedOptionsForSmokeTest();
+            return wizard;
+        }, new[] { "Sign in & Read AD", "Next >", "Open campaign editor",
+            "< Back", "Work offline (no AD)" }),
         ("Updater", () => new UniversalUpdaterWindow(),
             new[] { "1  Check", "2  Install", "Backup status" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
@@ -368,6 +374,80 @@ internal static class UiLayoutSmokeTests
             next.Height < 30 || next.Width < 75)
             throw new InvalidOperationException(
                 $"Wizard Next/Finish action is cropped at {profile}.");
+
+        // Catch horizontally clipped Continue / Continue (no save), not only
+        // the presence of a nonzero button bounding box.
+        int captionWidth = TextRenderer.MeasureText(next.Text, next.Font).Width + 12;
+        int captionHeight = TextRenderer.MeasureText("Agpqy", next.Font).Height + 7;
+        if (next.Name != "CampaignWizardContinueAction" ||
+            next.Image is not null || next.AutoEllipsis ||
+            next.Width < captionWidth || next.Height < captionHeight)
+            throw new InvalidOperationException(
+                $"Campaign Wizard Continue text clipped at {profile}: " +
+                $"{next.Text}, {next.Width}x{next.Height}, required " +
+                $"{captionWidth}x{captionHeight}.");
+    }
+
+    private static void CheckUpdaterHeader(Form form, string profile)
+    {
+        if (form is not UniversalUpdaterWindow) return;
+        var all = Descendants(form).ToArray();
+        var header = all.OfType<TableLayoutPanel>()
+            .FirstOrDefault(x => x.Name == "UpdaterHeader") ??
+            throw new InvalidOperationException("Software updates header missing.");
+        var title = all.OfType<Label>()
+            .FirstOrDefault(x => x.Name == "UpdaterHeaderTitle") ??
+            throw new InvalidOperationException("Software updates title missing.");
+        var subtitle = all.OfType<Label>()
+            .FirstOrDefault(x => x.Name == "UpdaterHeaderSubtitle") ??
+            throw new InvalidOperationException("Software updates subtitle missing.");
+        if (header.Parent is not TableLayoutPanel outer || title.Parent != header ||
+            subtitle.Parent != header || header.RowStyles.Count != 2 ||
+            title.AutoEllipsis || subtitle.AutoEllipsis)
+            throw new InvalidOperationException(
+                $"Updater banner text hierarchy invalid at {profile}.");
+        UiStyle.FitWizardHeader(outer, header, title, subtitle, 116);
+        int titleHeight = TextRenderer.MeasureText("Agpqy", title.Font).Height +
+            title.Padding.Vertical + title.Margin.Vertical + 8;
+        int subtitleHeight = TextRenderer.MeasureText("Agpqy", subtitle.Font).Height +
+            subtitle.Padding.Vertical + subtitle.Margin.Vertical + 8;
+        if (header.RowStyles[0].Height < titleHeight ||
+            header.RowStyles[1].Height < subtitleHeight ||
+            outer.RowStyles[0].Height <
+                header.RowStyles[0].Height + header.RowStyles[1].Height +
+                header.Padding.Vertical + header.Margin.Vertical)
+            throw new InvalidOperationException(
+                $"Software updates subtitle clipped at {profile}.");
+    }
+
+    private static void CheckAdAdvancedOptions(Form form, string profile)
+    {
+        if (form is not AdConnectionStartDialog) return;
+        var all = Descendants(form).ToArray();
+        var options = all.OfType<CheckBox>()
+            .FirstOrDefault(x => x.Name == "AdAdvancedConnectionOptions");
+        var panel = all.OfType<TableLayoutPanel>()
+            .FirstOrDefault(x => x.Name == "AdAdvancedConnectionPanel");
+        var content = all.OfType<TableLayoutPanel>()
+            .FirstOrDefault(x => x.Name == "AdConnectionScrollableContent");
+        if (options is null || panel is null || content is null ||
+            content.Parent is not Panel scrolling || !scrolling.AutoScroll ||
+            options.Parent != panel || options.Dock != DockStyle.Fill ||
+            options.AutoEllipsis || options.AutoSize)
+            throw new InvalidOperationException(
+                $"Advanced connection options are not safely laid out at {profile}.");
+        if (!options.Checked) return;
+        int required = TextRenderer.MeasureText("Agpqy", options.Font).Height +
+            options.Padding.Vertical + options.Margin.Vertical + 10;
+        int rowsTotal = content.RowStyles.Cast<RowStyle>()
+            .Sum(row => (int)Math.Ceiling(row.Height));
+        if (panel.RowStyles[0].Height < required ||
+            content.RowStyles[2].Height < panel.RowStyles[0].Height + 100 ||
+            content.Height < rowsTotal)
+            throw new InvalidOperationException(
+                $"Advanced connection options lower line clipped at {profile}: " +
+                $"checkbox={options.Height}, header={panel.RowStyles[0].Height}, " +
+                $"content={content.Height}, needed={rowsTotal}.");
     }
 
     private static void CheckTimeZoneSelectors(Form form, string profile)
@@ -478,6 +558,8 @@ internal static class UiLayoutSmokeTests
                             "Missing/clipped live version " + versionLabel + " at " + profile.Name);
                 }
                 CheckWizardFooter(form, profile.Name);
+                CheckUpdaterHeader(form, profile.Name);
+                CheckAdAdvancedOptions(form, profile.Name);
                 CheckTimeZoneSelectors(form, profile.Name);
                 if (window.Name is "Campaign Wizard - images" or "Campaign Wizard - arrange")
                 {
