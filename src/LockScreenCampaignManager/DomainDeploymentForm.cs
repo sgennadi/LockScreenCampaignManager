@@ -491,6 +491,15 @@ internal sealed partial class DomainDeploymentForm : Form
 
     private async Task CheckRightsAsync()
     {
+        if (_project.TargetAssignments.Count > 0)
+        {
+            UiStyle.ApplyStatus(_rightsBanner,
+                "GROUP MATRIX: Each user/computer OU, group, rights and GPO " +
+                "are independently checked by Preview. No writes are performed.",
+                UiStatusKind.Neutral);
+            _progress.Text = "Group assignment rights are verified per-target at Preview.";
+            return;
+        }
         if (_running || !HasSelectedTargets) return;
         try
         {
@@ -599,14 +608,17 @@ internal sealed partial class DomainDeploymentForm : Form
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
-            (_project.ClientType != CampaignClientType.Executable ||
+            (_project.TargetAssignments.Count > 0 &&
+                _project.TargetAssignments.All(x => x.UsesScreenSaver) ||
+             _project.ClientType != CampaignClientType.Executable ||
              NativeClientAgent.CanDeployNativeClient);
         if (_gpoOperationsButton is not null)
         {
             // Read-only inventory and remote actions are useful directly from
             // the last Wizard page, not only the Advanced editor.
             _gpoOperationsButton.Visible = _advancedMode || _wizardStep == 2;
-            _gpoOperationsButton.Enabled = !_running && HasSelectedTargets;
+            _gpoOperationsButton.Enabled = !_running && HasSelectedTargets &&
+                _project.TargetAssignments.Count == 0;
         }
     }
 
