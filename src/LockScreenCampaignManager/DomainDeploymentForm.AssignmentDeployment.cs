@@ -183,6 +183,10 @@ internal sealed partial class DomainDeploymentForm
             var completeReports = new List<GroupConflictTarget>();
             var info = new StringBuilder();
             info.AppendLine("MULTI-GROUP CAMPAIGN PLAN - READ ONLY");
+            info.AppendLine("Content source: " + _project.ContentSource +
+                (_project.ContentSource == CampaignContentSource.SmbShare
+                    ? " | " + CampaignPayloadLocation.ValidateRoot(_project.ContentShareRoot)
+                    : " | selected DC SYSVOL"));
             info.AppendLine("Computer Lock Screen = computer GPO, user Screen Saver = user GPO.");
             info.AppendLine("A Both row creates TWO separately filtered GPOs.");
             info.AppendLine("The Screen Saver uses Windows built-in .scr, not campaign JPG files.");
@@ -214,7 +218,9 @@ internal sealed partial class DomainDeploymentForm
                                         domain, dc, ouDn = row.ComputerOuDn,
                                         groupDn = row.ComputerGroupDn,
                                         gpoName, clientType = project.ClientType.ToString(),
-                                        packagePath = package
+                                        packagePath = package,
+                                        contentSource = project.ContentSource.ToString(),
+                                        contentShareRoot = project.ContentShareRoot
                                     }, creds);
                                 return response.GetProperty("data").Clone();
                             }
@@ -378,6 +384,9 @@ internal sealed partial class DomainDeploymentForm
         var decision = MessageBox.Show(this,
             "CREATE " + planned.Length + " NEW, INDEPENDENT GPO(s)?\n\n" +
             "Lock Screen -> Computer Configuration; Screen Saver -> User Configuration.\n" +
+            "Campaign files: " + _project.ContentSource +
+            (_project.ContentSource == CampaignContentSource.SmbShare
+                ? " (existing dedicated SMB UNC share)" : " (SYSVOL)") + "\n" +
             "User GPOs do NOT use loopback. Each GPO is filtered to its exact " +
             "computer/user security group and linked only to the chosen OU.\n\n" +
             (summary.Length > 1700 ? summary[..1700] +
@@ -421,7 +430,9 @@ internal sealed partial class DomainDeploymentForm
                                     domain, dc, ouDn = entry.OuDn,
                                     groupDn = entry.GroupDn, gpoName = entry.GpoName,
                                     clientType = project.ClientType.ToString(),
-                                    packagePath = package
+                                    packagePath = package,
+                                    contentSource = project.ContentSource.ToString(),
+                                    contentShareRoot = project.ContentShareRoot
                                 }, credentials);
                             return response.GetProperty("data").Clone();
                         }
