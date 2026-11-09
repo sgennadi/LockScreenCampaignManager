@@ -144,7 +144,8 @@ internal sealed class ClientFeedbackPanel : UserControl
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Files", FillWeight = 95 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Registry", FillWeight = 80 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Task", FillWeight = 48 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Agent", FillWeight = 95 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Agent version", FillWeight = 104 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Client type", FillWeight = 92 });
         layout.Controls.Add(_grid, 0, 2);
         var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
@@ -204,7 +205,7 @@ internal sealed class ClientFeedbackPanel : UserControl
                 foreach (var row in snapshot.Rows)
                 {
                     int idx = _grid.Rows.Add(row.Computer, row.Condition, row.Stage, row.Image,
-                        row.LastSeen, row.Files, row.Registry, row.Task, row.Version);
+                        row.LastSeen, row.Files, row.Registry, row.Task, row.Version, row.ClientType);
                     _grid.Rows[idx].Tag = row.Computer;
                     if (row.Condition is "Needs attention" or "Error")
                         _grid.Rows[idx].DefaultCellStyle.ForeColor = Color.DarkRed;
@@ -364,10 +365,10 @@ internal sealed class ClientFeedbackPanel : UserControl
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
         {
-            var builder = new StringBuilder("Computer,Condition,Stage,Image,LastSeen,Files,Registry,Task,Agent\r\n");
+            var builder = new StringBuilder("Computer,Condition,Stage,Image,LastSeen,Files,Registry,Task,AgentVersion,ClientType\r\n");
             foreach (var row in _snapshot.Rows)
                 builder.AppendLine(string.Join(",", new[] { row.Computer, row.Condition, row.Stage,
-                    row.Image, row.LastSeen, row.Files, row.Registry, row.Task, row.Version }
+                    row.Image, row.LastSeen, row.Files, row.Registry, row.Task, row.Version, row.ClientType }
                     .Select(CsvValue)));
             File.WriteAllText(dialog.FileName, builder.ToString(), new UTF8Encoding(true));
             _message.Text = "Exported: " + _snapshot.Rows.Count + " rows.";
