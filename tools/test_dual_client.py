@@ -44,7 +44,7 @@ assert "CampaignTasksGone(ctx)" in native_health
 assert "act(scheduler, (dynamic)root)" in native_tasks
 assert "ParseClientType(String(args, \"clientType\"))" in plan
 assert "requestedClient" in plan and "package.ClientType" in plan
-assert '"ClassicStartupCmd"' in apply and '"PowerShellStartup"' in apply
+assert '"ClassicStartupExe"' in apply and '"PowerShellStartup"' in apply
 assert '"scripts.ini"' in apply and '"psscripts.ini"' in apply
 assert '"Start-LockScreen-Agent.cmd"' not in apply
 assert '0Parameters=--client-agent Install' in apply
