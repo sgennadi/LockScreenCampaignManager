@@ -217,6 +217,7 @@ public static class CampaignSchedule
 
     public static void Validate(CampaignProject project, bool requireImages)
     {
+        ArgumentNullException.ThrowIfNull(project);
         if (project.RequiresCampaignTypeChoice && !project.CampaignModeExplicit)
             throw new CampaignValidationException("Choose Lock Screen, Screen Saver or Both first.");
         if (string.IsNullOrWhiteSpace(project.Name))
@@ -226,43 +227,11 @@ public static class CampaignSchedule
         if (!string.IsNullOrEmpty(project.CompanyProfileId) &&
             !Guid.TryParse(project.CompanyProfileId, out _))
             throw new CampaignValidationException("Campaign company identity must be a GUID.");
-        if (project.LastImageHours < 1 || project.LastImageHours > 72)
-            throw new CampaignValidationException("Last image duration must be 1–72 hours.");
         if (project.ImagePaths is null || project.ImagePaths.Count > MaxImages)
-            throw new CampaignValidationException($"Maximum {MaxImages} images.");
-        if (!Enum.IsDefined(project.ScheduleMode))
-            throw new CampaignValidationException("Unrecognized schedule mode.");
-        if (project.ScheduleMode == CampaignScheduleMode.CustomDays &&
-            project.WeekdayMask is < 1 or > 127)
-            throw new CampaignValidationException("Choose at least one weekday.");
-        if (project.ScheduleMode == CampaignScheduleMode.EveryInterval &&
-            project.IntervalMinutes is < 1 or > MaxIntervalMinutes)
-            throw new CampaignValidationException(
-                "Image change interval must be between 00:01 and 168:00.");
-        if (project.SpecificDatesLocal is null ||
-            project.SpecificDatesLocal.Count > MaxImages)
-            throw new CampaignValidationException("Invalid list of specific dates.");
-        if (project.ScheduleMode == CampaignScheduleMode.SpecificDates &&
-            project.SpecificDatesLocal.Count != project.ImagePaths.Count)
-            throw new CampaignValidationException(
-                "Specific dates require exactly one date/time per image.");
-        if (project.ScheduleMode == CampaignScheduleMode.SpecificDates &&
-            project.ImagePaths.Count > 0 &&
-            DateTime.SpecifyKind(project.SpecificDatesLocal[0], DateTimeKind.Unspecified) !=
-                DateTime.SpecifyKind(project.StartLocal, DateTimeKind.Unspecified))
-            throw new CampaignValidationException(
-                "The campaign start must equal the first scheduled image date/time.");
-        DateTime previous = DateTime.MinValue;
-        for (int i = 0; i < project.ImagePaths.Count; i++)
-        {
-            DateTime date = At(project, i);
-            if (date <= previous || date < project.StartLocal)
-                throw new CampaignValidationException(
-                    "Scheduled dates must increase and cannot precede the campaign start.");
-            if (date > project.StartLocal.AddYears(2))
-                throw new CampaignValidationException("Campaign schedule exceeds two years.");
-            previous = date;
-        }
+            throw new CampaignValidationException("Maximum " + MaxImages + " images.");
+
+        // OU/group and Screen Saver settings must always be valid, even when
+        // no Lock Screen image package will be created.
         CampaignTargetAssignments.Validate(project);
         if (!Enum.IsDefined(project.EffectiveCampaignMode))
             throw new CampaignValidationException("Choose Lock Screen, Screen Saver or Both.");
@@ -272,6 +241,7 @@ public static class CampaignSchedule
             (row.UsesScreenSaver && chosenMode == CampaignTargetMode.LockScreen)))
             throw new CampaignValidationException(
                 "Group assignments include a different target type. Choose Both or edit group assignments.");
+
         bool needsImages = chosenMode is CampaignTargetMode.LockScreen or
             CampaignTargetMode.Both ||
             project.TargetAssignments.Any(x => x.UsesLockScreen);
@@ -280,27 +250,73 @@ public static class CampaignSchedule
                 project.TargetAssignments.Any(x => x.UsesLockScreen)
                     ? "Lock Screen assignments need at least one image."
                     : "Add at least one image.");
+
+        // A Screen Saver-only user GPO does not use the image schedule.
+        // Preserve older image paths and dates for a later mode switch, but
+        // do not reject or access those unused local files during validation.
+        if (needsImages)
+        {
+            if (project.LastImageHours < 1 || project.LastImageHours > 72)
+                throw new CampaignValidationException("Last image duration must be 1–72 hours.");
+            if (!Enum.IsDefined(project.ScheduleMode))
+                throw new CampaignValidationException("Unrecognized schedule mode.");
+            if (project.ScheduleMode == CampaignScheduleMode.CustomDays &&
+                project.WeekdayMask is < 1 or > 127)
+                throw new CampaignValidationException("Choose at least one weekday.");
+            if (project.ScheduleMode == CampaignScheduleMode.EveryInterval &&
+                project.IntervalMinutes is < 1 or > MaxIntervalMinutes)
+                throw new CampaignValidationException(
+                    "Image change interval must be between 00:01 and 168:00.");
+            if (project.SpecificDatesLocal is null ||
+                project.SpecificDatesLocal.Count > MaxImages)
+                throw new CampaignValidationException("Invalid list of specific dates.");
+            if (project.ScheduleMode == CampaignScheduleMode.SpecificDates &&
+                project.SpecificDatesLocal.Count != project.ImagePaths.Count)
+                throw new CampaignValidationException(
+                    "Specific dates require exactly one date/time per image.");
+            if (project.ScheduleMode == CampaignScheduleMode.SpecificDates &&
+                project.ImagePaths.Count > 0 &&
+                DateTime.SpecifyKind(project.SpecificDatesLocal[0], DateTimeKind.Unspecified) !=
+                    DateTime.SpecifyKind(project.StartLocal, DateTimeKind.Unspecified))
+                throw new CampaignValidationException(
+                    "The campaign start must equal the first scheduled image date/time.");
+            DateTime previous = DateTime.MinValue;
+            for (int i = 0; i < project.ImagePaths.Count; i++)
+            {
+                DateTime date = At(project, i);
+                if (date <= previous || date < project.StartLocal)
+                    throw new CampaignValidationException(
+                        "Scheduled dates must increase and cannot precede the campaign start.");
+                if (date > project.StartLocal.AddYears(2))
+                    throw new CampaignValidationException("Campaign schedule exceeds two years.");
+                previous = date;
+            }
+        }
         if (project.EnableFeedback)
         {
             FeedbackPath.ValidateRoot(project.FeedbackShare);
             if (project.FeedbackIntervalMinutes is < 5 or > 60)
                 throw new CampaignValidationException("Feedback interval must be 5–60 minutes.");
         }
+
         var zone = TimeZoneInfo.FindSystemTimeZoneById(project.TimeZoneId);
+        if (!needsImages) return;
         foreach (var time in Enumerable.Range(0, project.ImagePaths.Count).Select(i => At(project, i))
                      .Append(End(project)))
         {
             if (zone.IsInvalidTime(time))
-                throw new CampaignValidationException($"Invalid local time due to DST: {time:yyyy-MM-dd HH:mm}");
+                throw new CampaignValidationException("Invalid local time due to DST: " +
+                    time.ToString("yyyy-MM-dd HH:mm"));
             if (zone.IsAmbiguousTime(time))
-                throw new CampaignValidationException($"Ambiguous local time due to DST: {time:yyyy-MM-dd HH:mm}");
+                throw new CampaignValidationException("Ambiguous local time due to DST: " +
+                    time.ToString("yyyy-MM-dd HH:mm"));
         }
         foreach (var path in project.ImagePaths)
         {
             if (!File.Exists(path)) throw new FileNotFoundException("Image not found", path);
             var ext = Path.GetExtension(path).ToLowerInvariant();
             if (ext is not (".png" or ".jpg" or ".jpeg" or ".bmp"))
-                throw new CampaignValidationException($"Unsupported image format: {path}");
+                throw new CampaignValidationException("Unsupported image format: " + path);
         }
     }
 }
