@@ -108,6 +108,11 @@ internal static class NativeGpoDeploymentApply
                     out long groupType) || (groupType & 0x80000000L) == 0)
                 throw new InvalidDataException("Selected group is not security-enabled.");
             _ = One(ldap, ouDn, "(objectClass=organizationalUnit)", "distinguishedName");
+            bool labCanary = clientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction;
+            if (labCanary)
+                ValidateLabCanaryGroup(ldap, groupDn, ouDn,
+                    plan.GetProperty("directGroupMembers").GetInt32());
             var currentGpos = NativeGpoLifecycleList.SearchPaged(ldap,
                 "CN=Policies,CN=System," + baseDn,
                 "(objectClass=groupPolicyContainer)", 2500,
@@ -148,6 +153,11 @@ internal static class NativeGpoDeploymentApply
                 RestrictApplyToGroup(ldap, gpoDn, selectedSid);
                 RegisterStartup(ldap, gpoDn, actualDc, domain,
                     created.Value, clientScript, clientType);
+                // Membership can drift while files and GPO are being staged.
+                // Check once more immediately before linking into the OU.
+                if (labCanary)
+                    ValidateLabCanaryGroup(ldap, groupDn, ouDn,
+                        plan.GetProperty("directGroupMembers").GetInt32());
                 LinkNewGpo(ldap, ouDn, gpoDn);
                 linked = true;
                 return JsonSerializer.SerializeToElement(new
@@ -467,6 +477,42 @@ internal static class NativeGpoDeploymentApply
                     "(objectClass=organizationalUnit)", "gPLink"), "gPLink"),
                 StringComparison.Ordinal))
             throw new IOException("New OU GPO link could not be verified.");
+    }
+
+    private static void ValidateLabCanaryGroup(LdapConnection ldap,
+        string groupDn, string targetOuDn, int expectedDirectMembers)
+    {
+        // This temporary, explicitly opted-in deployment method is only
+        // suitable for a few directly listed test computers. Reject any
+        // nested group, out-of-OU computer, or size drift. This is not proof
+        // of the full effective token, so it never enables production mode.
+        if (expectedDirectMembers is < 0 or > 5)
+            throw new InvalidOperationException(
+                "EXE lab canary accepts no more than 5 directly assigned computers.");
+        var group = One(ldap, groupDn, "(objectClass=group)",
+            "sAMAccountName", "member");
+        string sam = NativeAdDiscovery.Attr(group, "sAMAccountName");
+        if (sam.Equals("Domain Computers", StringComparison.OrdinalIgnoreCase) ||
+            sam.Equals("Authenticated Users", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "EXE lab canary refuses broad built-in computer groups.");
+        int actual = NativeGpoDeploymentPlan.CountDirectMembers(group);
+        if (actual != expectedDirectMembers)
+            throw new InvalidOperationException(
+                "Lab canary group membership changed after Preview.");
+        if (!group.Attributes.Contains("member")) return;
+        foreach (object value in group.Attributes["member"]!)
+        {
+            string memberDn = Convert.ToString(value,
+                CultureInfo.InvariantCulture) ?? "";
+            if (!memberDn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase) ||
+                memberDn.Length > 2048 ||
+                !NativeGpoConflictScan.Inside(memberDn, targetOuDn))
+                throw new InvalidOperationException(
+                    "EXE lab canary group contains an out-of-scope object.");
+            _ = One(ldap, memberDn, "(objectClass=computer)",
+                "distinguishedName");
+        }
     }
 
     private static SearchResultEntry One(LdapConnection ldap,
