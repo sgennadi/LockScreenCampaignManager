@@ -63,12 +63,12 @@ public sealed partial class MainForm
         return wizard;
     }
 
-    private sealed class CampaignWizardDialog : Form
+    private sealed partial class CampaignWizardDialog : Form
     {
         private static readonly string[] StepNames =
         [
-            "1  AD connection", "2  Images", "3  Arrange",
-            "4  Schedule", "5  Save / Skip", "6  Deploy"
+            "1  AD connection", "2  Campaign type", "3  Images",
+            "4  Arrange", "5  Schedule", "6  Save / Skip", "7  Deploy"
         ];
         private readonly MainForm _owner;
         private readonly TableLayoutPanel _root = new();
@@ -76,7 +76,7 @@ public sealed partial class MainForm
         private readonly TableLayoutPanel _header = new();
         private readonly Label _heading = new();
         private readonly Label _subheading = new();
-        private readonly Label[] _rail = new Label[6];
+        private readonly Label[] _rail = new Label[7];
         private readonly Panel _host = new();
         private readonly Button _back = new();
         private readonly Button _next = new();
@@ -163,7 +163,7 @@ public sealed partial class MainForm
             _heading.AutoEllipsis = true;
             _subheading.Name = "CampaignWizardHeaderSubtitle";
             _subheading.Dock = DockStyle.Fill;
-            _subheading.Text = "Step 1 of 6  -  Choose how to connect to Active Directory";
+            _subheading.Text = "Step 1 of 7  -  Choose how to connect to Active Directory";
             _subheading.TextAlign = ContentAlignment.MiddleLeft;
             _subheading.ForeColor = Color.FromArgb(226, 238, 255);
             _subheading.Font = new Font("Segoe UI", 10f);
@@ -187,12 +187,12 @@ public sealed partial class MainForm
             var rail = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, AutoScroll = true,
-                ColumnCount = 1, RowCount = 7,
+                ColumnCount = 1, RowCount = 8,
                 BackColor = UiStyle.SoftBlue,
                 Padding = new Padding(9, 16, 9, 10),
                 Margin = new Padding(0, 0, 7, 0)
             };
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
             {
                 rail.RowStyles.Add(new RowStyle(SizeType.Absolute, 59));
                 var label = new Label
@@ -215,7 +215,7 @@ public sealed partial class MainForm
                 Font = new Font("Segoe UI", 9f),
                 Padding = new Padding(9, 12, 4, 4),
                 AutoEllipsis = false
-            }, 0, 6);
+            }, 0, 7);
             _root.Controls.Add(rail, 0, 1);
 
             _host.Dock = DockStyle.Fill;
@@ -263,7 +263,7 @@ public sealed partial class MainForm
             _back.Tag = "NoIcon";
             _back.Dock = DockStyle.Fill;
             _back.Margin = new Padding(4, 2, 4, 2);
-            _back.Click += (_, _) => { _step = Math.Max(0, _step - 1); RenderPage(); };
+            _back.Click += (_, _) => { _step = _step == 5 && !NeedsLockImages ? 1 : Math.Max(0, _step - 1); RenderPage(); };
             footer.Controls.Add(_back, 2, 0);
 
             _next.Name = "CampaignWizardContinueAction";
@@ -324,7 +324,7 @@ public sealed partial class MainForm
 
         internal void ShowPageForSmokeTest(int page)
         {
-            _step = Math.Clamp(page, 0, 5);
+            _step = Math.Clamp(page, 0, 6);
             RenderPage();
         }
 
@@ -354,7 +354,7 @@ public sealed partial class MainForm
             if (_host.IsDisposed) return;
             if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
                 && !page.IsDisposed)
-                page.Height = Math.Max(_step is 1 or 2 ? 720 : 555,
+                page.Height = Math.Max(_step is 2 or 3 ? 720 : 555,
                     _host.ClientSize.Height - _host.Padding.Vertical);
         }
 
@@ -423,7 +423,7 @@ public sealed partial class MainForm
                     _host.Controls.Remove(old);
                     old.Dispose();
                 }
-                _subheading.Text = "Step " + (_step + 1) + " of 6  -  " + StepNames[_step][3..];
+                _subheading.Text = "Step " + (_step + 1) + " of 7  -  " + StepNames[_step][3..];
                 for (int i = 0; i < _rail.Length; i++)
                 {
                     _rail[i].BackColor = i == _step ? UiStyle.Accent : UiStyle.SoftBlue;
@@ -431,7 +431,7 @@ public sealed partial class MainForm
                         i < _step ? UiStyle.Green : UiStyle.Navy;
                 }
 
-                bool imagePage = _step is 1 or 2;
+                bool imagePage = _step is 2 or 3;
                 var page = new TableLayoutPanel
                 {
                     Dock = DockStyle.Top,
@@ -454,6 +454,7 @@ public sealed partial class MainForm
                 string[] titles =
                 [
                     "Connect to Active Directory",
+                    "Choose campaign type",
                     "Choose your campaign images",
                     "Arrange the image order",
                     "Choose days and times",
@@ -463,6 +464,7 @@ public sealed partial class MainForm
                 string[] descriptions =
                 [
                     "Choose a Windows AD connection or prepare the campaign offline. No AD or GPO changes are made during sign-in.",
+                    "Choose Lock Screen, Screen Saver or Both before images. This determines which pages are needed.",
                     "Select multiple image files or import a complete folder. You can add more images before continuing.",
                     "Place images in the desired order. The first image is assigned to the first scheduled change.",
                     "Set the start date, weekdays, exact dates and change time. Review the schedule before saving.",
@@ -514,30 +516,35 @@ public sealed partial class MainForm
                         RenderConnection(actions, body, status);
                         break;
                     case 1:
-                        RenderImages(actions, body, status, false, selected);
+                        RenderCampaignType(actions, body, status);
                         break;
                     case 2:
-                        RenderImages(actions, body, status, true, selected);
+                        RenderImages(actions, body, status, false, selected);
                         break;
                     case 3:
-                        RenderSchedule(actions, body, status);
+                        RenderImages(actions, body, status, true, selected);
                         break;
                     case 4:
-                        RenderSave(actions, body, status);
+                        RenderSchedule(actions, body, status);
                         break;
                     case 5:
+                        RenderSave(actions, body, status);
+                        break;
+                    case 6:
                         RenderDeploy(actions, body, status);
                         break;
                 }
                 _back.Enabled = _step > 0;
-                _next.Text = _step == 5 && _deployChoice?.Checked == true
-                    ? "Deploy GPO..." : _step == 5 ? "Finish" :
-                    _step == 4 && _skipProjectSave ? "Continue (no save)" :
-                    _step == 4 && !_saved ? "Save & Next" :
+                _next.Text = _step == 6 && _deployChoice?.Checked == true
+                    ? "Deploy GPO..." : _step == 6 ? "Finish" :
+                    _step == 5 && _skipProjectSave ? "Continue (no save)" :
+                    _step == 5 && !_saved ? "Save & Next" :
                     _step == 0 ? "Continue" : "Next";
-                _next.Enabled = _step is 0 or 5 || _owner._project.ImagePaths.Count > 0;
+                _next.Enabled = _step is 0 or 1 or 6 || !NeedsLockImages ||
+                    _owner._project.ImagePaths.Count > 0;
                 _footnote.Text = _step == 0 ? "AD sign-in is optional" :
-                    _step >= 4 && _skipProjectSave && !_saved
+                    !NeedsLockImages ? "Screen Saver: images not needed" :
+                    _step >= 5 && _skipProjectSave && !_saved
                         ? "Local project not saved"
                         : _owner._project.ImagePaths.Count + " image(s) selected";
                 _host.ResumeLayout(true);
@@ -1123,7 +1130,7 @@ public sealed partial class MainForm
             };
             _deployChoice.CheckedChanged += (_, _) =>
             {
-                if (_step == 5)
+                if (_step == 6)
                     _next.Text = _deployChoice.Checked ? "Deploy GPO..." : "Finish";
             };
             options.Controls.Add(_deployChoice, 0, 0);
@@ -1155,37 +1162,28 @@ public sealed partial class MainForm
                     if (_connectChoice?.Checked == true && !_owner.AdReady)
                     {
                         _owner.ConnectAndReadAd();
-                        if (!_owner.AdReady)
-                        {
-                            RenderPage();
-                            return;
-                        }
+                        if (!_owner.AdReady) { RenderPage(); return; }
                     }
                     break;
                 case 1:
+                    if (!Enum.IsDefined(_owner._project.EffectiveCampaignMode))
+                    {
+                        MessageBox.Show(this, "Choose Lock Screen, Screen Saver or Both.",
+                            "Campaign Wizard", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    break;
                 case 2:
-                    if (_owner._project.ImagePaths.Count == 0)
+                case 3:
+                    if (NeedsLockImages && _owner._project.ImagePaths.Count == 0)
                     {
                         MessageBox.Show(this, "Add at least one image to continue.",
                             "Campaign Wizard", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
                     break;
-                case 3:
-                    try
-                    {
-                        _owner.ReadControls();
-                        CampaignSchedule.Validate(_owner._project, requireImages: true);
-                    }
-                    catch (Exception ex) when (ex is CampaignValidationException or FileNotFoundException)
-                    {
-                        MessageBox.Show(this, ex.Message, "Check schedule",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    }
-                    break;
                 case 4:
-                    // Skip saving never bypasses image/schedule validation.
+                case 5:
                     try
                     {
                         _owner.ReadControls();
@@ -1197,24 +1195,21 @@ public sealed partial class MainForm
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
-                    if (ShouldSaveCampaignProject(_saved, _skipProjectSave))
+                    if (_step == 5 && ShouldSaveCampaignProject(_saved, _skipProjectSave))
                     {
                         if (!_owner.TrySaveProject()) return;
                         _saved = true;
                     }
                     break;
-                case 5:
-                    if (_deployChoice?.Checked == true)
-                    {
-                        Deploy();
-                        return;
-                    }
+                case 6:
+                    if (_deployChoice?.Checked == true) { Deploy(); return; }
                     DialogResult = DialogResult.OK;
                     Close();
                     return;
             }
-            _step = Math.Min(5, _step + 1);
+            // Screen Saver-only has no image selection, ordering or JPEG
+            // schedule. Skip these pages and restore Type with Back.
+            _step = _step == 1 && !NeedsLockImages ? 5 : Math.Min(6, _step + 1);
             RenderPage();
-        }
-    }
+        }    }
 }
