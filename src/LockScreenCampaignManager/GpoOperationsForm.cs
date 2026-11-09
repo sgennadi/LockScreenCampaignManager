@@ -259,6 +259,7 @@ internal sealed partial class GpoOperationsForm : Form
         _lifecycleAction.SelectedIndexChanged += (_, _) => InvalidatePlans();
         actions.Controls.Add(_lifecycleAction);
         _lifecyclePreview = ActionButton("Preview", () => _ = PreviewLifecycleAsync(), 145);
+        _lifecyclePreview.Name = "GpoLifecyclePreviewButton";
         // Never send a routine missing-selection prompt to universal diagnostics.
         _lifecyclePreview.Enabled = false;
         actions.Controls.Add(_lifecyclePreview);
