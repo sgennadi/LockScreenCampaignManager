@@ -324,12 +324,22 @@ internal static partial class NativeClientAgent
         FileSystemAclExtensions.SetAccessControl(new DirectoryInfo(path), acl);
     }
 
+    // Explicit native 64-bit HKLM policy view even for win-x86 clients
+    // running under WOW64 on a 64-bit computer.
+    internal static RegistryView PreferredRegistryView(bool is64BitOs) =>
+        is64BitOs ? RegistryView.Registry64 : RegistryView.Registry32;
+
+    private static RegistryKey OpenNativeHive() =>
+        RegistryKey.OpenBaseKey(RegistryHive.LocalMachine,
+            PreferredRegistryView(Environment.Is64BitOperatingSystem));
+
     private static void EnsureNoOtherOwner(Context ctx)
     {
         OwnerRecord? owner = ReadOptional<OwnerRecord>(ctx.OwnerPath);
         if (owner is not null && owner.CampaignId != ctx.Id)
             throw new InvalidOperationException("Another campaign owns the lock screen.");
-        using var key = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+        using var hive = OpenNativeHive();
+        using var key = hive.OpenSubKey(RegistryPath, writable: false);
         string current = Convert.ToString(key?.GetValue("LockScreenImage", "",
             RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
         if (current.StartsWith(ctx.Base + "\\", StringComparison.OrdinalIgnoreCase) &&
@@ -453,7 +463,8 @@ internal static partial class NativeClientAgent
 
     private static void VerifySupportedWindows()
     {
-        using var key = Registry.LocalMachine.OpenSubKey(
+        using var hive = OpenNativeHive();
+        using var key = hive.OpenSubKey(
             @"SOFTWARE\Microsoft\Windows NT\CurrentVersion") ??
             throw new InvalidOperationException("Windows version could not be read.");
         if (!int.TryParse(Convert.ToString(key.GetValue("CurrentBuildNumber")),
@@ -486,7 +497,8 @@ internal static partial class NativeClientAgent
             VerifyAndCopy(source, selected, slide.Sha256, 30L * 1_048_576);
         }
 
-        using var key = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+        using var hive = OpenNativeHive();
+        using var key = hive.OpenSubKey(RegistryPath, writable: false);
         string current = Convert.ToString(key?.GetValue("LockScreenImage", "",
             RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
         BackupRecord? backup = ReadBackup(ctx);
@@ -503,7 +515,7 @@ internal static partial class NativeClientAgent
         if (!File.Exists(ctx.OwnerPath))
             WriteNew(ctx.OwnerPath, new OwnerRecord(ctx.Id,
                 DateTimeOffset.UtcNow.ToString("O")));
-        using var update = Registry.LocalMachine.CreateSubKey(RegistryPath,
+        using var update = hive.CreateSubKey(RegistryPath,
             writable: true) ?? throw new IOException("Cannot open lock-screen policy.");
         update.SetValue("LockScreenImage", selected, RegistryValueKind.String);
         update.SetValue("NoChangingLockScreen", 1, RegistryValueKind.DWord);
@@ -572,7 +584,8 @@ internal static partial class NativeClientAgent
         bool? registryMatches = null;
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(RegistryPath, writable: false);
+            using var hive = OpenNativeHive();
+            using var key = hive.OpenSubKey(RegistryPath, writable: false);
             currentImage = Convert.ToString(key?.GetValue("LockScreenImage", "",
                 RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
             if (index >= 0)
