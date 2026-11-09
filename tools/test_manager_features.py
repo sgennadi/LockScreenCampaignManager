@@ -92,7 +92,8 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('Agent Management / Live', manager)
         self.assertIn('SetupAgentManagement(toolbar)', manager)
         self.assertIn('AgentComputerList()', manager)
-        self.assertIn('await ProbeVisibleAgentHostsAsync()', manager)
+        self.assertIn('_ = ProbeVisibleAgentHostsAsync()', manager)
+        self.assertIn('await RefreshAgentEvidenceAsync()', manager)
         self.assertIn('PreviewPushAsync()', manager)
         self.assertIn('ExecutePushAsync()', manager)
         self.assertIn('SelectReachableAgents', live)
@@ -510,7 +511,7 @@ class ClientManagementContracts(unittest.TestCase):
         assert "Campaign Wizard - deploy" in smoke
         immediate = read("NativeImmediateActions.cs")
         runner = read("DomainPowerShellRunner.cs")
-        assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
+        assert 'mode is ("List" or "Inventory" or "Preview" or "VerifyCleanup")' in runner
         assert 'LegacyPlanHash' in immediate
         assert 'Task Scheduler RPC' in immediate
         deploy_plan = read("NativeGpoDeploymentPlan.cs")
