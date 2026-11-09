@@ -8,6 +8,7 @@ internal sealed partial class GpoOperationsForm
     private readonly List<PcRow> _agentInventory = new();
     private readonly TextBox _agentSearch = new();
     private readonly CheckBox _agentReachableOnly = new();
+    private readonly ComboBox _agentActivityFilter = new();
     private readonly CheckBox _agentAutoProbe = new();
     private readonly Label _agentProbeStatus = new();
     private readonly TextBox _agentSelectedDetails = new();
@@ -33,6 +34,18 @@ internal sealed partial class GpoOperationsForm
         _agentSearch.Margin = new Padding(5, 7, 7, 3);
         _agentSearch.TextChanged += (_, _) => DrawAgentInventory();
         toolbar.Controls.Add(_agentSearch);
+
+        _agentActivityFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+        _agentActivityFilter.Width = 189;
+        _agentActivityFilter.Items.AddRange(new object[] {
+            "All eligible", "Active <= 30 days", "Active <= 60 days",
+            "Active <= 90 days", "Active <= 180 days", "Active <= 365 days",
+            "Older than 90 days", "Never / unknown", "Disabled computers"
+        });
+        _agentActivityFilter.SelectedIndex = 3; // Exclude inactive/disabled by default.
+        _agentActivityFilter.Margin = new Padding(5, 7, 7, 3);
+        _agentActivityFilter.SelectedIndexChanged += (_, _) => DrawAgentInventory();
+        toolbar.Controls.Add(_agentActivityFilter);
 
         _agentReachableOnly.Text = "RPC reachable only";
         _agentReachableOnly.AutoSize = true;
@@ -67,19 +80,27 @@ internal sealed partial class GpoOperationsForm
     {
         var panel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = Padding.Empty
+            Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = Padding.Empty
         };
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 49));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 47));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
+        _agentReportsStatus.Dock = DockStyle.Fill;
+        _agentReportsStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _agentReportsStatus.AutoEllipsis = true;
+        UiStyle.ApplyStatus(_agentReportsStatus,
+            "OU / group / feedback statistics: load verified AD inventory.",
+            UiStatusKind.Neutral);
+        panel.Controls.Add(_agentReportsStatus, 0, 0);
         _agentProbeStatus.Dock = DockStyle.Fill;
         _agentProbeStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentProbeStatus.AutoEllipsis = true;
         UiStyle.ApplyStatus(_agentProbeStatus,
             "Load AD computers, then check RPC reachability. TCP/135 is not proof that the agent is running.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentProbeStatus, 0, 0);
-        panel.Controls.Add(_computers, 0, 1);
+        panel.Controls.Add(_agentProbeStatus, 0, 1);
+        panel.Controls.Add(_computers, 0, 2);
         _agentSelectedDetails.Dock = DockStyle.Fill;
         _agentSelectedDetails.Multiline = true;
         _agentSelectedDetails.ReadOnly = true;
@@ -87,7 +108,7 @@ internal sealed partial class GpoOperationsForm
         _agentSelectedDetails.BackColor = UiStyle.Surface;
         _agentSelectedDetails.Font = new Font("Segoe UI", 9f);
         _agentSelectedDetails.Text = "Select a verified computer to see RPC hints, client-reported health and latest command outcome.";
-        panel.Controls.Add(_agentSelectedDetails, 0, 2);
+        panel.Controls.Add(_agentSelectedDetails, 0, 3);
         return panel;
     }
 
@@ -125,9 +146,12 @@ internal sealed partial class GpoOperationsForm
         var selected = _computers.CheckedItems.Cast<PcRow>()
             .Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         string? highlighted = (_computers.SelectedItem as PcRow)?.Name;
+        var activity = _agentActivityFilter.SelectedItem as string ?? "Active <= 90 days";
+        var observedUtc = DateTimeOffset.UtcNow;
         var visible = _agentInventory.Where(x =>
                 (query.Length == 0 || x.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                  x.Sam.Contains(query, StringComparison.OrdinalIgnoreCase)) &&
+                MatchesAdActivity(x, activity, observedUtc) &&
                 (!_agentReachableOnly.Checked || x.RpcReachable == true))
             .OrderByDescending(x => x.RpcReachable == true)
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -149,6 +173,7 @@ internal sealed partial class GpoOperationsForm
         if (!selected.SetEquals(_computers.CheckedItems.Cast<PcRow>().Select(x => x.Name)))
             InvalidatePlans();
         DisplaySelectedAgentDetails();
+        UpdateAgentOverview(visible.Length);
     }
 
     private void SelectReachableAgents()
