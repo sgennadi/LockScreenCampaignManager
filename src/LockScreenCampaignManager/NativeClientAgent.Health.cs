@@ -142,6 +142,8 @@ internal static partial class NativeClientAgent
             });
         ReportSafe(ctx, "Completed");
         UnregisterCampaignTasks(ctx);
+        if (!CampaignTasksGone(ctx))
+            throw new IOException("Native client scheduled tasks were not removed.");
 
         // Windows keeps an executable mapped until the final process exits.
         // Unlike PS1, removing the running EXE synchronously cannot work.
@@ -199,6 +201,9 @@ internal static partial class NativeClientAgent
         OwnerRecord? owner = ReadOptional<OwnerRecord>(ctx.OwnerPath);
         if (owner is not null && owner.CampaignId == ctx.Id)
             throw new InvalidOperationException("Cleanup owner was not released.");
+        if (!CampaignTasksGone(ctx))
+            throw new InvalidOperationException(
+                "Scheduled tasks still exist; native cleanup receipt cannot be issued.");
 
         if (restored && backup is not null)
         {
