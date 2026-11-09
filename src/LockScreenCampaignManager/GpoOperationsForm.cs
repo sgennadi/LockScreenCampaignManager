@@ -50,13 +50,17 @@ internal sealed partial class GpoOperationsForm : Form
         public override string ToString() => $"{Name}  |  {CampaignId}  |  {Links} link(s)  |  {Id}";
     }
     private sealed record PcRow(string Name, string Sam,
-        bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null)
+        bool? RpcReachable = null, DateTimeOffset? CheckedUtc = null,
+        AgentReportEvidence? AgentReport = null, AgentTaskOutcome? LastAction = null)
     {
-        public override string ToString() => $"{Name}   ({Sam})" +
-            (RpcReachable.HasValue
-                ? (RpcReachable.Value ? "   |   RPC 135: reachable" : "   |   RPC 135: not reachable") +
-                  "   |   checked " + CheckedUtc?.ToLocalTime().ToString("HH:mm:ss")
-                : "   |   RPC: not checked");
+        public override string ToString() =>
+            $"{Name}   |   RPC: " +
+            (RpcReachable is null ? "unknown" : RpcReachable.Value ? "reachable" : "unreachable") +
+            "   |   Agent: " + (AgentReport?.Condition ?? "not checked") +
+            "   |   Version: " + (AgentReport?.Version ?? "—") +
+            "   |   Last report: " +
+            (AgentReport?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—") +
+            "   |   Last command: " + (LastAction?.Display ?? "—");
     }
 
     internal GpoOperationsForm(string domain, string dc, string ouDn, string groupDn,
@@ -202,6 +206,9 @@ internal sealed partial class GpoOperationsForm : Form
                 _clientHealth.SetSelectedManagedCampaign(managed.CampaignId);
             _deviceDashboard?.SetManagedCampaign(managed?.CampaignId, managed?.Id);
             _dcConsistency?.InvalidateSelectedCampaign();
+            InvalidateAgentEvidence();
+            if (_agentTabControl?.SelectedTab == _agentManagementTab)
+                _ = RefreshAgentEvidenceAsync();
         };
         layout.Controls.Add(_policies, 0, 1);
         _lifecycleInfo.Dock = DockStyle.Fill;
@@ -297,6 +304,7 @@ internal sealed partial class GpoOperationsForm : Form
         _computers.CheckOnClick = true;
         _computers.HorizontalScrollbar = true;
         _computers.ItemCheck += (_, _) => BeginInvoke((Action)InvalidatePlans);
+        _computers.SelectedIndexChanged += (_, _) => DisplaySelectedAgentDetails();
         layout.Controls.Add(AgentComputerList(), 0, 1);
         _pushInfo.Dock = DockStyle.Fill;
         _pushInfo.Multiline = true;
@@ -608,7 +616,12 @@ internal sealed partial class GpoOperationsForm : Form
             // to navigate to another panel. No remote task is created.
             if (_agentTabControl?.SelectedTab == _agentManagementTab &&
                 _agentInventory.Count > 0)
-                await ProbeVisibleAgentHostsAsync();
+            {
+                // SMB feedback and RPC reachability are unrelated signals.
+                // Refresh reports first; reachability continues independently.
+                await RefreshAgentEvidenceAsync();
+                _ = ProbeVisibleAgentHostsAsync();
+            }
         }
         catch (Exception ex) { Fail(ex, "List eligible computers"); }
     }
@@ -760,6 +773,7 @@ internal sealed partial class GpoOperationsForm : Form
                         approvedGmsaRoute)
                     : (0, 0, 0, 0, true);
             _pushInfo.Text = Pretty(data);
+            UpdateAgentTaskOutcomes(data, mode);
             _status.Text = tracked.Tracked
                 ? $"Remote task attempted. Offline queued: {tracked.Offline}; " +
                   $"awaiting healthy feedback: {tracked.AwaitingHealth + tracked.AwaitingTask}; " +
