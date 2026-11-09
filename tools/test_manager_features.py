@@ -149,6 +149,30 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('_status.Text = "Select a managed GPO first (no action performed).";', manager)
         self.assertIn('Bug #11 regression: missing GPO selection', layout)
 
+    def test_screen_saver_ms_gpreg_nul_termination_and_binary_readback(self):
+        # The previous preview could emit syntactically plausible text that
+        # violates the MS-GPREG UTF-16 NUL-terminated identifier contract.
+        policy = read("NativeUserScreenSaverGpo.cs")
+        tests = read("SelfTests.cs")
+        self.assertIn('Text("[" + key + "\\\\0;" + field + "\\\\0;")', policy)
+        self.assertIn("ParseUserRegistryPol(byte[] bytes)", policy)
+        self.assertIn("VerifyScreenSaverRegistryPol(actualPolicyBytes", policy)
+        self.assertIn("VerifyScreenSaverRegistryPol(registry, saver, seconds, secure)", policy)
+        self.assertIn('writer.Write(Encoding.ASCII.GetBytes("PReg"))', policy)
+        self.assertIn('RequireUtf16(\'[\')', policy)
+        self.assertIn("string key = ReadNullTerminatedUnicode()", policy)
+        self.assertIn("string name = ReadNullTerminatedUnicode()", policy)
+        self.assertIn("kind != 1", policy)
+        self.assertIn("dataSize % 2", policy)
+        self.assertIn("values.Count != 4", policy)
+        self.assertIn("UpgradeFreshUserGptIni(gptText)", policy)
+        self.assertIn("ZeroVersion.Matches(original).Count != 1", policy)
+        self.assertIn("MS-GPREG rejects missing key NUL", tests)
+        self.assertIn("MS-GPREG rejects missing value NUL", tests)
+        self.assertIn("MS-GPREG rejects truncated last record", tests)
+        self.assertIn("MS-GPREG rejects unexpected REG_DWORD type", tests)
+        self.assertIn("User GPO GPT upgrade preserves following lines", tests)
+
     def test_group_mode_assignments_and_separate_user_gpo(self):
         model = read("CampaignModels.cs")
         assignment = read("CampaignTargetAssignments.cs")
