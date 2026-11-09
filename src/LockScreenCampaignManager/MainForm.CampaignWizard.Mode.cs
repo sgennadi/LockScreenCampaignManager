@@ -67,6 +67,7 @@ public sealed partial class MainForm
             {
                 Name = "WizardCampaignTypeDetails",
                 Dock = DockStyle.Top, ColumnCount = 1, RowCount = 7,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Height = 470, Padding = new Padding(14, 12, 14, 14)
             };
             foreach (int h in new[] { 53, 55, 87, 58, 57, 54, 95 })
