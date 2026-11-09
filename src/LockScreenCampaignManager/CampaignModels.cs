@@ -20,6 +20,13 @@ public enum CampaignClientType
     Executable = 1
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum CampaignContentSource
+{
+    Sysvol = 0,
+    SmbShare = 1
+}
+
 public sealed class CampaignProject
 {
     public string Name { get; set; } = "Lock Screen Campaign";
@@ -31,6 +38,10 @@ public sealed class CampaignProject
     public string CompanyProfileId { get; set; } = string.Empty;
     // Existing projects remain PowerShell by default; chosen in Deploy.
     public CampaignClientType ClientType { get; set; } = CampaignClientType.PowerShell;
+    // Where immutable client campaign payloads are published. GPO metadata always stays in SYSVOL.
+    public CampaignContentSource ContentSource { get; set; } = CampaignContentSource.Sysvol;
+    // Dedicated SMB UNC folder. Domain Computers need READ; only administrators may write.
+    public string ContentShareRoot { get; set; } = string.Empty;
     // Empty list means legacy single-target Lock Screen deployment.
     // New projects can assign several computer/user groups independently.
     public List<CampaignGroupTarget> TargetAssignments { get; set; } = new();
@@ -217,6 +228,8 @@ public static class CampaignSchedule
 
     public static void Validate(CampaignProject project, bool requireImages)
     {
+        if (!Enum.IsDefined(project.ContentSource))
+            throw new CampaignValidationException("Unrecognized campaign content source.");
         if (project.RequiresCampaignTypeChoice && !project.CampaignModeExplicit)
             throw new CampaignValidationException("Choose Lock Screen, Screen Saver or Both first.");
         if (string.IsNullOrWhiteSpace(project.Name))
