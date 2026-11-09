@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace LockScreenCampaignManager;
 
-internal sealed class DomainDeploymentForm : Form
+internal sealed partial class DomainDeploymentForm : Form
 {
     private readonly CampaignProject _project;
     private readonly CompanyProfile? _company;
@@ -447,7 +447,8 @@ internal sealed class DomainDeploymentForm : Form
 
     private bool HasSelectedTargets =>
         !string.IsNullOrWhiteSpace(_connectedDomain) && _connectedWritable &&
-        _ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow &&
+        (_project.TargetAssignments.Count > 0 ||
+            (_ous.SelectedItem is DirectoryRow && _groups.SelectedItem is DirectoryRow)) &&
         !string.IsNullOrWhiteSpace(_gpoBox.Text);
 
     private void SetDeploymentMode(bool advanced)
@@ -869,6 +870,12 @@ internal sealed class DomainDeploymentForm : Form
 
     private string PlanKey()
     {
+        if (_project.TargetAssignments.Count > 0)
+            return string.Join("|", _connectedDomain, _connectedDc,
+                _gpoBox.Text.Trim(), CampaignSchedule.BuildId(_project),
+                _project.ClientType,
+                System.Text.Json.JsonSerializer.Serialize(_project.TargetAssignments),
+                System.Text.Json.JsonSerializer.Serialize(_project.ScreenSaver));
         var x = Selection();
         return string.Join("|", x.domain, x.dc, x.ou.Dn, x.group.Dn, x.gpoName,
             CampaignSchedule.BuildId(_project), _project.ClientType,
@@ -888,6 +895,11 @@ internal sealed class DomainDeploymentForm : Form
     private async Task<JsonElement?> PlanAsync()
     {
         if (_running) return null;
+        if (_project.TargetAssignments.Count > 0)
+        {
+            await PlanTargetMatrixAsync();
+            return null;
+        }
         try
         {
             var x = Selection();
@@ -983,6 +995,11 @@ internal sealed class DomainDeploymentForm : Form
     private async Task DeployAsync()
     {
         if (_running) return;
+        if (_project.TargetAssignments.Count > 0)
+        {
+            await DeployTargetMatrixAsync();
+            return;
+        }
         if (_project.ClientType == CampaignClientType.Executable &&
             !NativeClientAgent.CanDeployNativeClient)
         {
