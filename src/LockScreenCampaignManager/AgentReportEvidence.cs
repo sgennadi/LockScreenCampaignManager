@@ -9,11 +9,27 @@ namespace LockScreenCampaignManager;
 /// </summary>
 internal sealed record AgentReportEvidence(
     string Condition, string Stage, string Version, string Health,
-    DateTimeOffset? LastReportedUtc, bool Fresh, string Details)
+    DateTimeOffset? LastReportedUtc, bool Fresh, string Details,
+    string ClientType = "Unknown")
 {
     private static readonly Regex SafeVersion = new(
         @"\A[A-Za-z0-9][A-Za-z0-9.+_ -]{0,49}\z",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
+    // Client-supplied method is never proof of which binary actually ran.
+    // The GPO method is independently verified when the managed GPO is loaded.
+    internal static string MethodAgreement(string expected, string reported)
+    {
+        if (expected is not ("PowerShell" or "Executable"))
+            return "GPO method unknown";
+        if (reported is not ("PowerShell" or "Executable"))
+            return "Not reported (legacy client)";
+        return string.Equals(expected, reported, StringComparison.Ordinal)
+            ? "Reported match" : "Reported mismatch";
+    }
+
+    internal static bool HasReportedMethodMismatch(string expected, string reported) =>
+        MethodAgreement(expected, reported) == "Reported mismatch";
 
     internal static AgentReportEvidence Missing() =>
         new("No report", "Unknown", "—", "Unknown", null, false,
@@ -51,7 +67,10 @@ internal sealed record AgentReportEvidence(
         else condition = "Unverified report";
 
         string version = SafeVersion.IsMatch(report.AgentVersion) ? report.AgentVersion : "—";
+        string clientType = report.ClientType is "PowerShell" or "Executable"
+            ? report.ClientType : "Unknown";
         string details = "Client-reported: " + report.Stage + " / " + report.Health +
+            " | client method " + clientType +
             " | image " + (report.ImageMatches ? "match" : "not verified") +
             " | registry " + (report.RegistryMatches ? "match" : "not verified") +
             " | task " + (report.TaskPresent ? "present" : "missing") +
@@ -59,6 +78,7 @@ internal sealed record AgentReportEvidence(
             " | corrupt files " + report.CorruptFiles +
             " | timestamp supplied by endpoint; not authenticated proof.";
         return new AgentReportEvidence(condition, report.Stage, version,
-            report.Health, report.LastSeenUtc, recent && report.Stage != "Completed", details);
+            report.Health, report.LastSeenUtc, recent && report.Stage != "Completed", details,
+            clientType);
     }
 }
