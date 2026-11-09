@@ -49,7 +49,8 @@ internal sealed class CampaignAssignmentsDialog : Form
                 ComputerOuDn = currentComputerOu, ComputerGroupDn = currentComputerGroup
             });
 
-        Text = "Campaign assignment matrix — Lock Screen / Screen Saver / Both";
+        Text = "LockScreen Campaign Manager " + AppVersion.Current +
+            " - Group assignments: Lock Screen / Screen Saver / Both";
         Font = new Font("Segoe UI", 9.5f);
         BackColor = UiStyle.Canvas;
         StartPosition = FormStartPosition.CenterParent;
