@@ -495,7 +495,9 @@ internal sealed class DomainDeploymentForm : Form
         _planButton.Enabled = !_running && HasSelectedTargets;
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
-            _lastPlanKey is not null && _lastPlanKey == PlanKey();
+            _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
+            (_project.ClientType != CampaignClientType.Executable ||
+             NativeClientAgent.IsReadyForProduction);
         if (_gpoOperationsButton is not null)
             _gpoOperationsButton.Visible = _advancedMode;
     }
@@ -738,12 +740,12 @@ internal sealed class DomainDeploymentForm : Form
             CampaignSchedule.BuildId(_project), _project.ClientType);
     }
 
-    private (string parent,string package) MakeTemporaryPackage()
+    private (string parent,string package) MakeTemporaryPackage(bool forReadOnlyPreview = false)
     {
         CampaignSchedule.Validate(_project, true);
         string parent = Path.Combine(Path.GetTempPath(), "LSCM-Package-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(parent);
-        try { return (parent, CampaignExporter.Export(_project, parent)); }
+        try { return (parent, CampaignExporter.Export(_project, parent, forReadOnlyPreview)); }
         catch { Directory.Delete(parent, true); throw; }
     }
 
@@ -761,7 +763,7 @@ internal sealed class DomainDeploymentForm : Form
                 if (!Directory.Exists(inbox))
                     throw new DirectoryNotFoundException("Prepare the SMB feedback directory first: " + inbox);
             }
-            var (parent, package) = MakeTemporaryPackage();
+            var (parent, package) = MakeTemporaryPackage(forReadOnlyPreview: true);
             try
             {
                 var result = await RunBusy("Checking permissions, domain, OU, GPO name and image hashes...", () =>
@@ -829,8 +831,11 @@ internal sealed class DomainDeploymentForm : Form
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
                 UpdateDeploymentSteps();
-                _progress.Text = "Preview validated campaign and GPO scope. " +
-                    "AD write rights and SYSVOL still require verification during deployment.";
+                _progress.Text = _project.ClientType == CampaignClientType.Executable &&
+                    !NativeClientAgent.IsReadyForProduction
+                    ? "EXE preview only: native client deployment remains disabled until endpoint canary validation."
+                    : "Preview validated campaign and GPO scope. " +
+                      "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
@@ -841,6 +846,12 @@ internal sealed class DomainDeploymentForm : Form
     private async Task DeployAsync()
     {
         if (_running) return;
+        if (_project.ClientType == CampaignClientType.Executable &&
+            !NativeClientAgent.IsReadyForProduction)
+        {
+            _progress.Text = "EXE deployment is blocked pending isolated Windows 10/11 endpoint tests.";
+            return;
+        }
         var plan = await PlanAsync();
         if (plan is null) return;
         try
