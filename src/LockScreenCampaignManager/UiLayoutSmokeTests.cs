@@ -43,6 +43,15 @@ internal static class UiLayoutSmokeTests
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
+        ("AD / GPO Deployment - dual client", () => new DomainDeploymentForm(
+            new CampaignProject
+            {
+                Name = "Offline UI layout test",
+                TimeZoneId = "UTC",
+                StartLocal = new DateTime(2027, 1, 10, 8, 0, 0),
+                ImagePaths = new List<string> { "test.jpg" }
+            }), new[] { "Wizard", "Advanced", "Check GPO rights",
+                "Preview / check conflicts", "Deploy GPO + files" }),
         ("Updater", () => new UniversalUpdaterWindow(),
             new[] { "1  Check", "2  Install", "Backup status" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
@@ -453,6 +462,19 @@ internal static class UiLayoutSmokeTests
                         throw new InvalidOperationException(
                             $"Wizard preview is visually collapsed at {profile.Name}: " +
                             $"{imagePreview.Width} x {imagePreview.Height}.");
+                }
+                if (window.Name == "AD / GPO Deployment - dual client")
+                {
+                    var selector = Descendants(form).OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentClientType");
+                    if (selector is null || selector.DropDownStyle != ComboBoxStyle.DropDownList ||
+                        selector.Items.Count != 2 ||
+                        selector.SelectedIndex != 0 ||
+                        selector.Items[0]?.ToString()?.Contains(".ps1", StringComparison.Ordinal) != true ||
+                        selector.Items[1]?.ToString()?.Contains(".exe", StringComparison.Ordinal) != true ||
+                        selector.Width < 250 || selector.Height < selector.PreferredHeight)
+                        throw new InvalidOperationException(
+                            $"Deployment PS1/EXE client selector clipped or missing at {profile.Name}");
                 }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
                         StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
