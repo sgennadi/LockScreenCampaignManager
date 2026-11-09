@@ -401,17 +401,19 @@ internal sealed class AdAlternateAccountWizard : Form
         _forgetSaved.Height = 40;
         _forgetSaved.AutoEllipsis = true;
         _forgetSaved.Visible = _allowSaving && _forgetSavedLogin is not null;
+        var details = new Panel { Dock = DockStyle.Fill };
         var passwordActions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 50, WrapContents = false };
         passwordActions.Controls.Add(_forgetSaved);
-        layout.Controls.Add(passwordActions, 0, 3);
-        layout.Controls.Add(new Label
+        details.Controls.Add(new Label
         {
             Text = _allowSaving
                 ? "The password is used for authentication after this wizard. Saving it is optional; Windows Credential Manager protects it for this Windows account."
                 : "The password is held only for this session. It is not saved to a campaign, log, or the domain.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Muted,
             Padding = new Padding(8, 19, 8, 8), AutoEllipsis = true
-        }, 0, 3);
+        });
+        details.Controls.Add(passwordActions);
+        layout.Controls.Add(details, 0, 3);
         _passwordPage.Controls.Add(layout);
     }
 
