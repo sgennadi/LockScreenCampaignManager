@@ -42,7 +42,8 @@ internal static class NativeGpoLifecycleList
     private sealed record LinkInfo(
         string ou, int flags, bool enabled, bool enforced,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? type);
-    internal sealed record ManagedInfo(string campaignId, string end, string timeZone);
+    internal sealed record ManagedInfo(string campaignId, string end, string timeZone,
+        CampaignClientType clientType);
     private sealed record PolicyResult(
         string id, string name, string campaignId, string end,
         string timeZone, LinkInfo[] links, int linkCount, int gpoFlags);
@@ -366,7 +367,7 @@ internal static class NativeGpoLifecycleList
         string zone = manifest.GetProperty("timeZoneId").GetString() ?? "";
         if (end.Length == 0 || zone.Length == 0)
             throw new InvalidDataException("Managed GPO campaign schedule is incomplete.");
-        return new ManagedInfo(campaignId, end, zone);
+        return new ManagedInfo(campaignId, end, zone, kind);
     }
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
