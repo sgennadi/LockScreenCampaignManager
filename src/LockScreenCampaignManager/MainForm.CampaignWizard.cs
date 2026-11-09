@@ -266,8 +266,14 @@ public sealed partial class MainForm
             _back.Click += (_, _) => { _step = Math.Max(0, _step - 1); RenderPage(); };
             footer.Controls.Add(_back, 2, 0);
 
+            _next.Name = "CampaignWizardContinueAction";
             _next.Text = "Next";
-            _next.Tag = "PrimaryAction";
+            // The decorative icon consumed the available width and clipped
+            // "Continue" at higher DPI. The primary action stays blue.
+            _next.Tag = "NoIcon";
+            _next.ForeColor = Color.White;
+            _next.BackColor = UiStyle.Accent;
+            _next.AutoEllipsis = false;
             _next.Dock = DockStyle.Fill;
             _next.Margin = new Padding(4, 2, 4, 2);
             _next.Click += (_, _) => NextStep();
@@ -367,7 +373,7 @@ public sealed partial class MainForm
             // Constrain all fixed columns by the actual viewport width;
             // the status note yields space first, never the navigation.
             int back = Math.Clamp(RequiredWidth(_back, 28), 94, 160);
-            int next = Math.Clamp(RequiredWidth(_next, 32), 125, 205);
+            int next = Math.Clamp(RequiredWidth(_next, 36), 125, 360);
             int close = Math.Clamp(RequiredWidth(_close, 28), 115, 185);
             int update = _updateAvailable.Visible
                 ? Math.Clamp(RequiredWidth(_updateAvailable, 28), 130, 245) : 0;
