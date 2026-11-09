@@ -101,13 +101,13 @@ for guard in ('GetProperty("schemaVersion")', 'agentSha256', 'imageCount',
               'ReadDcWritable(ldap, root)', 'SearchPaged', 'Math.Abs((long)skew) > 300'):
     assert guard in native_deploy_plan, guard
 
-# Immediate Actions List/Preview/VerifyCleanup are read-only C#.
+# Immediate Actions List/Inventory/Preview/VerifyCleanup are read-only C#.
 # Guarded Push/Repair/Report/Cleanup use native C# Scheduler RPC.
 native_immediate = (project / 'NativeImmediateActions.cs').read_text(encoding='utf-8')
-assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
+assert 'mode is ("List" or "Inventory" or "Preview" or "VerifyCleanup")' in runner
 assert 'NativeImmediateActions.Execute(mode, request, credentials)' in runner
 # Native VerifyCleanup reads client post-deletion evidence but never writes.
-assert 'mode is ("List" or "Preview" or "VerifyCleanup")' in runner
+assert 'mode is ("List" or "Inventory" or "Preview" or "VerifyCleanup")' in runner
 native_receipt = (project / 'NativeRemoteCleanup.cs').read_text(encoding='utf-8')
 for guard in ('CheckMany', 'ValidateReceipt', 'MatchesExpected',
               'RegistryView.Registry64', 'OpenRemoteBaseKey', 'GetTask',
