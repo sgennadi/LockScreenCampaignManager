@@ -273,6 +273,15 @@ internal static class NativeGpoLifecycleList
         return true;
     }
 
+    private static bool ExistsStrict(string path)
+    {
+        try { _ = File.GetAttributes(path); return true; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        // Network failure, ACL denial, malformed paths and IO errors
+        // propagate rather than erasing a managed-policy audit result.
+    }
+
     internal static ManagedInfo? ReadManagedGpo(string dc, string domain, Guid id)
     {
         string policyDir = @"\\" + dc + @"\SYSVOL\" + domain + @"\Policies\{" +
@@ -280,15 +289,17 @@ internal static class NativeGpoLifecycleList
         string scripts = Path.Combine(policyDir, "Machine", "Scripts");
         string psIni = Path.Combine(scripts, "psscripts.ini");
         string classicIni = Path.Combine(scripts, "scripts.ini");
-        string ini = File.Exists(psIni) ? psIni : classicIni;
-        bool executable = ini.Equals(classicIni, StringComparison.OrdinalIgnoreCase);
-        FileAttributes attr;
-        try { attr = File.GetAttributes(ini); }
-        catch (FileNotFoundException) { return null; }
-        catch (DirectoryNotFoundException) { return null; }
-        if (File.Exists(psIni) && File.Exists(classicIni))
+        // File.Exists silently returns false for access denied, broken SMB
+        // and several IO failures. Those must NEVER become evidence that a
+        // selected GPO lacks a startup method.
+        bool hasPowerShell = ExistsStrict(psIni);
+        bool hasClassic = ExistsStrict(classicIni);
+        if (!hasPowerShell && !hasClassic) return null;
+        if (hasPowerShell && hasClassic)
             return null; // Mixed startup methods are not a managed signature.
-        // Inaccessible SYSVOL data never becomes evidence of an unmanaged GPO.
+        string ini = hasPowerShell ? psIni : classicIni;
+        bool executable = hasClassic;
+        FileAttributes attr = File.GetAttributes(ini);
         if ((attr & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
             throw new InvalidDataException("A GPO script file is unsafe.");
         if (new FileInfo(ini).Length > 1_048_576)
