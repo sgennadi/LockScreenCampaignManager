@@ -175,7 +175,7 @@ internal static class NativeGpoDeploymentApply
                         clientScriptPath = clientScript,
                         clientType = clientType.ToString(),
                         gpoMethod = clientType == CampaignClientType.Executable
-                            ? "ClassicStartupCmd" : "PowerShellStartup",
+                            ? "ClassicStartupExe" : "PowerShellStartup",
                         operation = mode, rsatRequired = false,
                         nativeEngine = "C# LDAP + Windows GPO COM + SMB",
                         dcUtc = Required(plan, "dcUtc"),
