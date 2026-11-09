@@ -62,6 +62,28 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('Final status', source)
         self.assertNotIn('HttpClient', source)
 
+    def test_deployment_rights_warning_is_advisory_not_a_preview_gate(self):
+        form = read('DomainDeploymentForm.cs')
+        native = read('NativeAdDiscovery.cs')
+        self.assertIn('await CheckRightsAsync();', form)
+        self.assertNotIn('"GPO delegation may be insufficient"', form)
+        self.assertIn('Preview remains available', form)
+        self.assertIn('groupTokenComplete', form)
+        self.assertIn('NO_MATCHING_ALLOW', form)
+        self.assertIn('POSSIBLE_DENY', form)
+        self.assertIn('UiStyle.ApplyStatus(_rightsBanner', form)
+        self.assertIn('_targetSplit.Panel2Collapsed = true', form)
+        self.assertIn('_targetSplit.Panel1Collapsed = true', form)
+        self.assertIn('_connectionPanel.Visible = connectionVisible', form)
+        self.assertIn('connectionVisible ? 222 : 0', form)
+        self.assertIn('row.Dn.Contains(query', form)
+        self.assertIn('ShowDirectoryTooltip', form)
+        self.assertIn('fullPermissionVerified = false', native)
+        # Deploy still checks scope, conflicts, confirms a write and invokes
+        # native server-side permission checks. A preview is never permission.
+        self.assertIn('"Confirm Active Directory deployment"', form)
+        self.assertIn('DomainPowerShellRunner.Execute(DomainOperation.Deployment, "Deploy"', form)
+
     def test_export_and_deploy_events(self):
         self.assertIn('CampaignHistoryStore.TryRecordEvent(id, "Export"', read('CampaignExporter.cs'))
         self.assertIn('"GPO Deploy"', read('DomainDeploymentForm.cs'))

@@ -40,6 +40,13 @@ internal static class UiLayoutSmokeTests
                 "Skip saving & continue", "Save & Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(5),
             new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
+        ("AD / GPO deployment - offline Wizard", () => new DomainDeploymentForm(
+            new CampaignProject {
+                Name = "layout-only", TimeZoneId = "UTC",
+                StartLocal = new DateTime(2026, 11, 9, 14, 0, 0)
+            }),
+            new[] { "Wizard", "Advanced", "Next >", "Check GPO rights",
+                "Preview / check conflicts", "Deploy GPO + files", "Close" }),
         ("AD first-step connect/read", () => new AdConnectionStartDialog(null),
             new[] { "Sign in & Read AD", "Next >", "Open campaign editor", "< Back",
                 "Work offline (no AD)" }),
