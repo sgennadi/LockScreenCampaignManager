@@ -16,6 +16,7 @@ internal sealed class DomainDeploymentForm : Form
     private readonly TextBox _passwordBox = new();
     private readonly Label _otherAccountHint = new();
     private readonly TextBox _gpoBox = new();
+    private readonly ComboBox _clientTypeBox = new();
     private readonly RadioButton _currentRadio = new();
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
@@ -111,6 +112,7 @@ internal sealed class DomainDeploymentForm : Form
             _dcBox.Text = readOnlyInventory.Dc;
         }
         _gpoBox.Text = CampaignSchedule.DefaultGpoName(_project);
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
         if (authenticatedSession is { IsAlternate: true })
         {
             _suppressConnectionChanged = true;
@@ -288,8 +290,34 @@ internal sealed class DomainDeploymentForm : Form
         _rightsBanner.TextAlign = ContentAlignment.MiddleLeft;
         _rightsBanner.Text = "GPO RIGHTS: Not checked. Preview does not change Active Directory.";
         notification.Controls.Add(_rightsBanner, 0, 1);
-        notification.Controls.Add(new Label { Text = "Security filtering uses COMPUTER accounts from the selected security group, within the linked OU.",
-            Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 2);
+        // Choose the endpoint agent and corresponding Windows GPO startup method.
+        var engineChoice = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 445));
+        engineChoice.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        engineChoice.Controls.Add(new Label {
+            Text = "Client / GPO method", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy }, 0, 0);
+        _clientTypeBox.Name = "DeploymentClientType";
+        _clientTypeBox.Dock = DockStyle.Fill;
+        _clientTypeBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _clientTypeBox.Items.Add("PowerShell (.ps1) - PowerShell Startup Scripts");
+        _clientTypeBox.Items.Add("Native (.exe) - classic Startup Scripts");
+        _clientTypeBox.SelectedIndex = _project.ClientType == CampaignClientType.Executable ? 1 : 0;
+        _clientTypeBox.SelectedIndexChanged += (_, _) => {
+            CampaignClientType selected = _clientTypeBox.SelectedIndex == 1
+                ? CampaignClientType.Executable : CampaignClientType.PowerShell;
+            if (_project.ClientType != selected) {
+                _project.ClientType = selected;
+                InvalidatePlan();
+            }
+        };
+        engineChoice.Controls.Add(_clientTypeBox, 1, 0);
+        engineChoice.Controls.Add(new Label {
+            Text = "EXE: isolated test OU only.", Dock = DockStyle.Fill,
+            ForeColor = UiStyle.Muted, AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
+        notification.Controls.Add(engineChoice, 0, 2);
         layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
@@ -507,6 +535,7 @@ internal sealed class DomainDeploymentForm : Form
         _usersButton.Enabled = credentialsStep && _alternateRadio.Checked && !_running;
         _connectButton.Enabled = credentialsStep && !_running;
         _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
+        _clientTypeBox.Enabled = targetStep && !_running;
         _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
@@ -520,7 +549,9 @@ internal sealed class DomainDeploymentForm : Form
         _planButton.Enabled = !_running && HasSelectedTargets;
         _deployButton.Visible = _advancedMode || _wizardStep == 2;
         _deployButton.Enabled = !_running && HasSelectedTargets &&
-            _lastPlanKey is not null && _lastPlanKey == PlanKey();
+            _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
+            (_project.ClientType != CampaignClientType.Executable ||
+             NativeClientAgent.CanDeployNativeClient);
         if (_gpoOperationsButton is not null)
         {
             // Read-only inventory and remote actions are useful directly from
