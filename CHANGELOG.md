@@ -1,3 +1,11 @@
+## 0.4.0-preview.82 — JPG Screen Saver manual Computer GPO pilot kit (2026-11-09)
+
+- Add **Export GPO lab kit...** to Wizard Save for JPG Screen Saver / Both, after first creating the hash-verified .scr package. Keep built-in .scr User GPO and Lock Screen agent behavior unchanged.
+- Export `PhotoSaver-StartupInstall.ps1`, identical pinned .scr + manifest + JPGs, and human-readable GPMC lab directions as one atomic, non-overwriting, local-only package. Bind the script to exact campaign ID, slide interval, and SCR/manifest SHA-256.
+- New Windows PowerShell 5.1 Computer Startup lab installer runs only as LocalSystem, verifies JPG hashes and protected local ACL, and never edits AD/GPO, users' HKCU, a local Screen Saver registry key, or SYSVOL.
+- User GPO activation is still **blocked**. Do not point a user policy to a file that has not been installed on every eligible computer. Manual testing must verify SCR behavior, policy scope, AppLocker/WDAC, rollback and effective gpresult.
+- Add Windows x86/x64 full build, offline contracts, PowerShell 5.1 syntax, immutable export fixture, and simulated DPI Wizard checks. Version increments to preview.82 without touching production client agent versions.
+
 ## 0.4.0-preview.81 — Explicit current-user JPG Screen Saver pilot install / rollback (2026-11-09)
 
 - Extend the Campaign Wizard Save page with opt-in **Install local JPG pilot...** and **Remove local JPG pilot...** actions after exporting a photo .scr package. Require explicit confirmation (default No).
