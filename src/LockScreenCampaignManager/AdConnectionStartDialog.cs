@@ -700,9 +700,9 @@ internal sealed class AdConnectionStartDialog : Form
     private bool EditAlternateAccount()
     {
         if (_busy) return false;
-        // The same two-step lookup/password Wizard is used by the deployment
-        // form. Account discovery uses the Windows logon identity, read-only.
-        // Alternate password is entered only after the user is selected.
+        // Share the same two-page account lookup/password Wizard with GPO
+        // Deployment. Account search is read-only; password is entered after
+        // a specific account has been chosen.
         using var chooser = new AdAlternateAccountWizard(
             _domain.Text.Trim(),
             _advancedDc.Checked ? _dc.Text.Trim() : "",
