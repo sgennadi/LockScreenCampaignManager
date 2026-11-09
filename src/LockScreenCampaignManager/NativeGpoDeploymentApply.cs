@@ -67,9 +67,9 @@ internal static class NativeGpoDeploymentApply
             // Defense in depth: callers cannot bypass the UI and deploy an
             // unvalidated native client through the operation dispatcher.
             if (clientType == CampaignClientType.Executable &&
-                !NativeClientAgent.IsReadyForProduction)
+                !NativeClientAgent.CanDeployNativeClient)
                 throw new NotSupportedException(
-                    "Native EXE GPO deployment is disabled pending endpoint acceptance.");
+                    "Native EXE GPO deployment requires an explicit isolated-lab opt-in.");
             int imageCount = plan.GetProperty("imageCount").GetInt32();
             if (!NativeSysvolStorage.ValidCampaignId(id) ||
                 imageCount is < 1 or > 30)
