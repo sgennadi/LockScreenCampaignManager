@@ -269,11 +269,13 @@ jobs:
             }
           } finally { $verified.Dispose() }
 
-      # PRs run the full build, self-test and ZIP integrity checks without
-      # consuming Actions artifact storage for every preview commit.
+      # Ordinary PRs skip artifact storage. PR #3 temporarily publishes
+      # the dual-client lab canary ZIPs (2-day retention) for isolated
+      # endpoint testing. This does NOT create a GitHub Release or enable
+      # native production deployment.
       - name: Upload release build
         id: upload_release_build
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || github.event.pull_request.number == 3
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
