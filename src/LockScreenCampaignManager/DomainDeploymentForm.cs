@@ -510,6 +510,7 @@ internal sealed class DomainDeploymentForm : Form
             var selection = Selection();
             var snapshot = new CampaignProject {
                 Name = _project.Name, CompanyProfileId = _project.CompanyProfileId,
+                ClientType = _project.ClientType,
                 StartLocal = _project.StartLocal,
                 LastImageHours = _project.LastImageHours, TimeZoneId = _project.TimeZoneId,
                 EnableFeedback = _project.EnableFeedback, FeedbackShare = _project.FeedbackShare,
@@ -831,9 +832,10 @@ internal sealed class DomainDeploymentForm : Form
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
                 UpdateDeploymentSteps();
-                _progress.Text = _project.ClientType == CampaignClientType.Executable &&
-                    !NativeClientAgent.IsReadyForProduction
-                    ? "EXE preview only: native client deployment remains disabled until endpoint canary validation."
+                _progress.Text = _project.ClientType == CampaignClientType.Executable
+                    ? NativeClientAgent.CanDeployNativeClient
+                        ? "EXE LAB CANARY: Preview ready; max 5 directly listed computers, no nested groups."
+                        : "EXE preview only: use --native-exe-lab for a controlled test; production Deploy is blocked."
                     : "Preview validated campaign and GPO scope. " +
                       "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
@@ -847,9 +849,9 @@ internal sealed class DomainDeploymentForm : Form
     {
         if (_running) return;
         if (_project.ClientType == CampaignClientType.Executable &&
-            !NativeClientAgent.IsReadyForProduction)
+            !NativeClientAgent.CanDeployNativeClient)
         {
-            _progress.Text = "EXE deployment is blocked pending isolated Windows 10/11 endpoint tests.";
+            _progress.Text = "EXE Deploy locked. Restart this preview build with --native-exe-lab for isolated canaries.";
             return;
         }
         var plan = await PlanAsync();
@@ -858,6 +860,26 @@ internal sealed class DomainDeploymentForm : Form
         {
             var x = Selection();
             if (_lastPlanKey != PlanKey()) throw new InvalidOperationException("Scope changed. Preview again.");
+            if (_project.ClientType == CampaignClientType.Executable &&
+                !NativeClientAgent.IsReadyForProduction)
+            {
+                int count = plan.Value.GetProperty("directGroupMembers").GetInt32();
+                if (count > 5)
+                    throw new InvalidOperationException(
+                        "EXE canary accepts at most 5 direct computer accounts. Select a smaller, flat lab group.");
+                if (MessageBox.Show(this,
+                        "EXPERIMENTAL NATIVE EXE CLIENT - LAB CANARY ONLY\n\n" +
+                        $"Writable DC: {x.dc}\nTarget OU: {x.ou.Dn}\n" +
+                        $"Computer group: {x.group.Dn}\nDirect members: {count} (maximum 5)\n\n" +
+                        "The native client has not passed a real GPO/endpoint acceptance test. " +
+                        "Only use an isolated lab OU and a flat test-computer group. " +
+                        "The deployment code independently verifies that all direct members are computers " +
+                        "under the selected OU; nested groups and broad membership are rejected.\n\n" +
+                        "Create this TEST GPO?",
+                        "Native EXE LAB CANARY - explicit consent",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            }
             if (_lastConflictHigh > 0 && MessageBox.Show(this,
                     $"Detected {_lastConflictHigh} potentially conflicting Lock Screen policy settings.\n" +
                     "Do not deploy without confirming resultant policy on a test computer. Continue anyway?",
