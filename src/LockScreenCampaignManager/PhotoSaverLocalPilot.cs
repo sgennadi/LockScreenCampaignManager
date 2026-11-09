@@ -120,20 +120,37 @@ internal static class PhotoSaverLocalPilot
         {
             if (!installed)
             {
+                bool safelyRestored = state is null;
                 if (state is not null)
                 {
                     try
                     {
-                        using var desktop = Registry.CurrentUser.CreateSubKey(DesktopKey, writable: true);
-                        if (desktop is not null) Restore(desktop, state.Previous);
+                        using var desktop = Registry.CurrentUser.CreateSubKey(DesktopKey,
+                            writable: true) ?? throw new UnauthorizedAccessException(
+                                "Cannot open HKCU Desktop to undo an incomplete pilot installation.");
+                        Restore(desktop, state.Previous);
                         NotifyDesktop();
+                        safelyRestored = true;
                     }
-                    catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot install rollback"); }
+                    catch (Exception ex)
+                    {
+                        // Preserve both the copied binary and rollback journal
+                        // if registry restoration failed. Do not strand Windows
+                        // with SCRNSAVE.EXE pointing at a deleted .scr.
+                        AppLog.Write(ex, "Photo Saver pilot install rollback");
+                    }
                 }
-                try { if (File.Exists(statePath)) File.Delete(statePath); }
-                catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot state rollback"); }
-                try { if (Directory.Exists(package)) Directory.Delete(package, recursive: true); }
-                catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot package rollback"); }
+                if (safelyRestored)
+                {
+                    try { if (Directory.Exists(package)) Directory.Delete(package, recursive: true); }
+                    catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot package rollback"); }
+                    // Keep a rollback journal if package removal failed.
+                    if (!Directory.Exists(package))
+                    {
+                        try { if (File.Exists(statePath)) File.Delete(statePath); }
+                        catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot state rollback"); }
+                    }
+                }
             }
             try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); }
             catch (Exception ex) { AppLog.Write(ex, "Photo Saver pilot staging cleanup"); }
@@ -177,22 +194,25 @@ internal static class PhotoSaverLocalPilot
         ValidatePolicyNotManaged();
         using var desktop = Registry.CurrentUser.OpenSubKey(DesktopKey, writable: true) ??
             throw new InvalidOperationException("Current user Desktop settings are missing.");
-        foreach (string name in ScreenSaverNames)
-        {
-            if (desktop.GetValueKind(name) != RegistryValueKind.String ||
-                !string.Equals(desktop.GetValue(name, null,
-                    RegistryValueOptions.DoNotExpandEnvironmentNames) as string,
-                    state.Expected[name], StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    "A current-user screen saver setting changed since pilot installation: " +
-                    name + ". Automatic rollback is blocked to protect that change.");
-        }
+        bool pilotStillInstalled = ScreenSaverNames.All(name =>
+            MatchesRegistryValue(desktop, name, state.Expected[name]));
+        bool previousAlreadyRestored = ScreenSaverNames.All(name =>
+            MatchesPreviousValue(desktop, name, state.Previous[name]));
+        if (!pilotStillInstalled && !previousAlreadyRestored)
+            throw new InvalidOperationException(
+                "A current-user screen saver setting changed since pilot installation. " +
+                "Automatic rollback is blocked to protect that change.");
 
-        Restore(desktop, state.Previous);
-        NotifyDesktop();
-        File.Delete(statePath);
+        if (pilotStillInstalled)
+        {
+            Restore(desktop, state.Previous);
+            NotifyDesktop();
+        }
+        // Keep the state journal until the copied package is gone. If deletion
+        // fails, a second Remove can finish cleanup when values are restored.
         string package = Path.Combine(root, "package");
         if (Directory.Exists(package)) Directory.Delete(package, recursive: true);
+        File.Delete(statePath);
         return true;
     }
 
@@ -249,6 +269,26 @@ internal static class PhotoSaverLocalPilot
             found[name] = new PriorValue { Exists = exists, Value = value };
         }
         return found;
+    }
+
+    private static bool MatchesRegistryValue(RegistryKey desktop,
+        string name, string expected)
+    {
+        if (!desktop.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase))
+            return false;
+        return desktop.GetValueKind(name) == RegistryValueKind.String &&
+            string.Equals(desktop.GetValue(name, null,
+                RegistryValueOptions.DoNotExpandEnvironmentNames) as string,
+                expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesPreviousValue(RegistryKey desktop,
+        string name, PriorValue prior)
+    {
+        if (!prior.Exists)
+            return !desktop.GetValueNames().Contains(name,
+                StringComparer.OrdinalIgnoreCase);
+        return MatchesRegistryValue(desktop, name, prior.Value);
     }
 
     private static void Restore(RegistryKey desktop,
