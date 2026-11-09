@@ -28,6 +28,16 @@ assert "CampaignSchedule.BuildId(_project), _project.ClientType" in ui
 assert '"LockScreen-Agent.exe"' in export and '"LockScreen-Agent.ps1"' in export
 assert "NativeClientAgent.IsReadyForProduction" in export
 assert "config.AgentSha256" in export
+assert "forReadOnlyPreview = false" in export
+assert "!NativeClientAgent.IsReadyForProduction && !forReadOnlyPreview" in export
+assert "MakeTemporaryPackage(forReadOnlyPreview: true)" in ui
+assert "!NativeClientAgent.IsReadyForProduction" in ui
+assert "!NativeClientAgent.IsReadyForProduction" in apply
+assert "DeviceImageOrder" in native
+assert 'prefix + fileName' in native
+assert "AssertNoScheduleOverlap(ctx);" in native
+assert "CampaignTasksGone(ctx)" in native_health
+assert "act(scheduler, (dynamic)root)" in native_tasks
 assert "ParseClientType(String(args, \"clientType\"))" in plan
 assert "requestedClient" in plan and "package.ClientType" in plan
 assert '"ClassicStartupCmd"' in apply and '"PowerShellStartup"' in apply
