@@ -429,10 +429,21 @@ internal sealed class UniversalUpdaterWindow : Form
         {
             AppLog.Write(ex, "UniversalUpdater verified staging");
             _state.Text = "Download/verification failed. No installation occurred.";
+            bool transient = ex is HttpRequestException http &&
+                http.StatusCode is System.Net.HttpStatusCode.GatewayTimeout or
+                    System.Net.HttpStatusCode.BadGateway or
+                    System.Net.HttpStatusCode.ServiceUnavailable or
+                    System.Net.HttpStatusCode.RequestTimeout or
+                    System.Net.HttpStatusCode.TooManyRequests;
             _output.Text = "Release download or verification failed: " +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "For public releases no token is needed; private assets require a scoped read-only token.";
+                (transient
+                    ? "Temporary GitHub/CDN or network gateway error. " +
+                      "The updater retried up to four times; no installation occurred. " +
+                      "Choose Install to retry or Open releases to download manually."
+                    : "Check internet access. Public releases need no token; " +
+                      "private assets require a scoped read-only token.");
         }
         finally { FinishWorking(); }
     }
