@@ -507,13 +507,15 @@ public sealed partial class MainForm : Form
             ("Auto match filenames...", AutoMatchImageNames, () => _project.ImagePaths.Count > 0)
         });
         AddActionMenu(actions, "Review / export", new (string Label, Action Execute, Func<bool>? Allowed)[] {
-            ("Validate campaign...", ValidateCurrent, () => _project.ImagePaths.Count > 0),
+            ("Validate campaign...", ValidateCurrent, () => _project.ImagePaths.Count > 0 ||
+                _project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver),
             ("Export package...", ExportPackage, () => _project.ImagePaths.Count > 0)
         });
         AddActionMenu(actions, "AD / GPO", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Connect AD account...", ConnectAndReadAd, null),
             ("Deploy GPO...", () => OpenDomainDeployment(true),
                 () => AdReady && (_project.ImagePaths.Count > 0 ||
+                    _project.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver ||
                     _project.TargetAssignments is { Count: > 0 } &&
                     _project.TargetAssignments.All(x => x.UsesScreenSaver))),
             ("Agent Management / Live...", OpenAgentManagement, null),
