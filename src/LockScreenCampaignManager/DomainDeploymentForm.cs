@@ -344,7 +344,7 @@ internal sealed partial class DomainDeploymentForm : Form
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2
         };
         storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 245));
         storage.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
         storage.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
