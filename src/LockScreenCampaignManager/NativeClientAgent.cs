@@ -205,16 +205,32 @@ internal static partial class NativeClientAgent
         if (index < 0) return -1;
         if (!ctx.Config.RandomizePerDevice) return index;
 
-        // Stable per-machine permutation: the schedule remains unmodified.
-        byte[] seed = SHA256.HashData(Encoding.UTF8.GetBytes(
-            ctx.Id + ":" + Environment.MachineName.ToUpperInvariant()));
-        int[] order = Enumerable.Range(0, ctx.Starts.Length).ToArray();
-        for (int i = order.Length - 1; i >= 1; i--)
+        return DeviceImageOrder(ctx.Id, Environment.MachineName,
+            ctx.Config.Slides.Select(x => x.FileName).ToArray())[index];
+    }
+
+    /// <summary>
+    /// EXACT PowerShell v1 stable per-machine ordering:
+    /// SHA256(lowercaseCampaignId | uppercaseComputerName | originalImageName),
+    /// sorted lexicographically by uppercase digest, then original slide index.
+    /// Schedules are never reordered; only images assigned to slots change.
+    /// </summary>
+    internal static int[] DeviceImageOrder(string campaignId,
+        string computerName, IReadOnlyList<string> imageNames)
+    {
+        if (!Identifier.IsMatch(campaignId) ||
+            string.IsNullOrWhiteSpace(computerName) || imageNames.Count is < 1 or > 30)
+            throw new InvalidDataException("Invalid deterministic image ordering input.");
+        string prefix = campaignId.ToLowerInvariant() + "|" +
+            computerName.ToUpperInvariant() + "|";
+        return imageNames.Select((fileName, index) => new
         {
-            int j = (int)(BitConverter.ToUInt32(seed, (i * 4) % 28) % (uint)(i + 1));
-            (order[i], order[j]) = (order[j], order[i]);
-        }
-        return order[index];
+            Index = index,
+            Hash = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(prefix + fileName)))
+        }).OrderBy(x => x.Hash, StringComparer.Ordinal)
+          .ThenBy(x => x.Index)
+          .Select(x => x.Index).ToArray();
     }
 
     private static void VerifyFileAttributes(string path, long max)
