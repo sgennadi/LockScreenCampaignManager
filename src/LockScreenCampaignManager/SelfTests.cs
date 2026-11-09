@@ -989,8 +989,10 @@ StartExecutePSFirst=true
             writer.Write((ushort)'[');
             writer.Write(System.Text.Encoding.Unicode.GetBytes(
                 @"Software\Policies\Microsoft\Windows\Personalization"));
+            writer.Write((ushort)0); // MS-GPREG key UTF-16LE NUL
             writer.Write((ushort)';');
             writer.Write(System.Text.Encoding.Unicode.GetBytes("LockScreenImage"));
+            writer.Write((ushort)0); // MS-GPREG value UTF-16LE NUL
             writer.Write((ushort)';');
             writer.Write(1u);
             writer.Write((ushort)';');
@@ -1006,6 +1008,60 @@ StartExecutePSFirst=true
         Check(policyHits.Count == 1 && policyHits[0].risk == "High" &&
             policyHits[0].name == "LockScreenImage",
             "Native Registry.pol parser reads bounded binary policy values");
+
+        // A historical scanner accepted a key/value identifier with no
+        // UTF-16 NUL and treated a bare semicolon as the terminator. Real
+        // Group Policy can reject such a policy even if our Preview found hits.
+        static int TerminatorOffset(byte[] source, int occurrence)
+        {
+            int found = 0;
+            for (int i = 10; i <= source.Length - 4; i += 2)
+            {
+                if (source[i] != 0 || source[i + 1] != 0 ||
+                    source[i + 2] != (byte)';' || source[i + 3] != 0)
+                    continue;
+                if (found++ == occurrence) return i;
+            }
+            throw new InvalidOperationException("MS-GPREG fixture terminator not found.");
+        }
+        static byte[] RemoveIdentifierNul(byte[] source, int occurrence)
+        {
+            int index = TerminatorOffset(source, occurrence);
+            var malformed = new byte[source.Length - 2];
+            Buffer.BlockCopy(source, 0, malformed, 0, index);
+            Buffer.BlockCopy(source, index + 2, malformed, index,
+                source.Length - index - 2);
+            return malformed;
+        }
+        bool noKeyNulDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(RemoveIdentifierNul(policy, 0)); }
+        catch (InvalidDataException) { noKeyNulDenied = true; }
+        Check(noKeyNulDenied,
+            "Conflict scanner rejects MS-GPREG missing key NUL (former false-clean bug)");
+
+        bool noValueNulDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(RemoveIdentifierNul(policy, 1)); }
+        catch (InvalidDataException) { noValueNulDenied = true; }
+        Check(noValueNulDenied,
+            "Conflict scanner rejects MS-GPREG missing value NUL");
+
+        var invalidDword = (byte[])policy.Clone();
+        int typeOffset = TerminatorOffset(invalidDword, 1) + 4;
+        BitConverter.GetBytes(4u).CopyTo(invalidDword, typeOffset);
+        bool invalidDwordDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(invalidDword); }
+        catch (InvalidDataException) { invalidDwordDenied = true; }
+        Check(invalidDwordDenied,
+            "Conflict scanner rejects a DWORD with invalid byte length");
+
+        var missingDataNul = (byte[])policy.Clone();
+        missingDataNul[^4] = (byte)'X'; // Overwrite REG_SZ final UTF-16 NUL, keep closing bracket.
+        bool invalidStringDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(missingDataNul); }
+        catch (InvalidDataException) { invalidStringDenied = true; }
+        Check(invalidStringDenied,
+            "Conflict scanner rejects a REG_SZ value missing its NUL terminator");
+
         bool corruptDenied = false;
         try { NativeGpoConflictScan.ParseRegistryPol(policy[..^2]); }
         catch (InvalidDataException) { corruptDenied = true; }

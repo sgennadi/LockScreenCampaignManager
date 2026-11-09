@@ -472,7 +472,7 @@ internal static class NativeGpoConflictScan
         using var reader = new BinaryReader(stream, Encoding.Unicode);
         if (reader.ReadUInt32() != 0x67655250)
             throw new InvalidDataException("Invalid Registry.pol signature.");
-        uint version = reader.ReadUInt32();
+        uint version = ReadDword(reader);
         if (version is < 1 or > 10)
             throw new InvalidDataException("Unsupported Registry.pol version.");
         var hits = new List<Hit>();
@@ -481,23 +481,20 @@ internal static class NativeGpoConflictScan
             ushort marker = ReadWord(reader);
             if (marker == 0) continue;
             if (marker != '[') throw new InvalidDataException("Malformed Registry.pol entry.");
-            string key = ReadString(reader);
-            string name = ReadString(reader);
-            uint type = reader.ReadUInt32();
+            // MS-GPREG requires UTF-16LE NUL-terminated key AND value
+            // identifiers, followed by a separate UTF-16 semicolon.
+            // A delimiter alone is not a valid identifier terminator.
+            string key = ReadNullTerminatedIdentifier(reader, key: true);
+            string name = ReadNullTerminatedIdentifier(reader, key: false);
+            uint type = ReadDword(reader);
             Expect(reader, ';');
-            uint len = reader.ReadUInt32();
+            uint len = ReadDword(reader);
             if (len > 65535) throw new InvalidDataException("Registry.pol value limit exceeded.");
             Expect(reader, ';');
             byte[] bytes = reader.ReadBytes((int)len);
             if (bytes.Length != len) throw new InvalidDataException("Truncated Registry.pol value.");
             Expect(reader, ']');
-            string display = type switch
-            {
-                1 or 2 or 7 => Encoding.Unicode.GetString(bytes).TrimEnd('\0'),
-                4 when bytes.Length >= 4 => BitConverter.ToUInt32(bytes, 0).ToString(CultureInfo.InvariantCulture),
-                4 => "[invalid DWORD]",
-                _ => "[binary or unsupported]"
-            };
+            string display = DisplayRegistryPolicyValue(type, bytes);
             var hit = TargetValue(key, name, display, userScope);
             if (hit is not null) hits.Add(hit);
             if (hits.Count > 120)
@@ -506,16 +503,82 @@ internal static class NativeGpoConflictScan
         return hits;
     }
 
-    private static string ReadString(BinaryReader reader)
+    private static string ReadNullTerminatedIdentifier(BinaryReader reader, bool key)
     {
         var text = new StringBuilder();
-        for (int i = 0; i < 4097; i++)
+        int maxChars = key ? 4096 : 259;
+        for (int i = 0; i <= maxChars; i++)
         {
-            ushort value = ReadWord(reader);
-            if (value == ';') return text.ToString();
-            if (value != 0) text.Append((char)value);
+            ushort word = ReadWord(reader);
+            if (word == 0)
+            {
+                if (key && text.Length == 0)
+                    throw new InvalidDataException("Registry.pol key identifier cannot be empty.");
+                Expect(reader, ';');
+                // A malformed UTF-16 name can conceal a relevant policy key
+                // from the static scanner. Validate rather than replace.
+                string value = text.ToString();
+                try
+                {
+                    _ = new UnicodeEncoding(false, false, true).GetByteCount(value);
+                }
+                catch (EncoderFallbackException ex)
+                {
+                    throw new InvalidDataException("Registry.pol identifier contains invalid UTF-16.", ex);
+                }
+                return value;
+            }
+            // Semicolons/brackets may occur inside a registry identifier.
+            // Only the UTF-16 NUL plus following semicolon ends the field.
+            if (word < 0x20)
+                throw new InvalidDataException(
+                    "Registry.pol identifier contains invalid control characters.");
+            text.Append((char)word);
         }
-        throw new InvalidDataException("Registry.pol string too long.");
+        throw new InvalidDataException("Registry.pol identifier too long.");
+    }
+
+    private static uint ReadDword(BinaryReader reader)
+    {
+        if (reader.BaseStream.Position + 4 > reader.BaseStream.Length)
+            throw new InvalidDataException("Truncated Registry.pol DWORD.");
+        return reader.ReadUInt32();
+    }
+
+    private static string DisplayRegistryPolicyValue(uint type, byte[] bytes)
+    {
+        // Keep unknown/binary policy types as overlapping candidates rather
+        // than claiming they set a valid string, or silently omitting them.
+        if (type is 1 or 2 or 7)
+        {
+            if (bytes.Length < 2 || bytes.Length % 2 != 0 ||
+                bytes[^1] != 0 || bytes[^2] != 0 ||
+                (type == 7 && (bytes.Length < 4 || bytes[^3] != 0 || bytes[^4] != 0)))
+                throw new InvalidDataException("Malformed UTF-16 Registry.pol value.");
+            try
+            {
+                return new UnicodeEncoding(false, false, true).GetString(bytes)
+                    .TrimEnd('\0');
+            }
+            catch (DecoderFallbackException ex)
+            {
+                throw new InvalidDataException("Invalid UTF-16 Registry.pol value.", ex);
+            }
+        }
+        if (type == 4 && bytes.Length != 4)
+            throw new InvalidDataException("Malformed Registry.pol DWORD value.");
+        if (type == 5 && bytes.Length != 4)
+            throw new InvalidDataException("Malformed Registry.pol big-endian DWORD value.");
+        if (type == 11 && bytes.Length != 8)
+            throw new InvalidDataException("Malformed Registry.pol QWORD value.");
+        return type switch
+        {
+            4 => BitConverter.ToUInt32(bytes, 0).ToString(CultureInfo.InvariantCulture),
+            5 => System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes)
+                .ToString(CultureInfo.InvariantCulture),
+            11 => BitConverter.ToUInt64(bytes, 0).ToString(CultureInfo.InvariantCulture),
+            _ => "[binary or unsupported]"
+        };
     }
 
     private static ushort ReadWord(BinaryReader reader)

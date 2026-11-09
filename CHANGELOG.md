@@ -1,3 +1,11 @@
+## 0.4.0-preview.78 — Strict MS-GPREG GPO conflict evidence (2026-11-09)
+
+- Harden native `Machine/Registry.pol` and `User/Registry.pol` read-only conflict scanning: keys and value identifiers must end with UTF-16LE NUL followed by a separate semicolon. Previously the scanner accepted the semicolon alone and silently discarded NULs, so malformed registry policy evidence could be mistaken for valid policy settings.
+- Check bounded UTF-16LE data lengths and required string terminators; reject invalid REG_DWORD/REG_DWORD_BIG_ENDIAN/QWORD sizes and invalid Unicode text. Preserve binary/unsupported entries as candidate findings rather than claiming to know their value.
+- Fix the computer-scope self-test `Registry.pol` fixture to include actual MS-GPREG NUL terminators. Add negative tests for a missing key NUL, missing value NUL, malformed DWORD and unterminated REG_SZ, in addition to the already-valid User Screen Saver fixture.
+- Preserve read-only, fail-closed pre-deployment behavior. Malformed linked policies now stop Preview and Deploy; operators should inspect existing GPOs with GPMC/gpresult and compare with selected DC SYSVOL. No GPO/AD repair, client PS1 or EXE changes are included.
+- Bump manager to `0.4.0-preview.78` and release automation for separately verified x64/x86 and updater ZIP packages. Real AD and endpoint RSoP testing remains an isolated pilot task.
+
 ## 0.4.0-preview.77 — Correct GPO empty-half handling and Screen Saver policy path (2026-11-09)
 
 - Fix a false-blocking Preview.76 regression: a linked GPO with no User/Computer settings can legitimately omit the respective SYSVOL subdirectory. Before rejecting missing policy folders, inspect AD GPC `versionNumber` and `gPCUserExtensionNames` / `gPCMachineExtensionNames` on the **same selected DC**. Skip only an unconfigured policy half (with coverage note); reject missing User/Machine folders if AD says the half contains settings.

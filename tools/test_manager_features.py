@@ -175,6 +175,27 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("MS-GPREG rejects unexpected REG_DWORD type", tests)
         self.assertIn("User GPO GPT upgrade preserves following lines", tests)
 
+    def test_strict_ms_gpreg_conflict_scan_parser(self):
+        scanner = read("NativeGpoConflictScan.cs")
+        tests = read("SelfTests.cs")
+        self.assertIn('ReadNullTerminatedIdentifier(reader, key: true)', scanner)
+        self.assertIn('ReadNullTerminatedIdentifier(reader, key: false)', scanner)
+        self.assertIn('Expect(reader, \';\');', scanner)
+        self.assertIn('ReadDword(reader)', scanner)
+        self.assertIn('DisplayRegistryPolicyValue(type, bytes)', scanner)
+        self.assertIn('new UnicodeEncoding(false, false, true)', scanner)
+        self.assertIn('type == 4 && bytes.Length != 4', scanner)
+        self.assertIn('type == 11 && bytes.Length != 8', scanner)
+        self.assertIn('NativeGpoConflictScan.ParseRegistryPol(saverPolicy, true)', tests)
+        for regression in (
+            'Conflict scanner rejects MS-GPREG missing key NUL',
+            'Conflict scanner rejects MS-GPREG missing value NUL',
+            'Conflict scanner rejects a DWORD with invalid byte length',
+            'Conflict scanner rejects a REG_SZ value missing its NUL terminator',
+        ):
+            self.assertIn(regression, tests)
+        self.assertNotIn('if (value == \';\') return text.ToString()', scanner)
+
     def test_optional_gpo_policy_half_and_registry_cse_integrity(self):
         source = read("NativeGpoConflictScan.cs")
         tests = read("SelfTests.cs")
