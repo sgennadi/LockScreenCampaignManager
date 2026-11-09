@@ -7,6 +7,40 @@ public sealed partial class MainForm
 {
     private sealed partial class CampaignWizardDialog
     {
+        // CI-only verification: a user Screen Saver-only campaign goes from
+        // Type straight to Save, with zero JPEGs and no AD/LDAP access.
+        internal void ExerciseScreenSaverSkipForSmokeTest()
+        {
+            _step = 1;
+            RenderPage();
+            var selector = _host.Controls.OfType<TableLayoutPanel>()
+                .SelectMany(panel => Walk(panel))
+                .OfType<ComboBox>()
+                .Single(x => x.Name == "WizardCampaignType");
+            selector.SelectedItem = CampaignTargetMode.ScreenSaver;
+            if (NeedsLockImages || _owner._project.ImagePaths.Count != 0)
+                throw new InvalidOperationException(
+                    "Screen Saver type must not require JPEG images.");
+            NextStep();
+            if (_step != 5 || !_next.Enabled ||
+                !_host.Controls.OfType<TableLayoutPanel>()
+                    .SelectMany(panel => Walk(panel))
+                    .OfType<TextBox>()
+                    .Any(x => x.Name == "WizardCampaignNameInput"))
+                throw new InvalidOperationException(
+                    "Screen Saver-only did not skip images/arrangement/schedule to Save.");
+        }
+
+        private static IEnumerable<Control> Walk(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                yield return child;
+                foreach (Control grandchild in Walk(child))
+                    yield return grandchild;
+            }
+        }
+
         private bool NeedsLockImages =>
             _owner._project.EffectiveCampaignMode is
                 CampaignTargetMode.LockScreen or CampaignTargetMode.Both;
@@ -69,7 +103,17 @@ public sealed partial class MainForm
                 .Cast<object>().ToArray());
             saver.SelectedItem = _owner._project.ScreenSaver.Executable;
             if (saver.SelectedIndex < 0) saver.SelectedIndex = 0;
-            details.Controls.Add(saver, 0, 3);
+            var saverRow = new TableLayoutPanel {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1
+            };
+            saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
+            saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            saverRow.Controls.Add(new Label {
+                Text = "Screen Saver (.scr)", Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
+            }, 0, 0);
+            saverRow.Controls.Add(saver, 1, 0);
+            details.Controls.Add(saverRow, 0, 3);
 
             var idle = new NumericUpDown
             {
@@ -78,7 +122,17 @@ public sealed partial class MainForm
                 Increment = 60,
                 Value = Math.Clamp(_owner._project.ScreenSaver.IdleSeconds, 60, 86400)
             };
-            details.Controls.Add(idle, 0, 4);
+            var idleRow = new TableLayoutPanel {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1
+            };
+            idleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
+            idleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            idleRow.Controls.Add(new Label {
+                Text = "Idle timeout (seconds)", Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
+            }, 0, 0);
+            idleRow.Controls.Add(idle, 1, 0);
+            details.Controls.Add(idleRow, 0, 4);
             var password = new CheckBox
             {
                 Name = "WizardScreenSaverRequirePassword",
