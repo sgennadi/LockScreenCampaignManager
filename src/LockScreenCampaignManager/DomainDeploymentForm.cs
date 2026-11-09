@@ -29,7 +29,10 @@ internal sealed class DomainDeploymentForm : Form
     private string _rightsStatus = "NOT_CHECKED";
     private readonly Button _usersButton = new();
     private readonly Label _connectionStatus = new();
+    private readonly Label _rightsBanner = new();
     private readonly Label _progress = new();
+    private readonly ToolTip _directoryTooltip = new() { AutoPopDelay = 12000, InitialDelay = 450, ReshowDelay = 150 };
+    private SplitContainer? _targetSplit;
     private readonly List<DirectoryRow> _allOus = new();
     private readonly List<DirectoryRow> _allGroups = new();
     private string _connectedDomain = string.Empty;
@@ -54,9 +57,11 @@ internal sealed class DomainDeploymentForm : Form
 
     private sealed record DirectoryRow(string Name, string Dn, string Sam = "")
     {
+        // Keep long DNs out of the list rows; they remain searchable and
+        // available through item tooltips and the deployment preview.
         public override string ToString() => string.IsNullOrWhiteSpace(Sam)
-            ? Name + "   |   " + Dn
-            : Name + " (" + Sam + ")   |   " + Dn;
+            ? Name
+            : Name + " (" + Sam + ")";
     }
 
     private sealed class SavedConnection
@@ -247,8 +252,9 @@ internal sealed class DomainDeploymentForm : Form
         connLayout.Controls.Add(accounts, 0, 1);
         layout.Controls.Add(connection, 0, 2);
 
-        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
-        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
+        var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
         notification.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _connectionStatus.Dock = DockStyle.Fill;
         _connectionStatus.AutoEllipsis = true;
@@ -256,12 +262,18 @@ internal sealed class DomainDeploymentForm : Form
         _connectionStatus.Text = "Not connected. Native LDAP + Windows GPO COM; no RSAT or WinRM.";
         _connectionStatus.ForeColor = Color.DarkSlateGray;
         notification.Controls.Add(_connectionStatus, 0, 0);
-        notification.Controls.Add(new Label { Text = "Security Filtering targets COMPUTER accounts in the selected security group, within the linked OU. Preview is read-only.",
-            Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 1);
+        _rightsBanner.Dock = DockStyle.Fill;
+        _rightsBanner.AutoEllipsis = true;
+        _rightsBanner.TextAlign = ContentAlignment.MiddleLeft;
+        _rightsBanner.Text = "GPO RIGHTS: Not checked. Preview does not change Active Directory.";
+        notification.Controls.Add(_rightsBanner, 0, 1);
+        notification.Controls.Add(new Label { Text = "Security filtering uses COMPUTER accounts from the selected security group, within the linked OU.",
+            Dock = DockStyle.Fill, ForeColor = Color.DarkSlateGray, AutoEllipsis = true }, 0, 2);
         layout.Controls.Add(notification, 0, 3);
 
         var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, SplitterWidth = 8,
             BackColor = UiStyle.Canvas };
+        _targetSplit = split;
         Shown += (_, _) => {
             if (split.Width > 750)
             {
@@ -285,6 +297,7 @@ internal sealed class DomainDeploymentForm : Form
         _ous.IntegralHeight = false;
         _ous.HorizontalScrollbar = true;
         _ous.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _ous.MouseMove += (_, e) => ShowDirectoryTooltip(_ous, e);
         _groupFilter.Dock = DockStyle.Fill;
         _groupFilter.PlaceholderText = "Search computer security group...";
         _groupFilter.TextChanged += (_, _) => FilterGroups();
@@ -292,6 +305,7 @@ internal sealed class DomainDeploymentForm : Form
         _groups.IntegralHeight = false;
         _groups.HorizontalScrollbar = true;
         _groups.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _groups.MouseMove += (_, e) => ShowDirectoryTooltip(_groups, e);
         lists.Controls.Add(_ouFilter, 0, 0);
         lists.Controls.Add(_ous, 0, 1);
         lists.Controls.Add(_groupFilter, 0, 2);
@@ -372,17 +386,12 @@ internal sealed class DomainDeploymentForm : Form
         }
         if (_wizardStep == 1)
         {
+            // Read-only ACL hints are advisory and can be incomplete. Never
+            // interrupt an otherwise safe Preview with a blocking Yes/No.
+            // The actual AD/SYSVOL write retains its own confirmation and
+            // independently verifies delegated rights during deployment.
             await CheckRightsAsync();
-            if (_rightsStatus is "POSSIBLE_DENY" or "NO_MATCHING_ALLOW" or "UNAVAILABLE")
-            {
-                if (MessageBox.Show(this,
-                        "The read-only check could not confirm the permissions needed to create and link a GPO. " +
-                        "You may continue previewing, but actual deployment can fail unless an administrator " +
-                        "delegates GPO creation, OU linking and SYSVOL write rights. Continue?",
-                        "GPO delegation may be insufficient", MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-                    return;
-            }
+            if (_running || _wizardStep != 1 || !HasSelectedTargets) return;
         }
         _wizardStep = Math.Min(2, _wizardStep + 1);
         UpdateDeploymentSteps();
@@ -403,21 +412,35 @@ internal sealed class DomainDeploymentForm : Form
             var data = response.GetProperty("data");
             string create = data.GetProperty("gpoCreateAce").GetString() ?? "UNKNOWN";
             string link = data.GetProperty("ouGpoLinkAce").GetString() ?? "UNKNOWN";
-            _rightsStatus = create == "POTENTIAL_ALLOW" && link == "POTENTIAL_ALLOW"
-                ? "POTENTIAL_ALLOW" : create == "POSSIBLE_DENY" || link == "POSSIBLE_DENY"
-                ? "POSSIBLE_DENY" : "NO_MATCHING_ALLOW";
+            bool complete = data.TryGetProperty("groupTokenComplete", out var token) &&
+                token.ValueKind == JsonValueKind.True;
+            _rightsStatus = create == "POTENTIAL_ALLOW" && link == "POTENTIAL_ALLOW" && complete
+                ? "POTENTIAL_ALLOW"
+                : create == "POSSIBLE_DENY" || link == "POSSIBLE_DENY"
+                    ? "POSSIBLE_DENY"
+                    : !complete || create.StartsWith("UNKNOWN", StringComparison.Ordinal) ||
+                      link.StartsWith("UNKNOWN", StringComparison.Ordinal)
+                        ? "UNKNOWN"
+                        : "NO_MATCHING_ALLOW";
             _progress.Text = "GPO create: " + create + " | OU link: " + link +
-                " | SYSVOL write: NOT TESTED. These are read-only ACL hints, not authorization.";
-            if (_rightsStatus != "POTENTIAL_ALLOW")
-                UiStyle.ApplyStatus(_connectionStatus,
-                    "WARNING: AD ACL check did not confirm both GPO create and OU link rights.",
-                    UiStatusKind.Warning);
+                " | group SIDs complete: " + (complete ? "YES" : "NO") +
+                " | SYSVOL write: NOT TESTED. These are advisory read-only ACL hints.";
+            UiStyle.ApplyStatus(_rightsBanner, _rightsStatus switch
+            {
+                "POTENTIAL_ALLOW" => "GPO RIGHTS: Potentially allowed (read-only hints). SYSVOL and COM not tested.",
+                "POSSIBLE_DENY" => "GPO RIGHTS: Possible deny ACE. Preview is safe; deployment can fail.",
+                "UNKNOWN" => "GPO RIGHTS: Unknown — account group membership or ACL incomplete. Preview is safe.",
+                _ => "GPO RIGHTS: Permission not confirmed (no matching allow). Preview is safe."
+            }, _rightsStatus == "POTENTIAL_ALLOW" ? UiStatusKind.Success : UiStatusKind.Warning);
         }
         catch (Exception ex)
         {
             _rightsStatus = "UNAVAILABLE";
-            _progress.Text = "GPO write permissions could not be determined without changing AD. " +
-                "Ask an administrator to verify delegation before deploying.";
+            _progress.Text = "Read-only GPO rights could not be determined. Preview remains available; " +
+                "deployment still requires independent permission checks.";
+            UiStyle.ApplyStatus(_rightsBanner,
+                "GPO RIGHTS: Read-only check unavailable. Preview is safe; write rights unverified.",
+                UiStatusKind.Warning);
             AppLog.Write(ex, "Read-only GPO permission preflight");
         }
         UpdateDeploymentSteps();
@@ -434,6 +457,15 @@ internal sealed class DomainDeploymentForm : Form
                 1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
                 _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
             };
+        // Use the full content width for target selection and for read-only
+        // preview, instead of leaving half the window blank on each page.
+        if (_targetSplit is not null)
+        {
+            _targetSplit.Panel1Collapsed = false;
+            _targetSplit.Panel2Collapsed = false;
+            if (!_advancedMode && _wizardStep == 1) _targetSplit.Panel2Collapsed = true;
+            else if (!_advancedMode && _wizardStep == 2) _targetSplit.Panel1Collapsed = true;
+        }
         // Guided mode exposes only the controls needed for the current step.
         // Advanced mode keeps the complete manual editing surface.
         bool credentialsStep = _advancedMode || _wizardStep == 0;
@@ -521,6 +553,9 @@ internal sealed class DomainDeploymentForm : Form
     {
         _lastPlanKey = null;
         _rightsStatus = "NOT_CHECKED";
+        UiStyle.ApplyStatus(_rightsBanner,
+            "GPO RIGHTS: Not checked. Preview does not change Active Directory.",
+            UiStatusKind.Neutral);
         _lastConflictHigh = 0;
         _lastConflictWarnings = 0;
         _deployButton.Enabled = false;
@@ -658,15 +693,34 @@ internal sealed class DomainDeploymentForm : Form
         catch (Exception ex) { DisplayError(ex); }
     }
 
+    private void ShowDirectoryTooltip(ListBox list, MouseEventArgs e)
+    {
+        int index = list.IndexFromPoint(e.Location);
+        string hint = index >= 0 && index < list.Items.Count &&
+            list.Items[index] is DirectoryRow row
+                ? row.ToString() + Environment.NewLine + row.Dn : string.Empty;
+        if (!string.Equals(_directoryTooltip.GetToolTip(list), hint, StringComparison.Ordinal))
+            _directoryTooltip.SetToolTip(list, hint);
+    }
+
+    private static bool MatchesDirectoryQuery(DirectoryRow row, string query) =>
+        string.IsNullOrWhiteSpace(query) ||
+        row.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        row.Dn.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+        row.Sam.Contains(query, StringComparison.OrdinalIgnoreCase);
+
     private void FilterOus()
     {
         string query = _ouFilter.Text.Trim();
         _ous.BeginUpdate();
         try
         {
+            var selection = _ous.SelectedItem as DirectoryRow;
             _ous.Items.Clear();
-            foreach (var row in _allOus.Where(x => string.IsNullOrEmpty(query) || x.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)))
+            foreach (var row in _allOus.Where(x => MatchesDirectoryQuery(x, query)))
                 _ous.Items.Add(row);
+            if (selection is not null && _ous.Items.Contains(selection))
+                _ous.SelectedItem = selection;
         }
         finally { _ous.EndUpdate(); }
     }
@@ -677,9 +731,12 @@ internal sealed class DomainDeploymentForm : Form
         _groups.BeginUpdate();
         try
         {
+            var selection = _groups.SelectedItem as DirectoryRow;
             _groups.Items.Clear();
-            foreach (var row in _allGroups.Where(x => string.IsNullOrEmpty(query) || x.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)))
+            foreach (var row in _allGroups.Where(x => MatchesDirectoryQuery(x, query)))
                 _groups.Items.Add(row);
+            if (selection is not null && _groups.Items.Contains(selection))
+                _groups.SelectedItem = selection;
         }
         finally { _groups.EndUpdate(); }
     }
