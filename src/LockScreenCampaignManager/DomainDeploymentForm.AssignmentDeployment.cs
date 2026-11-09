@@ -11,13 +11,68 @@ internal sealed partial class DomainDeploymentForm
     // computer or user scope. No mode-wide Apply shortcut is permitted.
     private sealed record TargetPlanEntry(int Number, string Mode,
         string OuDn, string GroupDn, string GpoName,
-        string CampaignId, string PlanHash, int DirectMembers);
+        string CampaignId, string PlanHash, int DirectMembers,
+        int ConflictHighRisk, int ConflictWarnings);
     private readonly List<TargetPlanEntry> _targetPlans = new();
 
     private static string TargetGpoName(string root, int index, string mode)
     {
         string suffix = " - " + mode + (index + 1).ToString("D2");
         return root[..Math.Min(root.Length, 120 - suffix.Length)] + suffix;
+    }
+
+
+    private sealed record TargetConflictAudit(int HighRisk, int Warnings, string Preview);
+
+    // Every group target gets its own read-only OU/ancestor GPO scan.
+    // An incomplete scan fails Preview rather than being reported as zero hits.
+    private async Task<TargetConflictAudit> ScanTargetConflictsAsync(
+        string domain, string dc, string ouDn, string policyScope,
+        DomainCredentials credentials)
+    {
+        _progress.Text = "Read-only " + policyScope +
+            " Configuration GPO conflict scan on selected DC...";
+        var response = await Task.Run(() =>
+            DomainPowerShellRunner.Execute(DomainOperation.ConflictScan, "Scan",
+                new { domain, dc, ouDn, computer = "", policyScope },
+                credentials, timeoutMilliseconds: 240000));
+        var data = response.GetProperty("data");
+        if (!string.Equals(data.GetProperty("domain").GetString(), domain,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(data.GetProperty("targetOu").GetString(), ouDn,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(data.GetProperty("policyScope").GetString(), policyScope,
+                StringComparison.Ordinal))
+            throw new InvalidDataException(
+                "GPO conflict audit returned a different domain, OU or policy scope.");
+
+        int highRisk = data.GetProperty("highRisk").GetInt32();
+        int warnings = data.GetProperty("warningsCount").GetInt32();
+        if (highRisk < 0 || warnings < 0 ||
+            data.GetProperty("count").GetInt32() > 500)
+            throw new InvalidDataException("Invalid conflict audit counts.");
+
+        static string Display(string? value, int max = 110) =>
+            new((value ?? "").Where(ch => !char.IsControl(ch)).Take(max).ToArray());
+        var details = new StringBuilder();
+        details.AppendLine("  READ-ONLY " + policyScope.ToUpperInvariant() +
+            " GPO CONFLICT AUDIT: " + highRisk + " high-risk, " + warnings +
+            " warning static entries.");
+        var candidates = data.GetProperty("matches").EnumerateArray()
+            .Where(hit => hit.GetProperty("risk").GetString() is
+                "High" or "Warning" or "Info")
+            .OrderByDescending(hit => hit.GetProperty("risk").GetString() == "High")
+            .Take(12);
+        foreach (var hit in candidates)
+            details.AppendLine("    " + Display(hit.GetProperty("risk").GetString()) +
+                " | " + Display(hit.GetProperty("gpo").GetString()) +
+                " | " + Display(hit.GetProperty("name").GetString()) +
+                " = " + Display(hit.GetProperty("value").GetString(), 180));
+        foreach (var note in data.GetProperty("notes").EnumerateArray().Take(6))
+            details.AppendLine("    COVERAGE: " + Display(note.GetString(), 180));
+        details.AppendLine("  NOT RSoP: zero static hits does not prove no effective conflict.");
+        details.AppendLine("  Verify user/computer gpresult, WMI, site, ACL and scripts.");
+        return new TargetConflictAudit(highRisk, warnings, details.ToString());
     }
 
     private CampaignProject ProjectForTarget(int index)
@@ -124,15 +179,18 @@ internal sealed partial class DomainDeploymentForm
                         });
                         string id = result.GetProperty("campaignId").GetString() ?? "";
                         int members = result.GetProperty("directGroupMembers").GetInt32();
+                        var audit = await ScanTargetConflictsAsync(
+                            domain, dc, row.ComputerOuDn, "Computer", creds);
                         planned.Add(new TargetPlanEntry(i, "LockScreen",
                             row.ComputerOuDn, row.ComputerGroupDn,
-                            gpoName, id, "", members));
+                            gpoName, id, "", members, audit.HighRisk, audit.Warnings));
                         info.AppendLine("LOCK SCREEN - " + row.Name);
                         info.AppendLine("  GPO: " + gpoName + " | client: " + project.ClientType);
                         info.AppendLine("  OU: " + row.ComputerOuDn);
                         info.AppendLine("  Computer group: " + row.ComputerGroupDn);
                         info.AppendLine("  Direct members: " + members +
                             " | campaign folder: " + id);
+                        info.Append(audit.Preview);
                     }
                     if (row.UsesScreenSaver)
                     {
@@ -154,8 +212,11 @@ internal sealed partial class DomainDeploymentForm
                         int members = result.GetProperty("directGroupMembers").GetInt32();
                         if (hash.Length != 64)
                             throw new InvalidDataException("Screen Saver plan hash missing.");
+                        var audit = await ScanTargetConflictsAsync(
+                            domain, dc, row.UserOuDn, "User", creds);
                         planned.Add(new TargetPlanEntry(i, "ScreenSaver",
-                            row.UserOuDn, row.UserGroupDn, gpoName, "", hash, members));
+                            row.UserOuDn, row.UserGroupDn, gpoName, "", hash, members,
+                            audit.HighRisk, audit.Warnings));
                         info.AppendLine("SCREEN SAVER - " + row.Name);
                         info.AppendLine("  GPO: " + gpoName + " | USER policy / HKCU");
                         info.AppendLine("  User OU: " + row.UserOuDn);
@@ -163,6 +224,7 @@ internal sealed partial class DomainDeploymentForm
                         info.AppendLine("  Direct members: " + members + " | " +
                             saver.Executable + " | idle " + saver.IdleSeconds +
                             "s | resume password: " + saver.PasswordOnResume);
+                        info.Append(audit.Preview);
                     }
                     info.AppendLine();
                 }
@@ -172,6 +234,10 @@ internal sealed partial class DomainDeploymentForm
                 _running = false;
                 UseWaitCursor = false;
             }
+            int totalHigh = planned.Sum(x => x.ConflictHighRisk);
+            int totalWarnings = planned.Sum(x => x.ConflictWarnings);
+            info.AppendLine("BATCH STATIC GPO CANDIDATES: " + totalHigh +
+                " high-risk overlaps, " + totalWarnings + " warnings.");
             info.AppendLine("PREVIEW ONLY - no GPOs, SYSVOL or AD objects modified.");
             info.AppendLine("Overlapping inherited user or computer policies must " +
                 "be checked by gpresult/RSoP before a production rollout.");
@@ -180,8 +246,9 @@ internal sealed partial class DomainDeploymentForm
             _lastPlanKey = PlanKey();
             _deployButton.Enabled = _project.ClientType != CampaignClientType.Executable ||
                 !includesLock || NativeClientAgent.CanDeployNativeClient;
-            _progress.Text = planned.Count + " independently scoped GPO(s) ready for " +
-                "explicit confirmation; no changes have been made.";
+            _progress.Text = planned.Count + " scoped GPO(s) preflighted. " +
+                totalHigh + " high / " + totalWarnings +
+                " warning static overlaps; review report before approval.";
             UpdateDeploymentSteps();
             return true;
         }
@@ -224,6 +291,23 @@ internal sealed partial class DomainDeploymentForm
             return;
         }
         var planned = _targetPlans.ToArray();
+        int totalHigh = planned.Sum(x => x.ConflictHighRisk);
+        int totalWarnings = planned.Sum(x => x.ConflictWarnings);
+        if (totalHigh > 0 || totalWarnings > 0)
+        {
+            var riskApproval = MessageBox.Show(this,
+                "READ-ONLY STATIC GPO CONFLICTS DETECTED.\n\n" +
+                totalHigh + " high-risk and " + totalWarnings +
+                " warning entries across scoped Computer/User targets.\n" +
+                "These are candidates, not confirmed winning policies.\n" +
+                "Review the per-target Preview. Verify pilot gpresult/RSoP, " +
+                "inheritance, site, WMI and security filtering.\n\n" +
+                "Continue to the separate GPO creation confirmation?",
+                "Review existing GPO conflicts before deployment",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (riskApproval != DialogResult.Yes) return;
+        }
         string summary = string.Join(Environment.NewLine,
             planned.Select(p => p.Mode + " : " + p.GpoName +
                 " | OU=" + p.OuDn + " | Group=" + p.GroupDn));
@@ -234,7 +318,9 @@ internal sealed partial class DomainDeploymentForm
             "computer/user security group and linked only to the chosen OU.\n\n" +
             (summary.Length > 1700 ? summary[..1700] +
                 "\n... Full targets are in the Preview pane." : summary) +
-            "\n\nTHIS BATCH IS NOT ATOMIC: successful GPOs are not removed if " +
+            "\n\nStatic overlap scan: " + totalHigh + " high-risk / " + totalWarnings +
+            " warning entries; zero does not prove RSoP.\n" +
+            "THIS BATCH IS NOT ATOMIC: successful GPOs are not removed if " +
             "a later group fails. Inspect the deployment receipts.\n\nProceed?",
             "Confirm scoped multi-group AD deployment",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning,

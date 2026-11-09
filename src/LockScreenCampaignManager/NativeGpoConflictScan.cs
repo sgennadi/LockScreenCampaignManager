@@ -32,7 +32,8 @@ internal static class NativeGpoConflictScan
     private sealed record RemoteRegistryResult(bool reachable, IReadOnlyList<Hit> values, string note);
     private sealed record Match(
         string gpo, string gpoId, string linkedAt, bool enforced, bool disabled,
-        bool inheritanceBlocked, bool computerPartDisabled, bool wmiFilterPresent,
+        bool inheritanceBlocked, bool computerPartDisabled, bool userPartDisabled,
+        bool wmiFilterPresent,
         string source, string key, string name, string value, string risk, string reason,
         string applicability);
 
@@ -49,6 +50,10 @@ internal static class NativeGpoConflictScan
         if (dc.Length == 0) throw new ArgumentException("Choose an explicit domain controller.");
         string ouDn = Get(args, "ouDn").Trim();
         string computer = Get(args, "computer").Trim();
+        bool userScope = IsUserPolicyScope(Get(args, "policyScope"));
+        if (userScope && computer.Length > 0)
+            throw new ArgumentException(
+                "User Configuration requires a user gpresult/RSoP; remote computer HKLM is not user evidence.");
         if (computer.Length > 0 && !SafeComputerName(computer, domain))
             throw new ArgumentException("Computer must be a domain FQDN; no IP addresses or paths.");
 
@@ -90,22 +95,28 @@ internal static class NativeGpoConflictScan
                     if (gpoName.Length == 0) gpoName = id.ToString("D");
                     int flags = IntAttribute(entry, "flags");
                     string wmi = NativeAdDiscovery.Attr(entry, "gPCWQLFilter");
-                    if ((flags & 2) != 0) inScope = false;
+                    bool partDisabled = IsPolicyPartDisabled(flags, userScope);
+                    if (partDisabled) inScope = false;
+                    if (wmi.Length > 0 && inScope)
+                        notes.Add("WMI filter in " + SafeName(gpoName) +
+                            " cannot be evaluated without client-side RSoP.");
 
                     // The SYSVOL path is pinned to the same verified DC used
-                    // for LDAP. A missing/unreadable Machine directory must
-                    // block the pre-deployment audit, never count as no conflicts.
-                    string machine = Path.Combine(@"\\", actualDc, "SYSVOL", domain,
-                        "Policies", "{" + id.ToString("D").ToUpperInvariant() + "}", "Machine");
-                    EnsureDirectory(machine);
+                    // for LDAP. A missing/unreadable User or Machine directory must
+                    // block pre-deployment audit, never count as no conflicts.
+                    string policyFolder = userScope ? "User" : "Machine";
+                    string policyRoot = Path.Combine(@"\\", actualDc, "SYSVOL", domain,
+                        "Policies", "{" + id.ToString("D").ToUpperInvariant() + "}", policyFolder);
+                    EnsureDirectory(policyRoot);
                     foreach (string startup in new[]
                     {
                         @"Scripts\psscripts.ini", @"Scripts\scripts.ini"
                     })
                     {
-                        string path = Path.Combine(machine, startup);
+                        string path = Path.Combine(policyRoot, startup);
                         if (FileExistsSafe(path) && inScope)
-                            notes.Add("Startup script in " + SafeName(gpoName) +
+                            notes.Add((userScope ? "User logon/logoff" : "Computer startup") +
+                                " script in " + SafeName(gpoName) +
                                 " requires manual GPMC/gpresult verification.");
                     }
                     foreach (string source in new[]
@@ -113,14 +124,14 @@ internal static class NativeGpoConflictScan
                         "Registry.pol", @"Preferences\Registry\Registry.xml"
                     })
                     {
-                        string file = Path.Combine(machine, source);
+                        string file = Path.Combine(policyRoot, source);
                         if (!FileExistsSafe(file)) continue;
                         IReadOnlyList<Hit> hits;
                         try
                         {
                             byte[] bytes = File.ReadAllBytes(file);
                             hits = source == "Registry.pol"
-                                ? ParseRegistryPol(bytes) : ParseGppRegistry(bytes);
+                                ? ParseRegistryPol(bytes, userScope) : ParseGppRegistry(bytes, userScope);
                         }
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                             or InvalidDataException or XmlException or ArgumentException)
@@ -135,7 +146,7 @@ internal static class NativeGpoConflictScan
                                 throw new InvalidDataException("GPO conflict scan result limit exceeded.");
                             found.Add(new Match(gpoName, id.ToString("D"), level.Dn,
                                 enforced, !enabled, blockedBelow, (flags & 2) != 0,
-                                wmi.Length > 0, source, hit.key, hit.name,
+                                (flags & 1) != 0, wmi.Length > 0, source, hit.key, hit.name,
                                 Truncate(hit.value, 450),
                                 inScope ? hit.risk : "Inactive/filtered", hit.reason,
                                 "Estimated: security filtering, WMI, site/local policies and RSoP not fully evaluated."));
@@ -155,11 +166,14 @@ internal static class NativeGpoConflictScan
             var result = new
             {
                 domain, dc = actualDc, targetOu = ouDn,
+                policyScope = userScope ? "User" : "Computer",
                 scannedLevels = levels.Select(x => new ScanLevel(x.Dn, x.Blocked, x.Depth)),
                 matches = found, count = found.Count, highRisk = high,
                 warningsCount = warningCount, notes, remoteRegistry,
-                scope = "Read-only candidate audit. Not a definitive Resultant Set of Policy (RSoP). " +
-                    "Site-level, local, WMI, item-level targeting and security permissions require verification."
+                scope = "Read-only " + (userScope ? "User" : "Computer") +
+                    " Configuration static OU-link candidates, NOT Resultant Set of Policy (RSoP). " +
+                    "Site/local policies, WMI, security filtering, GPP item-level targeting and " +
+                    "scripts may change effective settings. Zero hits does not prove no conflict."
             };
             return JsonSerializer.SerializeToElement(new
             {
@@ -187,6 +201,21 @@ internal static class NativeGpoConflictScan
         using (token)
             return WindowsIdentity.RunImpersonated(token, Run);
     }
+
+    // Default Computer preserves the existing single-target scan API.
+    // A typo must not silently select the wrong Registry.pol policy half.
+    internal static bool IsUserPolicyScope(string? scope)
+    {
+        if (string.IsNullOrEmpty(scope) ||
+            scope.Equals("Computer", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (scope.Equals("User", StringComparison.OrdinalIgnoreCase))
+            return true;
+        throw new ArgumentException("Policy scope must be User or Computer.", nameof(scope));
+    }
+
+    internal static bool IsPolicyPartDisabled(int gpoFlags, bool userScope) =>
+        (gpoFlags & (userScope ? 1 : 2)) != 0;
 
     private static string Get(JsonElement args, string key) =>
         args.ValueKind == JsonValueKind.Object &&
@@ -290,7 +319,7 @@ internal static class NativeGpoConflictScan
     {
         var directory = new DirectoryInfo(path);
         if (!directory.Exists || (directory.Attributes & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("Selected DC SYSVOL Machine folder missing or unsafe.");
+            throw new InvalidDataException("Selected DC SYSVOL policy folder missing or unsafe.");
         // Fail closed if directory listing cannot be read.
         _ = directory.EnumerateFileSystemInfos().Take(1).ToArray();
     }
@@ -310,10 +339,28 @@ internal static class NativeGpoConflictScan
         return true;
     }
 
-    internal static Hit? TargetValue(string key, string name, string value)
+    internal static Hit? TargetValue(string key, string name, string value,
+        bool userScope = false)
     {
         string k = key.TrimStart('\\').ToLowerInvariant();
         string n = name.ToLowerInvariant();
+        if (userScope)
+        {
+            // User Group Policy writes these REG_SZ values in HKCU.
+            // GPP can also update the legacy HKCU\Control Panel\Desktop path.
+            bool screenSaverKey = k is
+                @"software\policies\microsoft\windows\control panel\desktop" or
+                @"control panel\desktop";
+            if (screenSaverKey && n is
+                ("screensaveactive" or "scrnsave.exe" or
+                 "screensavetimeout" or "screensaverissecure"))
+                return new Hit(key, name, value, "High",
+                    "Potential User Configuration Screen Saver overlap; check user gpresult/RSoP.");
+            if (screenSaverKey && n == "nodispscrsavpage")
+                return new Hit(key, name, value, "Warning",
+                    "Screen Saver configuration UI restriction; verify User Configuration.");
+            return null;
+        }
         if ((n == "lockscreenimage" || n == "nochanginglockscreen" || n == "nolockscreen")
             && k.EndsWith(@"\policies\microsoft\windows\personalization", StringComparison.Ordinal))
         {
@@ -332,7 +379,8 @@ internal static class NativeGpoConflictScan
         return null;
     }
 
-    internal static IReadOnlyList<Hit> ParseRegistryPol(byte[] contents)
+    internal static IReadOnlyList<Hit> ParseRegistryPol(byte[] contents,
+        bool userScope = false)
     {
         if (contents is null || contents.Length is < 8 or > 2097152)
             throw new InvalidDataException("Invalid Registry.pol length.");
@@ -366,7 +414,7 @@ internal static class NativeGpoConflictScan
                 4 => "[invalid DWORD]",
                 _ => "[binary or unsupported]"
             };
-            var hit = TargetValue(key, name, display);
+            var hit = TargetValue(key, name, display, userScope);
             if (hit is not null) hits.Add(hit);
             if (hits.Count > 120)
                 throw new InvalidDataException("Too many relevant Registry.pol settings.");
@@ -399,7 +447,8 @@ internal static class NativeGpoConflictScan
             throw new InvalidDataException("Malformed Registry.pol separator.");
     }
 
-    internal static IReadOnlyList<Hit> ParseGppRegistry(byte[] contents)
+    internal static IReadOnlyList<Hit> ParseGppRegistry(byte[] contents,
+        bool userScope = false)
     {
         if (contents is null || contents.Length is < 1 or > 2097152)
             throw new InvalidDataException("GPP Registry.xml exceeds size limit.");
@@ -426,9 +475,14 @@ internal static class NativeGpoConflictScan
             {
                 if (child is not XmlElement p) continue;
                 string hive = p.GetAttribute("hive");
-                if (hive is not ("HKEY_LOCAL_MACHINE" or "HKLM")) continue;
+                bool correctHive = userScope
+                    ? hive.Equals("HKCU", StringComparison.OrdinalIgnoreCase) ||
+                      hive.Equals("HKEY_CURRENT_USER", StringComparison.OrdinalIgnoreCase)
+                    : hive.Equals("HKLM", StringComparison.OrdinalIgnoreCase) ||
+                      hive.Equals("HKEY_LOCAL_MACHINE", StringComparison.OrdinalIgnoreCase);
+                if (!correctHive) continue;
                 var hit = TargetValue(p.GetAttribute("key"),
-                    p.GetAttribute("name"), p.GetAttribute("value"));
+                    p.GetAttribute("name"), p.GetAttribute("value"), userScope);
                 if (hit is not null) hits.Add(hit);
                 if (hits.Count > 120)
                     throw new InvalidDataException("Too many relevant GPP registry settings.");
