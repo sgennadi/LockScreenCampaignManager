@@ -33,6 +33,8 @@ internal sealed class DomainDeploymentForm : Form
     private readonly Label _progress = new();
     private readonly ToolTip _directoryTooltip = new() { AutoPopDelay = 12000, InitialDelay = 450, ReshowDelay = 150 };
     private SplitContainer? _targetSplit;
+    private TableLayoutPanel? _deploymentLayout;
+    private Control? _connectionPanel;
     private readonly List<DirectoryRow> _allOus = new();
     private readonly List<DirectoryRow> _allGroups = new();
     private string _connectedDomain = string.Empty;
@@ -170,6 +172,7 @@ internal sealed class DomainDeploymentForm : Form
     private void BuildControls()
     {
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(18) };
+        _deploymentLayout = layout;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
@@ -200,6 +203,7 @@ internal sealed class DomainDeploymentForm : Form
         layout.Controls.Add(navigation, 0, 1);
 
         var connection = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
+        _connectionPanel = connection;
         var connLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
@@ -457,6 +461,15 @@ internal sealed class DomainDeploymentForm : Form
                 1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
                 _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
             };
+        // Connection fields belong on step 1 only. Keep their selected values
+        // in memory while giving target and preview pages the full height.
+        bool connectionVisible = _advancedMode || _wizardStep == 0;
+        if (_connectionPanel is not null) _connectionPanel.Visible = connectionVisible;
+        if (_deploymentLayout is not null)
+        {
+            _deploymentLayout.RowStyles[2].SizeType = SizeType.Absolute;
+            _deploymentLayout.RowStyles[2].Height = connectionVisible ? 222 : 0;
+        }
         // Use the full content width for target selection and for read-only
         // preview, instead of leaving half the window blank on each page.
         if (_targetSplit is not null)
