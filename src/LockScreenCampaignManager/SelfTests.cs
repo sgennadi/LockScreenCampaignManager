@@ -896,6 +896,62 @@ StartExecutePSFirst=true
                 @"Software\Policies\Microsoft\Windows\CloudContent",
                 "DisableWindowsSpotlightFeatures", "1")?.risk == "Warning",
             "Native GPO scanner recognizes managed lock screen conflicts");
+        // Read-only User Configuration scanning must identify the exact
+        // four values emitted by our Screen Saver policy, not HKLM values.
+        Check(NativeGpoConflictScan.IsUserPolicyScope("User") &&
+            NativeGpoConflictScan.IsUserPolicyScope("user") &&
+            !NativeGpoConflictScan.IsUserPolicyScope("Computer") &&
+            !NativeGpoConflictScan.IsUserPolicyScope(null),
+            "GPO conflict scan defaults to Computer and supports explicit User scope");
+        bool wrongScopeDenied = false;
+        try { _ = NativeGpoConflictScan.IsUserPolicyScope("Usre"); }
+        catch (ArgumentException) { wrongScopeDenied = true; }
+        Check(wrongScopeDenied, "GPO conflict scan rejects misspelled scope");
+        Check(NativeGpoConflictScan.IsPolicyPartDisabled(1, true) &&
+            !NativeGpoConflictScan.IsPolicyPartDisabled(1, false) &&
+            NativeGpoConflictScan.IsPolicyPartDisabled(2, false) &&
+            !NativeGpoConflictScan.IsPolicyPartDisabled(2, true),
+            "User and computer GPO flags disable only their own policy half");
+
+        byte[] saverPolicy = NativeUserScreenSaverGpo.BuildRegistryPol(
+            "scrnsave.scr", 600, true);
+        var userHits = NativeGpoConflictScan.ParseRegistryPol(saverPolicy, true);
+        Check(userHits.Count == 4 && userHits.All(hit => hit.risk == "High") &&
+            userHits.Select(hit => hit.name).ToHashSet(
+                StringComparer.OrdinalIgnoreCase).SetEquals(new[] {
+                    "ScreenSaveActive", "SCRNSAVE.EXE",
+                    "ScreenSaveTimeOut", "ScreenSaverIsSecure"
+                }) && NativeGpoConflictScan.ParseRegistryPol(saverPolicy).Count == 0,
+            "Native User Registry.pol scan recognizes all four Screen Saver policies only in HKCU");
+        Check(NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                "ScreenSaveTimeOut", "900", true)?.risk == "High" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Control Panel\Desktop", "ScreenSaverIsSecure", "1", true)?.risk == "High" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                "NoDispScrSavPage", "1", true)?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(
+                @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                "ScreenSaveActive", "1") is null,
+            "Screen Saver overlap recognition does not leak into computer policy scanning");
+
+        string userXml = "<RegistrySettings><Registry><Properties hive=\"HKCU\" " +
+            "key=\"Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop\" " +
+            "name=\"SCRNSAVE.EXE\" value=\"scrnsave.scr\" /></Registry>" +
+            "<Registry><Properties hive=\"HKLM\" " +
+            "key=\"Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop\" " +
+            "name=\"ScreenSaveActive\" value=\"1\" /></Registry></RegistrySettings>";
+        byte[] userGpp = System.Text.Encoding.UTF8.GetBytes(userXml);
+        var userGppHits = NativeGpoConflictScan.ParseGppRegistry(userGpp, true);
+        Check(userGppHits.Count == 1 && userGppHits[0].name == "SCRNSAVE.EXE" &&
+            NativeGpoConflictScan.ParseGppRegistry(userGpp).Count == 0,
+            "User GPP Registry.xml scan requires HKCU and never reads wrong hive");
+        bool brokenUserPolicyDenied = false;
+        try { NativeGpoConflictScan.ParseRegistryPol(saverPolicy[..^1], true); }
+        catch (InvalidDataException) { brokenUserPolicyDenied = true; }
+        Check(brokenUserPolicyDenied, "Truncated User Registry.pol blocks deployment preview");
+
         byte[] policy;
         using (var bytes = new MemoryStream())
         {

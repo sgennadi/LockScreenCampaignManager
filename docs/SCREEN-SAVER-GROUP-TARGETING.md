@@ -29,7 +29,13 @@ These values are REG_SZ. The GPO user extension uses the Microsoft-defined Regis
 
 ## Batch safety
 
-Preview reads and validates **every** proposed computer or user policy separately, checks its exact OU, group, DC, GPO name, read-only source manifests and image hashes where needed, and does not change AD or SYSVOL. Deploy repeats Preview, requires one explicit batch confirmation (default **No**), creates individually named GPOs, and writes individual receipts.
+Preview reads and validates **every** proposed computer or user policy separately, checks its exact OU, group, DC, GPO name, read-only source manifests and image hashes where needed, and does not change AD or SYSVOL. Starting in preview.76, each target also receives an independent read-only **OU/ancestor-linked GPO conflict audit** using the chosen DC:
+
+- Lock Screen target: scan `Machine/Registry.pol` and `Machine/Preferences/Registry/Registry.xml`, plus detected startup-script coverage notes. Flag overlapping managed lock-screen and Spotlight settings.
+- Screen Saver target: scan `User/Registry.pol` and `User/Preferences/Registry/Registry.xml` (HKCU only), plus logon/logoff-script coverage notes. Flag `ScreenSaveActive`, `SCRNSAVE.EXE`, `ScreenSaveTimeOut`, `ScreenSaverIsSecure` as high-risk candidates; show a warning for `NoDispScrSavPage`.
+- Both: perform two separately scoped audits. Explicitly disabled User/Computer GPO halves and link/enforcement/inheritance state are handled independently. If any audit cannot read LDAP/SYSVOL reliably, **Preview fails** and Deploy does not proceed. High-risk/warning findings require an extra default-No confirmation. All details are in the read-only Preview.
+
+The static audit cannot determine the winning client policy: **zero static overlaps does not mean conflict-free**. Security filtering, WMI, GPP item-level targeting, Site/local GPOs, MDM policy, script side effects and client RSoP remain unverified. Deploy repeats Preview, requires an explicit batch confirmation (default **No**), creates individually named GPOs, and writes individual receipts.
 
 **This is not a transaction:** successful GPOs are **not** automatically deleted if a later assignment fails. If a batch is interrupted, stop and manually inspect the named GPOs and SYSVOL state before retrying. Use dedicated groups with no overlapping memberships. Native EXE batch deployment is blocked; use the production PS1 client for new LockScreen group batches. Existing projects with no assignment matrix still use the legacy single-target Lock Screen workflow.
 

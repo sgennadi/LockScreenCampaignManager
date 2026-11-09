@@ -175,6 +175,30 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("MS-GPREG rejects unexpected REG_DWORD type", tests)
         self.assertIn("User GPO GPT upgrade preserves following lines", tests)
 
+    def test_per_group_user_and_computer_conflict_preflight(self):
+        native = read("NativeGpoConflictScan.cs")
+        form = read("DomainDeploymentForm.AssignmentDeployment.cs")
+        tests = read("SelfTests.cs")
+        self.assertIn('IsUserPolicyScope(Get(args, "policyScope"))', native)
+        self.assertIn('policyFolder = userScope ? "User" : "Machine"', native)
+        self.assertIn('IsPolicyPartDisabled(flags, userScope)', native)
+        self.assertIn('ParseRegistryPol(bytes, userScope)', native)
+        self.assertIn('ParseGppRegistry(bytes, userScope)', native)
+        self.assertIn('hive.Equals("HKCU"', native)
+        self.assertIn('new { domain, dc, ouDn, computer = "", policyScope }', form)
+        self.assertIn('row.ComputerOuDn, "Computer", creds', form)
+        self.assertIn('row.UserOuDn, "User", creds', form)
+        self.assertIn('"policyScope").GetString()', form)
+        self.assertIn('data.GetProperty("highRisk")', form)
+        self.assertIn('data.GetProperty("warningsCount")', form)
+        self.assertIn('if (riskApproval != DialogResult.Yes) return;', form)
+        self.assertIn('MessageBoxDefaultButton.Button2', form)
+        self.assertIn('Truncated User Registry.pol blocks deployment preview', tests)
+        self.assertIn('User GPP Registry.xml scan requires HKCU', tests)
+        self.assertIn('zero static hits does not prove no effective conflict', form)
+        # Hosted CI must never treat a failed/incomplete audit as clean.
+        self.assertNotIn('catch { return new TargetConflictAudit(0', form)
+
     def test_group_mode_assignments_and_separate_user_gpo(self):
         model = read("CampaignModels.cs")
         assignment = read("CampaignTargetAssignments.cs")

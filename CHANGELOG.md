@@ -1,3 +1,12 @@
+## 0.4.0-preview.76 — Scoped read-only User/Computer GPO conflict auditing (2026-11-09)
+
+- Extend the native read-only GPO conflict scanner with an explicit **User** policy scope, while keeping existing **Computer** as the backwards-compatible default. Read the matching SYSVOL User/Machine halves with selected-DC LDAP identity and signed/sealed connections.
+- Detect Screen Saver HKCU `ScreenSaveActive`, `SCRNSAVE.EXE`, `ScreenSaveTimeOut`, `ScreenSaverIsSecure` and `NoDispScrSavPage` in `Registry.pol` and GPP Registry XML; do not confuse HKLM policies with HKCU.
+- Each row in group-targeted Preview now separately audits its Computer or User OU-linked and inherited policies, reports per-target counts/setting samples/coverage warnings, and fails closed if scan fails or scope is mismatched.
+- Deploy repeats every audit before approval. High-risk or warning static overlaps require a second explicit default-No decision before the existing confirmation. A zero-hit audit is never reported as effective RSoP.
+- New offline test fixtures cover GPO User/Computer disabled-policy bits, all four built-in Screen Saver registry values, HKCU-vs-HKLM GPP scope, malformed user policies, and mis-typed scope; CI checks the full group-preflight contract.
+- The production PowerShell and lab-only EXE **agent code remains unchanged** at 0.4.0-preview.75; this is a manager-side preflight update with no AD writes in its checks. Actual user gpresult, WMI, MDM and site applicability still require an isolated AD pilot.
+
 ## 0.4.0-preview.75 — Explicit type selection, correct skip stages and matching campaign names (2026-11-09)
 
 - New Campaign Wizard sessions start with **no** selected campaign type; Next stays disabled until Lock Screen, Screen Saver or Both is chosen.
