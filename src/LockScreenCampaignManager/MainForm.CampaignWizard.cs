@@ -1020,6 +1020,28 @@ public sealed partial class MainForm
 
         private void RenderSave(FlowLayoutPanel actions, Panel body, Label status)
         {
+            if (_owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+                Action(actions, "Export JPG .scr pilot...", () =>
+                {
+                    try
+                    {
+                        _owner.ReadControls();
+                        using var select = new FolderBrowserDialog {
+                            Description = "Choose an EXISTING local folder for the JPG screen saver package"
+                        };
+                        if (select.ShowDialog(this) != DialogResult.OK) return;
+                        string exported = PhotoJpegSaver.Export(_owner._project, select.SelectedPath);
+                        MessageBox.Show(this,
+                            "JPG Screen Saver package exported locally:\r\n" + exported +
+                            "\r\n\r\nTest PhotoScreenSaver.scr /s on an isolated client. " +
+                            "This does NOT deploy GPO or install anything.",
+                            "JPG Screen Saver pilot ready",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        status.Text = "JPG Screen Saver pilot package exported. Test before domain rollout.";
+                    }
+                    catch (Exception ex) { UiErrorDialog.Show(this, "Export JPG Screen Saver", ex); }
+                }, 222, true);
             Action(actions, "Validate campaign", () =>
                 _owner.ValidateCurrent(), 180);
             Action(actions, "Save project...", () =>
@@ -1108,11 +1130,14 @@ public sealed partial class MainForm
 
         private void RenderDeploy(FlowLayoutPanel actions, Panel body, Label status)
         {
-            Action(actions, "Open GPO Deployment Wizard...", () =>
+            var photoPilotOnly = _owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen;
+            var gpoAction = Action(actions, "Open GPO Deployment Wizard...", () =>
             {
                 _deployChoice!.Checked = true;
                 Deploy();
             }, 290, true);
+            gpoAction.Enabled = !photoPilotOnly;
             Action(actions, "Finish offline", () =>
             {
                 DialogResult = DialogResult.OK;
@@ -1128,14 +1153,15 @@ public sealed partial class MainForm
             _deployChoice = new RadioButton
             {
                 Text = "Deploy GPO to selected OU and computer/group assignments",
-                Dock = DockStyle.Fill, Checked = _owner.AdReady
+                Dock = DockStyle.Fill, Checked = _owner.AdReady && !photoPilotOnly,
+                Enabled = !photoPilotOnly
             };
             var offline = new RadioButton
             {
                 Text = _saved
                     ? "Finish offline - local project is saved"
                     : "Finish offline - keep the campaign in the editor",
-                Dock = DockStyle.Fill, Checked = !_owner.AdReady
+                Dock = DockStyle.Fill, Checked = !_owner.AdReady || photoPilotOnly
             };
             _deployChoice.CheckedChanged += (_, _) =>
             {
@@ -1145,7 +1171,10 @@ public sealed partial class MainForm
             options.Controls.Add(_deployChoice, 0, 0);
             options.Controls.Add(offline, 0, 1);
             body.Controls.Add(options);
-            status.Text = _skipProjectSave && !_saved
+            status.Text = photoPilotOnly
+                ? "JPG Screen Saver: export and test the .scr package locally. " +
+                  "AD deployment is blocked until group/photo delivery is pilot-verified."
+                : _skipProjectSave && !_saved
                 ? "No local project file was saved. Deploy or return to the editor."
                 : _owner.AdReady
                     ? "AD connected: choose deployment or finish without making AD changes."
@@ -1154,6 +1183,16 @@ public sealed partial class MainForm
 
         private void Deploy()
         {
+            if (_owner._project.ScreenSaver.UseJpegSlideshow &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+            {
+                MessageBox.Show(this,
+                    "JPG .scr package must be pilot-tested locally first. " +
+                    "Automatic user GPO delivery is not enabled.",
+                    "JPG Screen Saver pilot only", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
             if (!_owner.AdReady)
             {
                 _owner.ConnectAndReadAd();

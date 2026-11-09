@@ -8,6 +8,12 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // A PhotoScreenSaver.scr is the same portable, self-contained apphost
+        // in a restricted screensaver entrypoint. Never expose the manager,
+        // updater, repair or AD functions when loaded as a .scr.
+        if (PhotoJpegSaver.IsScrProcess)
+            return PhotoJpegSaver.Run(args);
+
         if (args.Length > 0 && args[0].Equals("--client-agent",
                 StringComparison.OrdinalIgnoreCase))
             return NativeClientAgent.Run(args);

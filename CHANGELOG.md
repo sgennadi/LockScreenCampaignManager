@@ -1,3 +1,12 @@
+## 0.4.0-preview.80 — JPG Screen Saver standalone pilot package (2026-11-09)
+
+- Add a separate **JPG slideshow** option under Campaign Type > Screen Saver. When enabled, the Wizard does NOT skip Images, Arrange and Schedule; existing built-in `.scr` mode still skips these steps. Support multiple files or a folder, with 5–3600 second JPG transition interval.
+- A new **Export JPG .scr pilot...** action creates a portable, local-only `PhotoScreenSaver.scr` package from the current signed/pinned single-file Manager apphost, its `slideshow.json`, and normalized JPEGs. Verify the binary, each JPEG and manifest by SHA-256 and reject linked/unsafe sources.
+- The renamed SCR enters a tightly restricted screen saver command parser before client/system/AD/updater commands: `/s` fullscreen JPG slideshow, `/p` preview, `/c` informational settings, and offline `--photo-saver-self-test`. Mouse/keyboard input exits fullscreen; screen saver does not create background tasks or change the user's Windows configuration.
+- Expand group-assignment editor with JPG mode and slide interval. Save JPG settings with the project without changing older built-in Screen Saver campaigns.
+- **Safety gate:** automatic User GPO delivery of the JPG runtime is blocked and no existing GPO is modified. Validate the SCR process, Windows screensaver invocation, multi-monitor behavior and client security on an isolated Windows 10/11 machine before adding domain-wide SYSVOL delivery. Pilot is not a production-ready domain rollout.
+- Add Windows CI smoke tests for JPG Wizard skip transitions and SCR package export/integrity. Bump manager to preview.80 and existing x64/x86 release automation; production Lock Screen PS1/EXE agents remain unchanged.
+
 ## 0.4.0-preview.79 — Complete per-target GPO candidate report (2026-11-09)
 
 - Add **Full conflict report...** to Group Assignments Preview. Its read-only DataGridView displays the complete (up to 500 per target) static policy candidates instead of truncating to the 12-row compact text Preview, with User/Computer scope, GPO identity, source and selected setting details.

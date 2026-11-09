@@ -27,6 +27,14 @@ These values are REG_SZ. The GPO user extension uses the Microsoft-defined Regis
 
 **Important:** The built-in `scrnsave.scr` is the **blank** Windows screen saver; choosing ScreenSaver or Both does **not** yet turn campaign JPEGs into a photo slideshow. Windows screen savers are executable `.scr` programs, not lock-screen JPGs. A managed slideshow `.scr` must be built, signed and validated separately, not silently inferred from an arbitrary path or JPEG.
 
+## JPG photos as a Screen Saver (preview.80, local pilot)
+
+Select **Screen Saver** or **Both**, then check **JPG photo slideshow** in Campaign Type. The Wizard then keeps Images, Arrange and Schedule enabled; choose multiple JPG/PNG image files or an entire folder, arrange them, and set **Change JPG every (seconds)**. After validation choose **Export JPG .scr pilot...** on the Save page.
+
+The export writes `PhotoScreenSaver.scr` (a renamed restricted portable Manager apphost), `slideshow.json` and a normalized, SHA-256 checked `images` folder into a local directory. Run `PhotoScreenSaver.scr /s` on an authorized test Windows 10/11 PC. The app only reads image files; it does not change HKCU/HKLM or install the Screen Saver. Built-in Windows `.scr` remains supported as before.
+
+**Not yet deployed by GPO:** User Configuration > `SCRNSAVE.EXE` must eventually point to an accessible protected local executable, with the matched JPGs and manifest. Running a remote SCR from SYSVOL or writing untested `EncryptedPIDL` values to HKCU would be unsafe. Hence JPG User GPO Apply is blocked until Windows endpoint and trust/ACL tests have passed. This does not affect existing built-in User GPO screen savers. The auto-update and Lock Screen agents are unchanged.
+
 ## Conflict-scan Registry.pol validation (preview.78)
 
 The native read-only scanner now requires the MS-GPREG UTF-16LE **NUL-terminated key and value identifiers**, with a separate UTF-16 semicolon following each terminator. It rejects incomplete/malformed string values, incorrectly sized numeric values and truncated DWORD fields rather than treating them as clean policy evidence. Valid `User/Registry.pol` generated for Screen Saver and `Machine/Registry.pol` for Lock Screen remain supported.

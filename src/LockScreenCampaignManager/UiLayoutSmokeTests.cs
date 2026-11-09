@@ -755,7 +755,10 @@ internal static class UiLayoutSmokeTests
                         !modes.Items.Contains(CampaignTargetMode.LockScreen) ||
                         !modes.Items.Contains(CampaignTargetMode.ScreenSaver) ||
                         content?.Parent is not Panel scroller || !scroller.AutoScroll ||
-                        preview is null || !preview.Text.Contains("Both",
+                        preview is null ||
+                        !all.OfType<CheckBox>().Any(x => x.Name == "AssignmentScreenSaverJpegMode") ||
+                        !all.OfType<NumericUpDown>().Any(x => x.Name == "AssignmentScreenSaverSlideSeconds") ||
+                        !preview.Text.Contains("Both",
                             StringComparison.Ordinal) ||
                         !preview.Text.Contains("Computer group:",
                             StringComparison.Ordinal) ||
@@ -776,6 +779,10 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "WizardScreenSaverIdleSeconds");
                     var password = all.OfType<CheckBox>()
                         .SingleOrDefault(x => x.Name == "WizardScreenSaverRequirePassword");
+                    var photo = all.OfType<CheckBox>()
+                        .SingleOrDefault(x => x.Name == "WizardScreenSaverJpegMode");
+                    var slideshow = all.OfType<NumericUpDown>()
+                        .SingleOrDefault(x => x.Name == "WizardScreenSaverSlideSeconds");
                     var next = all.OfType<Button>()
                         .FirstOrDefault(x => x.Name == "CampaignWizardContinueAction");
                     bool hasSkipped = all.OfType<Label>().Any(x =>
@@ -785,7 +792,8 @@ internal static class UiLayoutSmokeTests
                         mode.Items.Count != 3 ||
                         !mode.Items.Contains(CampaignTargetMode.ScreenSaver) ||
                         !mode.Items.Contains(CampaignTargetMode.Both) ||
-                        saver is null || timeout is null || password is null)
+                        saver is null || timeout is null || password is null ||
+                        photo is null || slideshow is null)
                         throw new InvalidOperationException(
                             "Campaign type must be selected before images at " + profile.Name);
                     mode.SelectedItem = CampaignTargetMode.ScreenSaver;
@@ -795,6 +803,16 @@ internal static class UiLayoutSmokeTests
                         !all.OfType<Label>().Any(x => x.Text.StartsWith("5  Schedule (skip)", StringComparison.Ordinal)))
                         throw new InvalidOperationException(
                             "Screen Saver-only must immediately skip three image steps at " + profile.Name);
+                    photo.Checked = true;
+                    if (!slideshow.Enabled || saver.Enabled ||
+                        all.OfType<Label>().Any(x => x.Text.Contains("(skip)", StringComparison.Ordinal)))
+                        throw new InvalidOperationException(
+                            "JPG Screen Saver requires image/arrange/schedule steps at " + profile.Name);
+                    photo.Checked = false;
+                    if (!all.OfType<Label>().Any(x =>
+                        x.Text.StartsWith("3  Images (skip)", StringComparison.Ordinal)))
+                        throw new InvalidOperationException(
+                            "Returning to built-in Screen Saver must restore skip labels at " + profile.Name);
                     mode.SelectedItem = CampaignTargetMode.Both;
                     if (all.OfType<Label>().Any(x => x.Text.Contains("(skip)", StringComparison.Ordinal)))
                         throw new InvalidOperationException(

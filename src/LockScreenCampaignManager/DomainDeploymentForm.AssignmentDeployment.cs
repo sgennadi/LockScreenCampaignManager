@@ -157,6 +157,12 @@ internal sealed partial class DomainDeploymentForm
         try
         {
             CampaignTargetAssignments.Validate(_project);
+            if (_project.ScreenSaver.UseJpegSlideshow &&
+                _project.TargetAssignments.Any(x => x.UsesScreenSaver))
+                throw new CampaignValidationException(
+                    "JPG slideshow .scr is LOCAL PILOT ONLY. Export the JPG " +
+                    "package and test on a Windows endpoint; User GPO " +
+                    "delivery is blocked until verified.");
             if (_project.TargetAssignments.Count == 0)
                 throw new CampaignValidationException("Add a group assignment.");
             if (!_connectedWritable || _connectedDomain.Length == 0 ||

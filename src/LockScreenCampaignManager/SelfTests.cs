@@ -27,6 +27,7 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
         TestGroupAssignmentMatrixAndScreenSaverPol();
+        TestPhotoJpegSaverLocal();
         TestCampaignModeBeforeImages();
         TestFlexibleSchedules();
         TestNativeClientImageOrder();
@@ -225,6 +226,73 @@ internal static class SelfTests
             old72.EffectiveCampaignMode == CampaignTargetMode.ScreenSaver,
             "Pre-mode preview.72 user target is inferred as Screen Saver.");
         CampaignSchedule.Validate(old72, true);
+    }
+
+    private static void TestPhotoJpegSaverLocal()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        string root = Path.Combine(Path.GetTempPath(),
+            "LSCM-Photo-Pilot-Test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string original = Path.Combine(root, "photo.jpg");
+            using (var bitmap = new System.Drawing.Bitmap(1200, 675))
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(System.Drawing.Color.CornflowerBlue);
+                bitmap.Save(original, System.Drawing.Imaging.ImageFormat.Jpeg);
+            }
+            var project = new CampaignProject {
+                Name = "Photo pilot test", TimeZoneId = "UTC",
+                StartLocal = new DateTime(2026, 11, 9, 14, 0, 0),
+                CampaignMode = CampaignTargetMode.ScreenSaver,
+                CampaignModeExplicit = true,
+                ImagePaths = [original],
+                ScreenSaver = new CampaignScreenSaverSettings {
+                    UseJpegSlideshow = true, SlideSeconds = 10
+                }
+            };
+            CampaignSchedule.Validate(project, requireImages: true);
+            string package = PhotoJpegSaver.Export(project, root);
+            var (interval, paths) = PhotoJpegSaver.Verify(package, true);
+            Check(interval == 10 && paths.Length == 1 &&
+                Path.GetFileName(paths[0]) == "01.jpg" &&
+                File.Exists(Path.Combine(package, "PhotoScreenSaver.scr")),
+                "JPG slideshow exports hash-verified standalone SCR + normalized JPEG package.");
+            using (var child = System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo {
+                    FileName = Path.Combine(package, "PhotoScreenSaver.scr"),
+                    Arguments = "--photo-saver-self-test", UseShellExecute = false,
+                    CreateNoWindow = true
+                }) ?? throw new InvalidOperationException("Cannot launch local JPG .scr test"))
+            {
+                if (!child.WaitForExit(90000))
+                {
+                    child.Kill(entireProcessTree: true);
+                    throw new InvalidOperationException("JPG .scr self-test timed out.");
+                }
+                Check(child.ExitCode == 0,
+                    "Renamed self-contained .scr apphost loads and verifies its photo manifest.");
+            }
+            string image = Path.Combine(package, "images", "01.jpg");
+            File.WriteAllBytes(image, [0, 1, 2, 3]);
+            bool denied = false;
+            try { PhotoJpegSaver.Verify(package, true); }
+            catch (InvalidDataException) { denied = true; }
+            Check(denied, "JPG .scr rejects modified or unverified photo content.");
+
+            project.ScreenSaver.UseJpegSlideshow = false;
+            bool invalidMode = false;
+            try { PhotoJpegSaver.Export(project, root); }
+            catch (CampaignValidationException) { invalidMode = true; }
+            Check(invalidMode, "Built-in Screen Saver cannot accidentally export JPG runtime.");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (Exception ex) { AppLog.Write(ex, "JPG self-test cleanup"); }
+        }
     }
 
     private static void TestGroupAssignmentMatrixAndScreenSaverPol()

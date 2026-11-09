@@ -124,7 +124,7 @@ public static class CampaignExporter
         }
     }
 
-    private static void WriteNormalizedJpeg(string source, string output)
+    internal static void WriteNormalizedJpeg(string source, string output)
     {
         if (new FileInfo(source).Length > 50L * 1024 * 1024)
             throw new InvalidOperationException("Image exceeds 50 MB: " + source);

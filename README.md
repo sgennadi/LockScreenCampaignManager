@@ -6,6 +6,8 @@
 
 # LockScreen Campaign Manager
 
+> **Preview.80 — real JPG photo Screen Saver local pilot:** The Campaign Type Wizard now offers **JPG photo slideshow**, preserves image/arrange/schedule steps, and exports a portable **PhotoScreenSaver.scr** package containing normalized JPEGs and SHA-256 manifests. The SCR is a restricted self-contained apphost with /s, /p, /c and offline --photo-saver-self-test modes. JPG **automatic AD GPO deployment is deliberately blocked** pending a real Windows 10/11 /s and /p client test and a verified user-scope delivery mechanism. Existing built-in Windows .scr campaigns are unchanged. [How to export and test](docs/JPG-SCREEN-SAVER-PILOT.md).
+
 > **Preview.79 — complete group GPO candidate report:** After Group assignments → Preview / check conflicts, open **Full conflict report...** to review EVERY scanned User/Computer policy entry (up to 500 per target) with search, risk filter, selected policy provenance/coverage notes and an opt-in, formula-safe local CSV export. Previous compact Preview displayed only the first 12 results. The full report is read-only, reset on scope changes, and **does not imply client RSoP**. No GPO changes in the report itself.
 
 > **Preview.78 — strict MS-GPREG conflict evidence:** The read-only per-target scan now rejects malformed `Registry.pol` key and value identifiers with missing UTF-16LE NUL terminators, truncated numeric fields and unterminated text data. Previous fixture tests accepted malformed records. No existing GPO or client is modified. See [Screen Saver group targeting](docs/SCREEN-SAVER-GROUP-TARGETING.md).
@@ -16,7 +18,7 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Current preview:** `0.4.0-preview.79` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
+**Current preview:** `0.4.0-preview.80` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
 
 > **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 
