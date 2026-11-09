@@ -14,6 +14,19 @@ internal sealed partial class DomainDeploymentForm
         string CampaignId, string PlanHash, int DirectMembers,
         int ConflictHighRisk, int ConflictWarnings);
     private readonly List<TargetPlanEntry> _targetPlans = new();
+    private readonly List<GroupConflictTarget> _conflictReports = new();
+
+    private void OpenFullConflictReport()
+    {
+        if (_running || _conflictReports.Count == 0 ||
+            _lastPlanKey is null || _lastPlanKey != PlanKey())
+        {
+            _progress.Text = "Complete Group assignments Preview before opening the full report.";
+            return;
+        }
+        using var report = new GroupConflictReportDialog(_conflictReports.ToArray());
+        report.ShowDialog(this);
+    }
 
     private static string TargetGpoName(string root, int index, string mode)
     {
@@ -22,13 +35,15 @@ internal sealed partial class DomainDeploymentForm
     }
 
 
-    private sealed record TargetConflictAudit(int HighRisk, int Warnings, string Preview);
+    private sealed record TargetConflictAudit(
+        int HighRisk, int Warnings, string Preview,
+        IReadOnlyList<GroupConflictFinding> Findings, IReadOnlyList<string> Notes);
 
     // Every group target gets its own read-only OU/ancestor GPO scan.
     // An incomplete scan fails Preview rather than being reported as zero hits.
     private async Task<TargetConflictAudit> ScanTargetConflictsAsync(
         string domain, string dc, string ouDn, string policyScope,
-        DomainCredentials credentials)
+        string targetName, DomainCredentials credentials)
     {
         _progress.Text = "Read-only " + policyScope +
             " Configuration GPO conflict scan on selected DC...";
@@ -51,6 +66,25 @@ internal sealed partial class DomainDeploymentForm
         if (highRisk < 0 || warnings < 0 ||
             data.GetProperty("count").GetInt32() > 500)
             throw new InvalidDataException("Invalid conflict audit counts.");
+        var matches = data.GetProperty("matches").EnumerateArray().ToArray();
+        if (matches.Length != data.GetProperty("count").GetInt32() ||
+            matches.Count(m => m.GetProperty("risk").GetString() == "High") != highRisk ||
+            matches.Count(m => m.GetProperty("risk").GetString() == "Warning") != warnings)
+            throw new InvalidDataException("GPO conflict inventory counts disagree with source results.");
+        var findings = matches.Select(hit => new GroupConflictFinding(
+            targetName, policyScope,
+            hit.GetProperty("gpo").GetString() ?? "",
+            hit.GetProperty("gpoId").GetString() ?? "",
+            hit.GetProperty("risk").GetString() ?? "",
+            hit.GetProperty("name").GetString() ?? "",
+            hit.GetProperty("value").GetString() ?? "",
+            hit.GetProperty("source").GetString() ?? "",
+            hit.GetProperty("key").GetString() ?? "",
+            hit.GetProperty("linkedAt").GetString() ?? "",
+            hit.GetProperty("applicability").GetString() ?? ""
+        )).ToArray();
+        var coverage = data.GetProperty("notes").EnumerateArray()
+            .Select(n => n.GetString() ?? "").ToArray();
 
         static string Display(string? value, int max = 110) =>
             new((value ?? "").Where(ch => !char.IsControl(ch)).Take(max).ToArray());
@@ -68,11 +102,16 @@ internal sealed partial class DomainDeploymentForm
                 " | " + Display(hit.GetProperty("gpo").GetString()) +
                 " | " + Display(hit.GetProperty("name").GetString()) +
                 " = " + Display(hit.GetProperty("value").GetString(), 180));
-        foreach (var note in data.GetProperty("notes").EnumerateArray().Take(6))
-            details.AppendLine("    COVERAGE: " + Display(note.GetString(), 180));
+        foreach (var note in coverage.Take(6))
+            details.AppendLine("    COVERAGE: " + Display(note, 180));
+        if (findings.Length > 12 || coverage.Length > 6)
+            details.AppendLine("    " + (findings.Length - Math.Min(12, findings.Length)) +
+                " more findings and " + (coverage.Length - Math.Min(6, coverage.Length)) +
+                " coverage notes: open Full conflict report for ALL results.");
         details.AppendLine("  NOT RSoP: zero static hits does not prove no effective conflict.");
         details.AppendLine("  Verify user/computer gpresult, WMI, site, ACL and scripts.");
-        return new TargetConflictAudit(highRisk, warnings, details.ToString());
+        return new TargetConflictAudit(highRisk, warnings,
+            details.ToString(), findings, coverage);
     }
 
     private CampaignProject ProjectForTarget(int index)
@@ -112,6 +151,7 @@ internal sealed partial class DomainDeploymentForm
     {
         if (_running) return false;
         _targetPlans.Clear();
+        _conflictReports.Clear();
         _lastPlanKey = null;
         _deployButton.Enabled = false;
         try
@@ -134,6 +174,7 @@ internal sealed partial class DomainDeploymentForm
             string baseName = _gpoBox.Text.Trim();
             var creds = Credentials();
             var planned = new List<TargetPlanEntry>();
+            var completeReports = new List<GroupConflictTarget>();
             var info = new StringBuilder();
             info.AppendLine("MULTI-GROUP CAMPAIGN PLAN - READ ONLY");
             info.AppendLine("Computer Lock Screen = computer GPO, user Screen Saver = user GPO.");
@@ -180,7 +221,13 @@ internal sealed partial class DomainDeploymentForm
                         string id = result.GetProperty("campaignId").GetString() ?? "";
                         int members = result.GetProperty("directGroupMembers").GetInt32();
                         var audit = await ScanTargetConflictsAsync(
-                            domain, dc, row.ComputerOuDn, "Computer", creds);
+                            domain, dc, row.ComputerOuDn, "Computer",
+                            row.Name + " #" + (i + 1) + " LS", creds);
+                        completeReports.Add(new GroupConflictTarget(
+                            row.Name + " #" + (i + 1) + " LS",
+                            "Computer", row.ComputerOuDn, row.ComputerGroupDn,
+                            audit.HighRisk, audit.Warnings,
+                            audit.Findings, audit.Notes));
                         planned.Add(new TargetPlanEntry(i, "LockScreen",
                             row.ComputerOuDn, row.ComputerGroupDn,
                             gpoName, id, "", members, audit.HighRisk, audit.Warnings));
@@ -213,7 +260,13 @@ internal sealed partial class DomainDeploymentForm
                         if (hash.Length != 64)
                             throw new InvalidDataException("Screen Saver plan hash missing.");
                         var audit = await ScanTargetConflictsAsync(
-                            domain, dc, row.UserOuDn, "User", creds);
+                            domain, dc, row.UserOuDn, "User",
+                            row.Name + " #" + (i + 1) + " SS", creds);
+                        completeReports.Add(new GroupConflictTarget(
+                            row.Name + " #" + (i + 1) + " SS",
+                            "User", row.UserOuDn, row.UserGroupDn,
+                            audit.HighRisk, audit.Warnings,
+                            audit.Findings, audit.Notes));
                         planned.Add(new TargetPlanEntry(i, "ScreenSaver",
                             row.UserOuDn, row.UserGroupDn, gpoName, "", hash, members,
                             audit.HighRisk, audit.Warnings));
@@ -238,11 +291,15 @@ internal sealed partial class DomainDeploymentForm
             int totalWarnings = planned.Sum(x => x.ConflictWarnings);
             info.AppendLine("BATCH STATIC GPO CANDIDATES: " + totalHigh +
                 " high-risk overlaps, " + totalWarnings + " warnings.");
+            info.AppendLine("FULL REPORT: " + completeReports.Count +
+                " targets, " + completeReports.Sum(x => x.Findings.Count) +
+                " total static findings. Click Full conflict report to view/filter/export all.");
             info.AppendLine("PREVIEW ONLY - no GPOs, SYSVOL or AD objects modified.");
             info.AppendLine("Overlapping inherited user or computer policies must " +
                 "be checked by gpresult/RSoP before a production rollout.");
             _details.Text = info.ToString();
             _targetPlans.AddRange(planned);
+            _conflictReports.AddRange(completeReports);
             _lastPlanKey = PlanKey();
             _deployButton.Enabled = _project.ClientType != CampaignClientType.Executable ||
                 !includesLock || NativeClientAgent.CanDeployNativeClient;
@@ -255,6 +312,7 @@ internal sealed partial class DomainDeploymentForm
         catch (Exception ex)
         {
             _targetPlans.Clear();
+            _conflictReports.Clear();
             _lastPlanKey = null;
             _deployButton.Enabled = false;
             _progress.Text = "Group assignment preflight failed; no AD/GPO changes.";

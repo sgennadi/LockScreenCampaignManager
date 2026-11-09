@@ -65,6 +65,18 @@ internal static class UiLayoutSmokeTests
             }),
             new[] { "Wizard", "Advanced", "Next >", "Check GPO rights",
                 "Preview / check conflicts", "Deploy GPO + files", "Close" }),
+        ("Full group GPO conflict report - offline", () =>
+            new GroupConflictReportDialog([
+                new GroupConflictTarget("Pilot users", "User",
+                    "OU=Users,DC=example,DC=com",
+                    "CN=Pilot,OU=Groups,DC=example,DC=com",
+                    1, 0, [
+                        new GroupConflictFinding("Pilot users", "User", "Existing GPO",
+                            Guid.Empty.ToString("D"), "High", "ScreenSaveTimeOut", "900",
+                            "Registry.pol", "Control Panel\\Desktop",
+                            "OU=Users,DC=example,DC=com", "Unknown without user gpresult")
+                    ], ["WMI and security filter results require real client RSoP"])
+            ]), new[] { "Export filtered CSV...", "Close" }),
         ("AD user picker - typeahead page", () => new AdAlternateAccountWizard(
             "example.com", "dc01.example.com", "", "", false, false, true),
             new[] { "Next >", "Use typed login instead", "Cancel", "< Back" }),
@@ -711,6 +723,24 @@ internal static class UiLayoutSmokeTests
                 CheckDpiTableRows(form, profile.Name);
                 CheckTimeZoneDifference(form, profile.Name);
                 CheckScrollableUncPaths(form, profile.Name);
+                if (window.Name == "Full group GPO conflict report - offline")
+                {
+                    var all = Descendants(form).ToArray();
+                    var grid = all.OfType<DataGridView>()
+                        .SingleOrDefault(x => x.Name == "GroupConflictGrid");
+                    var search = all.OfType<TextBox>()
+                        .SingleOrDefault(x => x.Name == "GroupConflictSearch");
+                    var filter = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "GroupConflictRisk");
+                    var export = all.OfType<Button>()
+                        .SingleOrDefault(x => x.Name == "GroupConflictExportCsv");
+                    if (grid is null || grid.Rows.Count != 1 ||
+                        search is null || filter is null || filter.Items.Count != 5 ||
+                        export is null || export.Width < 180)
+                        throw new InvalidOperationException(
+                            "Full read-only group GPO report grid/filter/export missing at " +
+                            profile.Name);
+                }
                 if (window.Name == "Campaign assignment matrix")
                 {
                     var all = Descendants(form).ToArray();

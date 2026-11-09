@@ -1,3 +1,12 @@
+## 0.4.0-preview.79 — Complete per-target GPO candidate report (2026-11-09)
+
+- Add **Full conflict report...** to Group Assignments Preview. Its read-only DataGridView displays the complete (up to 500 per target) static policy candidates instead of truncating to the 12-row compact text Preview, with User/Computer scope, GPO identity, source and selected setting details.
+- Search across target, policy, setting, OU/link and values; filter by High/Warning/Info/Inactive. When a target has no matching static hits, show coverage notes and clearly state that zero hits is not proof of effective RSoP.
+- Add explicit-approval, **local-only CSV export** of the filtered table; escape CSV quotes, newlines and leading spreadsheet formula operators. Never upload internal domain/OU/GPO details to GitHub automatically.
+- Validate native scanner `count`, `highRisk`, and `warningsCount` against every returned hit before accepting the pre-deploy report. A count mismatch aborts Preview rather than silently losing data.
+- Cache the complete report only for the approved Preview snapshot; clear it after changes to OU, group or campaign settings. The pre-deployment GPO authorization rules are unchanged.
+- Add multi-scale WinForms smoke and a 25-finding CSV truncation/formula-escaping regression test. Bump manager version and automated x64/x86 release workflow. Endpoint client binaries remain unchanged.
+
 ## 0.4.0-preview.78 — Strict MS-GPREG GPO conflict evidence (2026-11-09)
 
 - Harden native `Machine/Registry.pol` and `User/Registry.pol` read-only conflict scanning: keys and value identifiers must end with UTF-16LE NUL followed by a separate semicolon. Previously the scanner accepted the semicolon alone and silently discarded NULs, so malformed registry policy evidence could be mistaken for valid policy settings.
