@@ -47,12 +47,12 @@ public sealed record ClientFeedbackRecord(
     string Computer, string CampaignId, DateTimeOffset LastSeenUtc,
     string Stage, string Health, string ExpectedImage, bool ImageMatches,
     bool RegistryMatches, bool TaskPresent, int MissingFiles, int CorruptFiles,
-    string AgentVersion);
+    string AgentVersion, string ClientType = "Unknown");
 
 public sealed record ClientHealthRow(
     string Computer, string Condition, string Stage, string Image,
     string LastSeen, string Files, string Registry, string Task,
-    string Version);
+    string Version, string ClientType = "Unknown");
 
 public sealed class ClientHealthSnapshot
 {
@@ -82,6 +82,15 @@ public static class ClientFeedbackReader
     };
     private const int MaximumReports = 5000;
     private const int MaximumFileBytes = 16 * 1024;
+
+    // Schema-v1 reports predate the explicit client method. Missing/empty
+    // method is UNKNOWN, not automatically PowerShell. Unsupported values
+    // make the entire report invalid instead of polluting operator displays.
+    private static bool ValidClientType(string? value) =>
+        string.IsNullOrEmpty(value) || value is "PowerShell" or "Executable";
+
+    private static string NormalizedClientType(string? value) =>
+        value is "PowerShell" or "Executable" ? value : "Unknown";
 
     public static ClientHealthSnapshot Read(string share, string campaignId,
         IEnumerable<string> expectedComputers, DateTimeOffset nowUtc, int staleAfterMinutes = 45)
@@ -132,12 +141,14 @@ public static class ClientFeedbackReader
             !new[] { "Pending", "Active", "Completed", "Error" }.Contains(record.Stage, StringComparer.Ordinal) ||
             !new[] { "Healthy", "RepairNeeded", "Error", "Completed", "Pending" }.Contains(record.Health, StringComparer.Ordinal) ||
             record.MissingFiles is < 0 or > 30 || record.CorruptFiles is < 0 or > 30 ||
-            record.AgentVersion.Length > 50 || record.ExpectedImage.Length > 40)
+            record.AgentVersion.Length > 50 || record.ExpectedImage.Length > 40 ||
+            !ValidClientType(record.ClientType))
             throw new InvalidDataException("Client feedback fields failed validation.");
         return new ClientFeedbackRecord(
             host, campaignId, record.TimestampUtc, record.Stage, record.Health,
             record.ExpectedImage, record.ImageMatches, record.RegistryMatches,
-            record.TaskPresent, record.MissingFiles, record.CorruptFiles, record.AgentVersion);
+            record.TaskPresent, record.MissingFiles, record.CorruptFiles,
+            record.AgentVersion, NormalizedClientType(record.ClientType));
     }
 
     // Internal entrypoint used by isolated tests; network-path validation stays in public Read.
@@ -173,7 +184,8 @@ public static class ClientFeedbackReader
                     !new[] { "Pending", "Active", "Completed", "Error" }.Contains(record.Stage, StringComparer.Ordinal) ||
                     !new[] { "Healthy", "RepairNeeded", "Error", "Completed", "Pending" }.Contains(record.Health, StringComparer.Ordinal) ||
                     record.MissingFiles is < 0 or > 30 || record.CorruptFiles is < 0 or > 30 ||
-                    record.AgentVersion.Length > 50 || record.ExpectedImage.Length > 40)
+                    record.AgentVersion.Length > 50 || record.ExpectedImage.Length > 40 ||
+            !ValidClientType(record.ClientType))
                 { invalid++; continue; }
                 if (reports.TryGetValue(fileName, out var prior) && prior.LastSeenUtc >= record.TimestampUtc)
                     continue;
@@ -181,7 +193,8 @@ public static class ClientFeedbackReader
                     fileName.ToUpperInvariant(), campaignId, record.TimestampUtc,
                     record.Stage, record.Health, record.ExpectedImage,
                     record.ImageMatches, record.RegistryMatches, record.TaskPresent,
-                    record.MissingFiles, record.CorruptFiles, record.AgentVersion);
+                    record.MissingFiles, record.CorruptFiles,
+                    record.AgentVersion, NormalizedClientType(record.ClientType));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or
                 ArgumentException or FormatException or NullReferenceException)
@@ -209,7 +222,7 @@ public static class ClientFeedbackReader
             string condition;
             // Completed is terminal; a successful final report stays completed after its heartbeat ages.
             if (record.Stage == "Completed") { completed++; condition = "Completed"; }
-            else if (age > TimeSpan.FromMinutes(staleAfterMinutes)) { stale++; condition = "Stale / offline"; }
+            else if (age > TimeSpan.FromMinutes(staleAfterMinutes)) { stale++; condition = "Stale report"; }
             else if (record.Health != "Healthy" || record.MissingFiles != 0 || record.CorruptFiles != 0 ||
                      !record.ImageMatches || !record.TaskPresent ||
                      (record.Stage == "Active" && !record.RegistryMatches))
@@ -221,7 +234,7 @@ public static class ClientFeedbackReader
                 record.ExpectedImage, record.LastSeenUtc.LocalDateTime.ToString("dd.MM HH:mm:ss", CultureInfo.CurrentCulture),
                 record.MissingFiles == 0 && record.CorruptFiles == 0 ? "OK" : $"Missing {record.MissingFiles}, Corrupt {record.CorruptFiles}",
                 record.RegistryMatches ? "OK" : "Not verified", record.TaskPresent ? "Yes" : "No",
-                record.AgentVersion));
+                record.AgentVersion, record.ClientType));
         }
         return new ClientHealthSnapshot
         {
@@ -251,5 +264,6 @@ public static class ClientFeedbackReader
         public int MissingFiles { get; set; }
         public int CorruptFiles { get; set; }
         public string AgentVersion { get; set; } = "";
+        public string? ClientType { get; set; }
     }
 }
