@@ -52,7 +52,7 @@ public sealed partial class MainForm
         }
     }
 
-    // Allows offline UI smoke tests to validate all six wizard pages
+    // Allows offline UI smoke tests to validate all seven wizard pages
     // without ShowDialog, LDAP access or filesystem changes.
     internal Form CreateCampaignWizardForSmokeTest(int page = 0, string? imagePath = null)
     {

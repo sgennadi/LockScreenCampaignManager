@@ -769,6 +769,10 @@ internal static class UiLayoutSmokeTests
                     if (all.OfType<Label>().Any(x => x.Text.Contains("(skip)", StringComparison.Ordinal)))
                         throw new InvalidOperationException(
                             "Both mode must not skip image steps at " + profile.Name);
+                    mode.SelectedItem = CampaignTargetMode.LockScreen;
+                    if (all.OfType<Label>().Any(x => x.Text.Contains("(skip)", StringComparison.Ordinal)))
+                        throw new InvalidOperationException(
+                            "Lock Screen mode must never skip image stages at " + profile.Name);
                     mode.SelectedItem = CampaignTargetMode.ScreenSaver;
                     if (!saver.Enabled || !timeout.Enabled || !password.Enabled)
                         throw new InvalidOperationException(

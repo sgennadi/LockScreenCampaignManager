@@ -73,7 +73,7 @@ public sealed partial class MainForm : Form
         {
             // Corrupt company profiles cannot silently select the wrong AD scope.
             _company = null;
-            SetProject(new CampaignProject { Name = "" });
+            SetProject(new CampaignProject { Name = "", RequiresCampaignTypeChoice = true });
             _status.Text = "Company profiles unavailable: inspect Diagnostics.";
             AppLog.Write(ex, "Company startup");
         }
@@ -161,7 +161,7 @@ public sealed partial class MainForm : Form
         };
         var mainSteps = new Label {
             Name = "MainHeaderSteps",
-            Text = "1 AD sign-in / Skip    2 Images    3 Arrange    4 Schedule    5 Save    6 Deploy",
+            Text = "1 AD / Skip   2 Type   3 Images   4 Arrange   5 Schedule   6 Save   7 Deploy",
             AutoSize = false, Dock = DockStyle.Fill, AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
             Margin = new Padding(3, 0, 0, 0)
@@ -612,8 +612,8 @@ public sealed partial class MainForm : Form
         }, 0, 0);
         landingContent.Controls.Add(new Label
         {
-            Text = "Create a campaign through six guided steps: AD connection, " +
-                "images with live preview, arrangement, schedule, save and deploy. " +
+            Text = "Create a campaign through seven guided steps: AD connection, " +
+                "campaign type, images with live preview, arrangement, schedule, save and deploy. " +
                 "The Advanced editor is displayed only when Advanced is selected.",
             Dock = DockStyle.Fill, ForeColor = UiStyle.Foreground,
             Font = new Font("Segoe UI", 11f),
@@ -1435,13 +1435,8 @@ public sealed partial class MainForm : Form
             dialog.CancelButton = cancel;
             create.Click += (_, _) =>
             {
-                if (string.IsNullOrWhiteSpace(nameBox.Text))
-                {
-                    MessageBox.Show(dialog, "Enter a campaign name.",
-                        "New campaign", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    nameBox.Focus();
-                    return;
-                }
+                // An untitled draft is valid here: the Campaign Type Wizard
+                // supplies an appropriate name after a deliberate selection.
                 dialog.DialogResult = DialogResult.OK;
                 dialog.Close();
             };
@@ -1450,9 +1445,11 @@ public sealed partial class MainForm : Form
             if (!ConfirmDiscardChanges()) return;
             draft.Name = nameBox.Text.Trim();
             draft.StartLocal = DateTime.SpecifyKind(start.Value, DateTimeKind.Unspecified);
-            CampaignSchedule.Validate(draft, requireImages: false);
+            // Save/Deploy, not New, validates the name and explicit mode.
             SetProject(draft);
-            _status.Text = "Created campaign: " + draft.Name + " (not saved yet)";
+            _status.Text = draft.Name.Length == 0
+                ? "New campaign created. Open Wizard and choose campaign type."
+                : "Created campaign: " + draft.Name + " (not saved yet)";
             _name.Focus();
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "New campaign", ex); }

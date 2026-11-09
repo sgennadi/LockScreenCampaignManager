@@ -23,6 +23,10 @@ public enum CampaignClientType
 public sealed class CampaignProject
 {
     public string Name { get; set; } = "Lock Screen Campaign";
+    // In-memory only: a newly created campaign must explicitly select a type,
+    // even if images were imported through Advanced. Legacy saved projects
+    // without this flag still infer their old Lock Screen/user-group mode.
+    [JsonIgnore] public bool RequiresCampaignTypeChoice { get; set; }
     // Local editing context only; never exported to the endpoint campaign.json.
     public string CompanyProfileId { get; set; } = string.Empty;
     // Existing projects remain PowerShell by default; chosen in Deploy.
@@ -213,6 +217,8 @@ public static class CampaignSchedule
 
     public static void Validate(CampaignProject project, bool requireImages)
     {
+        if (project.RequiresCampaignTypeChoice && !project.CampaignModeExplicit)
+            throw new CampaignValidationException("Choose Lock Screen, Screen Saver or Both first.");
         if (string.IsNullOrWhiteSpace(project.Name))
             throw new CampaignValidationException("Enter a campaign name.");
         if (project.Name.Length > 100)

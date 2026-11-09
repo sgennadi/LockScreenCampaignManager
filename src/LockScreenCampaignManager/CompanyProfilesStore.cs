@@ -221,6 +221,7 @@ internal static class CompanyProfilesStore
             DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(zone));
         return new CampaignProject {
             Name = "", // New projects are untitled until the operator chooses a campaign type.
+            RequiresCampaignTypeChoice = true,
             CompanyProfileId = company?.Id ?? "",
             TimeZoneId = zone,
             EnableFeedback = company?.EnableFeedback ?? false,

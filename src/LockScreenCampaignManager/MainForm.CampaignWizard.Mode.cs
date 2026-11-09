@@ -45,8 +45,9 @@ public sealed partial class MainForm
         // images/target rows may infer their legacy mode without changing JSON.
         private bool HasChosenCampaignType =>
             _owner._project.CampaignModeExplicit ||
-            _owner._project.ImagePaths.Count > 0 ||
-            _owner._project.TargetAssignments.Count > 0;
+            (!_owner._project.RequiresCampaignTypeChoice &&
+                (_owner._project.ImagePaths.Count > 0 ||
+                 _owner._project.TargetAssignments.Count > 0));
 
         private bool NeedsLockImages =>
             _owner._project.EffectiveCampaignMode is
