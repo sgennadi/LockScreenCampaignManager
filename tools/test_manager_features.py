@@ -218,6 +218,8 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("PhotoJpegSaver.Verify(copy, true)", kit)
         self.assertIn("RenderStartupScript(LoadTemplate()", kit)
         self.assertIn("Directory.Move(stage, output)", kit)
+        self.assertIn("256L * 1024 * 1024", kit)
+        self.assertIn("do not copy large image campaigns to SYSVOL", kit)
         self.assertIn("GetManifestResourceStream(InstallResource)", kit)
         self.assertIn("PhotoSaverStartupInstall.ps1", project)
         self.assertIn("Assets/PhotoSaver-StartupInstall.ps1", workflow)
