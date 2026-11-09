@@ -2725,7 +2725,7 @@ StartExecutePSFirst=true
                 computerName = "PC003", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72-native",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.73-native",
                 clientType = "Executable"
             };
             File.WriteAllText(Path.Combine(root, "PC003.json"),
@@ -2741,7 +2741,7 @@ StartExecutePSFirst=true
                 computerName = "PC004", timestampUtc = now,
                 stage = "Active", health = "Healthy", expectedImage = "02.jpg",
                 imageMatches = true, registryMatches = true, taskPresent = true,
-                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.72",
+                missingFiles = 0, corruptFiles = 0, agentVersion = "0.4.0-preview.73",
                 clientType = "=HYPERLINK(\"http://untrusted\")"
             };
             File.WriteAllText(Path.Combine(root, "PC004.json"),

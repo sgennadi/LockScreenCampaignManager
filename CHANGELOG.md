@@ -1,3 +1,10 @@
+## 0.4.0-preview.73 — Screen Saver GPO Registry.pol binary integrity (2026-11-09)
+- Fix missing UTF-16LE NUL terminators in User/Registry.pol key/value names for Screen Saver; preview.72 user policies may not apply correctly.
+- Parse exact generated binary and DC SYSVOL read-back before OU linking. Reject corruption, wrong registry types/values, duplicates, and missing terminators.
+- Preserve GPT.INI CRLF and adjacent lines while setting User GPO version 65536; reject ambiguous initial version.
+- Add binary corruption roundtrip tests and maintain backward compatibility. Isolated real-domain gpresult/RSOP validation is required before production rollout.
+- Native EXE batch deployment remains lab-only; PS1 continues as production Lock Screen client.
+
 ## 0.4.0-preview.72 — Separate Lock Screen / Screen Saver / Both assignments per AD group (2026-11-09)
 - New per-campaign assignment matrix: up to 20 rows, each mode LockScreen, ScreenSaver or Both, independent computer OU/security group and user OU/security group. Existing projects preserve the legacy Lock Screen flow.
 - New native C# User Configuration GPO creates a Windows built-in Screen Saver configuration: selected standard .scr, idle timeout 60-86400 seconds, optional password on resume. No automatic loopback or domain-wide link.

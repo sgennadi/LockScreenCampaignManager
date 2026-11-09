@@ -618,7 +618,7 @@ internal static partial class NativeClientAgent
 
         return new
         {
-            AgentVersion = "0.4.0-preview.72-native",
+            AgentVersion = "0.4.0-preview.73-native",
             CampaignId = ctx.Id, ClientType = "Executable",
             Health = health, Stage = stage,
             Installed = File.Exists(ctx.LocalExe),
