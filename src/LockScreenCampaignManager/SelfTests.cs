@@ -270,6 +270,22 @@ internal static class SelfTests
         catch (InvalidDataException) { changedValueRejected = true; }
         Check(changedValueRejected, "MS-GPREG fails closed on mismatched approval.");
 
+        string initialGpt = "[General]\\r\\nVersion=0\\r\\n" +
+            "gPCFunctionalityVersion=2\\r\\n[Other]\\r\\nSafe=1\\r\\n";
+        // String escape sequences are C# syntax; runtime input uses CRLF.
+        initialGpt = initialGpt.Replace("\\\\r", "\\r").Replace("\\\\n", "\\n");
+        string upgradedGpt = NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(initialGpt);
+        Check(upgradedGpt == initialGpt.Replace("Version=0", "Version=65536",
+                StringComparison.Ordinal) &&
+            upgradedGpt.Contains("Version=65536\\r\\ngPCFunctionalityVersion=2",
+                StringComparison.Ordinal),
+            "User GPO GPT upgrade preserves following lines and sections");
+        bool gptDenied = false;
+        try { NativeUserScreenSaverGpo.UpgradeFreshUserGptIni(
+            "[General]\\r\\nVersion=0\\r\\nVersion=0\\r\\n"); }
+        catch (InvalidDataException) { gptDenied = true; }
+        Check(gptDenied, "Duplicate fresh user GPT Version rows must fail closed.");
+
         bool denied = false;
         try { NativeUserScreenSaverGpo.BuildRegistryPol("bad.exe", 600, true); }
         catch (ArgumentException) { denied = true; }
