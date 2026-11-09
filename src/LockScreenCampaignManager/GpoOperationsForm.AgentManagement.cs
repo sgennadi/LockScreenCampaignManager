@@ -17,6 +17,10 @@ internal sealed partial class GpoOperationsForm
     private TabControl? _agentTabControl;
     private bool _agentProbing;
     private int _agentInventoryGeneration;
+    private bool _openAgentManagementInitially;
+
+    internal void OpenAgentManagementInitially() =>
+        _openAgentManagementInitially = true;
 
     private void SetupAgentManagement(FlowLayoutPanel toolbar)
     {
