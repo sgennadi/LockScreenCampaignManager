@@ -497,7 +497,7 @@ internal sealed class DomainDeploymentForm : Form
         _deployButton.Enabled = !_running && HasSelectedTargets &&
             _lastPlanKey is not null && _lastPlanKey == PlanKey() &&
             (_project.ClientType != CampaignClientType.Executable ||
-             NativeClientAgent.IsReadyForProduction);
+             NativeClientAgent.CanDeployNativeClient);
         if (_gpoOperationsButton is not null)
             _gpoOperationsButton.Visible = _advancedMode;
     }
