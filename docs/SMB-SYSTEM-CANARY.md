@@ -1,7 +1,7 @@
 # SMB campaign source — real LocalSystem endpoint canary
 
 This is an **isolated test**, not proof that a campaign is safe to deploy broadly.
-The Preview.84 tools verify read-only access to an immutable SMB campaign
+The Preview.85 tools verify read-only access to an immutable SMB campaign
 under **the test computer's LocalSystem context**. They do **not** change AD,
 GPOs, SYSVOL, the lock-screen registry or the campaign's source files.
 The only temporary change is a **local** Scheduled Task, removed after testing.
@@ -9,7 +9,7 @@ A restricted local JSON report is retained for review. Nothing is uploaded.
 
 ## Prepare
 
-1. In the Manager Preview.84 Deployment Wizard, select **SMB network folder (UNC)**.
+1. In the Manager Preview.85 Deployment Wizard, select **SMB network folder (UNC)**.
    Prepare a dedicated protected network share beforehand. On *both* SMB share
    and NTFS ACLs, grant the approved test computer account (or scoped Domain
    Computers) **Read & Execute**; trusted administrators only may write.
@@ -19,14 +19,13 @@ A restricted local JSON report is retained for review. Nothing is uploaded.
    deploying the test Lock Screen campaign. Test the PowerShell client first.
    The EXE client remains subject to its separate lab-only gate.
 3. In the Manager's Deployment success window, note the **local receipt file**.
-   Preview.84 includes `contentSource=SmbShare`, `campaignId`,
+   Preview.85 includes `contentSource=SmbShare`, `campaignId`,
    `packageStoragePath`, `contentShareRoot`, `domain`, `clientType`,
-   `manifestSha256` and `agentSha256`. A Preview.83 receipt lacks the
-   additional digests and is **not sufficient**. Do not guess them.
+   `manifestSha256`, `agentSha256`, exact `gpoId` and `deployedUtc`. Older receipts without the deployment timestamp are **not sufficient**. Do not guess missing values.
 4. Copy that JSON receipt to the approved test client locally (e.g.
    `C:\Lab\deployment-receipt.json`). Copy both canary tools from the
    successful **main** branch's offline-lab ZIP: `run_smb_canary_local.ps1`
-   and `smb_system_canary_probe.ps1`, into the same local folder.
+   and `smb_system_canary_probe.ps1`, plus `smb_canary_rsop.ps1`, into the same local folder.
    Never put credentials into the receipt or send it to a public issue.
 
 ## Execute on the *test client*, not on the DC
@@ -46,7 +45,7 @@ LocalSystem through a temporary **local** Scheduled Task, and cleans up the
 task, probe and transient config afterward. The only persistent artifact is
 `report.json` in that protected local folder. It contains coarse statuses,
 build number and failure codes, not UNC paths, domain names, SIDs, accounts,
-hash values, raw `gpresult` output or GPO names. Review even this sanitized
+hash values, raw `gpresult` output or GPO names. A protected temporary RSoP XML file is deleted when the probe finishes. Review even this sanitized
 report before sharing it.
 
 ## How to interpret results
@@ -64,8 +63,8 @@ check could not be completed. It is **not** safe to deploy. Inspect the
 **new** immutable campaign if the source changed. Never overwrite a deployed
 campaign ID.
 
-The tool does **not** prove the share was reachable *during computer boot*,
-that the correct Startup GPO won, that Windows displayed the lock screen,
+The tool also reports whether the test computer rebooted after the recorded deployment time and whether the **exact expected Computer GPO GUID** appears applied in the endpoint's `gpresult /scope computer /x` RSoP, with permissive filtering flags. This does **not** prove that the Startup script ran at boot or that any particular setting won. A new `POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY` status requires the post-deploy boot, matching RSoP, source hashes and verified local cache. The simpler source-only result remains available during early testing.\n\nThe tool does **not** prove the share was reachable *during computer boot*,
+that the lock screen policy was the winning registry setting, or that Windows displayed the lock screen,
 that scheduled image rotation worked, or that original registry values were
 restored. Those remain separate hands-on acceptance checks:
 
