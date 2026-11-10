@@ -195,6 +195,9 @@ finally {
         $ReportPath.StartsWith('\\') -or
         $ReportPath.Contains('..')) { throw 'Invalid local report destination.' }
     $json=$checks | ConvertTo-Json -Depth 5
-    [IO.File]::WriteAllText($ReportPath,$json,[Text.UTF8Encoding]::new($false))
+    $partial=$ReportPath+'.'+[Guid]::NewGuid().ToString('N')+'.tmp'
+    # Publish only a fully written report: the runner watches for this filename.
+    [IO.File]::WriteAllText($partial,$json,[Text.UTF8Encoding]::new($false))
+    [IO.File]::Move($partial,$ReportPath)
 }
 if ($checks.result -ne 'SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY') { exit 2 }
