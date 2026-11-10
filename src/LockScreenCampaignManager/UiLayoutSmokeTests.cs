@@ -560,12 +560,13 @@ internal static class UiLayoutSmokeTests
             sourceField.Parent != config ||
             source.Items.Count != 2 ||
             source.SelectedIndex != 0 ||
-            source.Text != "Preview + stable" ||
+            source.SelectedItem?.ToString() != "Preview + stable" ||
             source.DropDownStyle != ComboBoxStyle.DropDownList)
             throw new InvalidOperationException(
                 $"Updater release channel missing at {profile}.");
         var label = sourceField.GetControlFromPosition(0, 0) as Label;
-        if (label is null || label.Text != "Release channel" ||
+        if (label is null ||
+            UiLocale.Translate(label.Text, "English") != "Release channel" ||
             label.AutoEllipsis)
             throw new InvalidOperationException(
                 $"Updater release channel label missing/clipped at {profile}.");
@@ -575,7 +576,7 @@ internal static class UiLayoutSmokeTests
             label.Padding.Vertical + label.Margin.Vertical + 9;
         int editorHeight = source.PreferredHeight + source.Margin.Vertical + 8;
         int optionTextWidth = TextRenderer.MeasureText(
-            "Preview + stable", source.Font).Width + 24;
+            source.GetItemText(source.SelectedItem), source.Font).Width + 24;
         if (sourceField.RowStyles[0].Height < labelHeight ||
             sourceField.RowStyles[1].Height < editorHeight ||
             source.Height < source.PreferredHeight ||
