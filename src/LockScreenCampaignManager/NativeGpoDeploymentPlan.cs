@@ -152,6 +152,17 @@ internal static class NativeGpoDeploymentPlan
                     packageStoragePath = dcCampaign,
                     contentSource = contentSource.ToString(),
                     contentShareRoot = smbRoot,
+                    // Advisory NTFS scan only: this does NOT establish share
+                    // permissions, actual access as the computer account,
+                    // Kerberos authentication or early-boot connectivity.
+                    smbNtfsAclScan = contentSource == CampaignContentSource.SmbShare
+                        ? "PASS_ADVISORY_BROAD_WRITE_ACL_SCAN" : "NOT_APPLICABLE",
+                    smbShareAclAccess = contentSource == CampaignContentSource.SmbShare
+                        ? "NOT_TESTED" : "NOT_APPLICABLE",
+                    smbComputerAccountRead = contentSource == CampaignContentSource.SmbShare
+                        ? "NOT_TESTED" : "NOT_APPLICABLE",
+                    smbStartupConnectivity = contentSource == CampaignContentSource.SmbShare
+                        ? "NOT_TESTED" : "NOT_APPLICABLE",
                     clientScriptPath = dfsScript,
                     clientType = requestedClient.ToString(),
                     gpoMethod = requestedClient == CampaignClientType.Executable

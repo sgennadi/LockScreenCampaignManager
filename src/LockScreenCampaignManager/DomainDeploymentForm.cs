@@ -629,7 +629,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _contentShareBox.Enabled = smb && !_running;
         _contentShareBrowse.Enabled = smb && !_running;
         _contentSourceHint.Text = smb
-            ? "GPO metadata stays in SYSVOL. SMB campaign files: computers READ, trusted admins WRITE."
+            ? "GPO metadata stays in SYSVOL. Computer-account SMB READ must be proven on a test PC; Preview NTFS ACL scan is advisory."
             : "SYSVOL stores both GPO metadata and the original immutable campaign package.";
     }
 
@@ -1048,8 +1048,13 @@ internal sealed partial class DomainDeploymentForm : Form
                 var scan = conflictResponse.GetProperty("data");
                 _lastConflictHigh = scan.GetProperty("highRisk").GetInt32();
                 _lastConflictWarnings = scan.GetProperty("warningsCount").GetInt32();
-                string storageSummary = "Smart SYSVOL Storage: duplicate audit unavailable. Open GPO Operations to inspect.";
-                try
+                // In SMB mode the selected package is NOT in SYSVOL.
+                // Never present SYSVOL duplicates as an SMB access test.
+                string storageEvidence = CampaignSmbPreflightEvidence.Describe(d);
+                string storageSummary = _project.ContentSource == CampaignContentSource.SmbShare
+                    ? "SYSVOL duplicate scan: SKIPPED (campaign files use a dedicated SMB UNC folder)."
+                    : "Smart SYSVOL Storage: duplicate audit unavailable. Open GPO Operations to inspect.";
+                if (_project.ContentSource == CampaignContentSource.Sysvol) try
                 {
                     var storageResponse = await RunBusy(
                         "Checking existing campaign image hashes in SYSVOL...", () =>
@@ -1092,7 +1097,8 @@ internal sealed partial class DomainDeploymentForm : Form
                     $"Cleanup: administrator removes the GPO and its immutable source package (SYSVOL or SMB).\r\n" +
                     $"\r\nCONFLICT AUDIT: {_lastConflictHigh} high-risk, {_lastConflictWarnings} warning matches.\r\n" +
                     $"{conflictSummary}\r\n" +
-                    $"\r\nSMART SYSVOL STORAGE:\r\n{storageSummary}\r\n" +
+                    $"\r\nSTORAGE ACCESS EVIDENCE:\r\n{storageEvidence}\r\n" +
+                    $"STORAGE DUPLICATES:\r\n{storageSummary}\r\n" +
                     $"Audit is not full RSoP: check local/site GPO, security, WMI filters and gpresult.\r\n";
                 _lastPlanKey = PlanKey();
                 _deployButton.Enabled = true;
@@ -1101,8 +1107,11 @@ internal sealed partial class DomainDeploymentForm : Form
                     ? NativeClientAgent.CanDeployNativeClient
                         ? "EXE LAB CANARY: Preview ready; max 5 directly listed computers, no nested groups."
                         : "EXE preview only: use --native-exe-lab in an isolated test lab; Deploy is blocked."
-                    : "Preview validated campaign and GPO scope. " +
-                      "AD write rights and SYSVOL still require verification during deployment.";
+                    : _project.ContentSource == CampaignContentSource.SmbShare
+                        ? "SMB source: advisory NTFS scan passed. Share ACL, computer-account READ " +
+                          "and startup access NOT TESTED; run LocalSystem pilot canary."
+                        : "Preview validated campaign and GPO scope. " +
+                          "AD write rights and SYSVOL still require verification during deployment.";
                 return d;
             }
             finally { try { Directory.Delete(parent, true); } catch (Exception ex) { AppLog.Write(ex); } }
@@ -1161,6 +1170,8 @@ internal sealed partial class DomainDeploymentForm : Form
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (MessageBox.Show(this,
                     $"CREATE A NEW GPO AND COPY CAMPAIGN FILES TO {_project.ContentSource}?\n\nDomain: {x.domain}\nDC: {x.dc}\nOU: {x.ou.Dn}\n" +
+                    $"Actual source path: {plan.Value.GetProperty("packageStoragePath").GetString()}\n" +
+                    CampaignSmbPreflightEvidence.ConfirmationWarning(_project.ContentSource, _project.ContentShareRoot) +
                     $"Computer security group: {x.group.Sam}\nGPO: {x.gpoName}\nClient: {_project.ClientType}\n\n" +
                     "No changes are made to other GPOs. Confirm you have a tested campaign and delegated rights.",
                     "Confirm Active Directory deployment", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,

@@ -41,6 +41,34 @@ class SmbSourceContracts(unittest.TestCase):
         self.assertIn("contentSource == CampaignContentSource.SmbShare", apply)
         self.assertIn('@"(?m)^Version=0[ \\t]*\\r?$"', apply)
 
+    def test_smb_preview_is_advisory_and_does_not_scan_sysvol_duplicates(self):
+        plan = read("NativeGpoDeploymentPlan.cs")
+        ui = read("DomainDeploymentForm.cs")
+        batch = read("DomainDeploymentForm.AssignmentDeployment.cs")
+        helper = read("CampaignSmbPreflightEvidence.cs")
+        tests = read("SelfTests.cs")
+        for field in ("smbNtfsAclScan", "smbShareAclAccess",
+                      "smbComputerAccountRead", "smbStartupConnectivity"):
+            self.assertIn(field, plan)
+            self.assertIn(field, helper)
+        for evidence in ("PASS_ADVISORY_BROAD_WRITE_ACL_SCAN",
+                         "NOT_TESTED", "NOT_APPLICABLE"):
+            self.assertIn(evidence, plan)
+        for notice in ("SMB share permissions: NOT TESTED",
+                       "Actual computer-account READ access: NOT TESTED",
+                       "Access during Windows startup: NOT TESTED",
+                       "An administrator's successful SMB read is NOT proof"):
+            self.assertIn(notice, helper)
+        self.assertIn("CampaignSmbPreflightEvidence.Describe(d)", ui)
+        self.assertIn("CampaignSmbPreflightEvidence.Describe(result)", batch)
+        self.assertIn("CampaignSmbPreflightEvidence.ConfirmationWarning", ui)
+        self.assertIn("CampaignSmbPreflightEvidence.ConfirmationWarning", batch)
+        self.assertIn("if (_project.ContentSource == CampaignContentSource.Sysvol) try", ui)
+        self.assertIn("SYSVOL duplicate scan: SKIPPED", ui)
+        self.assertIn("TestSmbPreflightEvidence();", tests)
+        self.assertNotIn("File.WriteAllText", helper)
+        self.assertNotIn("Directory.CreateDirectory", helper)
+
     def test_wizard_and_batch_send_same_fields(self):
         ui = read("DomainDeploymentForm.cs")
         batch = read("DomainDeploymentForm.AssignmentDeployment.cs")
