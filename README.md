@@ -6,6 +6,9 @@
 
 # LockScreen Campaign Manager
 
+> **Preview.87 — Wizard source selector + HiDPI Update UI fix:** The main seven-step Campaign Wizard now offers **Campaign files → SYSVOL (default) / SMB network folder (UNC)** on step **7 Deploy**, with an editable UNC path and Browse. This choice persists in the project and follows into the AD / GPO deployment Wizard; subsequent edits there also return to the editor. The Updater's Release channel and credential fields now use DPI-aware measured row heights, fixing the clipped `Preview + stable` selector at 125–200% display/font scale. Invalid UNC paths block opening deployment without attempting AD changes. [Release notes](docs/RELEASE-PREVIEW87.md).
+
+
 > **Preview.86 — independently confirm client cleanup:** a read-only LocalSystem test on an isolated Windows 10/11 computer now takes a **pre-deployment registry fingerprint** and later checks the restored registry, exact Computer GPO RSoP, scheduled tasks, ownership, local files and final postcleanup receipt. A client `Completed` status alone is not enough. This test does not mutate domain policy and cannot replace actual display/boot acceptance. [Local closure audit instructions](docs/ENDPOINT-CLOSURE-AUDIT.md).
 
 
@@ -30,7 +33,7 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Current preview:** `0.4.0-preview.86` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
+**Current preview:** `0.4.0-preview.87` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
 
 > **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 
