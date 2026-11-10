@@ -61,12 +61,20 @@ $domain=[string]$receipt.domain
 $manifest=[string]$receipt.manifestSha256
 $agent=[string]$receipt.agentSha256
 $method=[string]$receipt.clientType
+$gpoId=[string]$receipt.gpoId
+$deploymentUtc=[string]$receipt.deployedUtc
+[Guid]$verifiedGuid=[Guid]::Empty
+[DateTimeOffset]$verifiedUtc=[DateTimeOffset]::MinValue
 if ([string]$receipt.contentSource -cne 'SmbShare' -or
     $id -cnotmatch '^[a-z0-9-]{5,75}$' -or
     $manifest -notmatch '^[a-fA-F0-9]{64}$' -or
     $agent -notmatch '^[a-fA-F0-9]{64}$' -or
     $domain -cnotmatch '^[A-Za-z0-9][A-Za-z0-9.-]{2,252}$' -or
     $method -cnotin @('PowerShell','Executable') -or
+    -not [Guid]::TryParseExact($gpoId,'D',[ref]$verifiedGuid) -or
+    -not [DateTimeOffset]::TryParseExact($deploymentUtc,'o',
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind,[ref]$verifiedUtc) -or
     $root -notmatch '^\\\\[a-zA-Z0-9][a-zA-Z0-9.-]+\\[A-Za-z0-9_]' -or
     $root.Length -gt 200 -or $root.Contains('..') -or
     $root.Contains('"') -or $root.Contains('$') -or
@@ -78,12 +86,14 @@ if ([string]$computer.Domain -ine $domain) {
     throw 'The computer is joined to another domain than the approved receipt.'
 }
 $source=Join-Path $PSScriptRoot 'smb_system_canary_probe.ps1'
-if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-    throw 'Missing sibling read-only SYSTEM probe.'
+$rsopSource=Join-Path $PSScriptRoot 'smb_canary_rsop.ps1'
+if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $rsopSource -PathType Leaf)) {
+    throw 'Missing read-only SYSTEM probe or offline RSoP parser.'
 }
 Write-Host 'LOCAL LAB SMB SOURCE CHECK. No AD/GPO, SYSVOL or registry settings will be modified.'
 Write-Host 'The harness temporarily creates a LOCAL Scheduled Task as SYSTEM.'
-Write-Host 'The probe reads the selected SMB package and optional local cache, then'
+Write-Host 'The probe checks SMB package hashes, reboot timing and the exact Computer GPO, then'
 Write-Host 'writes an admin-only local JSON report. Nothing is uploaded.'
 $approval=Read-Host 'Type I_APPROVE_SMB_CANARY to continue'
 if ($approval -cne 'I_APPROVE_SMB_CANARY') { throw 'Lab approval not given.' }
@@ -99,9 +109,11 @@ $work=Join-Path $base $runId
 New-Item -ItemType Directory -Path $work -ErrorAction Stop | Out-Null
 Set-PrivateAcl $work
 $localProbe=Join-Path $work 'probe.ps1'
+$rsopScript=Join-Path $work 'smb_canary_rsop.ps1'
 $configFile=Join-Path $work 'config.json'
 $report=Join-Path $work 'report.json'
 Copy-Item -LiteralPath $source -Destination $localProbe -ErrorAction Stop
+Copy-Item -LiteralPath $rsopSource -Destination $rsopScript -ErrorAction Stop
 $config=[ordered]@{
     schema='lscm-smb-canary-config/v1'
     contentShareRoot=$root
@@ -111,6 +123,8 @@ $config=[ordered]@{
     manifestSha256=$manifest.ToLowerInvariant()
     agentSha256=$agent.ToLowerInvariant()
     clientType=$method
+    expectedGpoId=$verifiedGuid.ToString('D')
+    deployedUtc=$verifiedUtc.ToString('o')
 }
 [IO.File]::WriteAllText($configFile,($config | ConvertTo-Json -Depth 5),
     [Text.UTF8Encoding]::new($false))
@@ -143,6 +157,8 @@ try {
         ' / agent: '+[bool]$result.agentSha256Verified+
         ' / photos: '+[bool]$result.allImagesVerified)
     Write-Host ('Local cache verified: '+[bool]$result.localCacheHashVerified)
+    Write-Host ('Boot after campaign deployment: '+[bool]$result.rebootAfterDeployment)
+    Write-Host ('Expected Computer GPO in RSoP: '+[string]$result.gpoRsopStatus)
     Write-Host ('Private JSON report: '+$report)
     if ([string]$result.result -cne 'SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY') {
         throw 'SMB canary check failed closed; inspect the local JSON findings.'
@@ -161,5 +177,8 @@ finally {
     }
     if (Test-Path -LiteralPath $localProbe) {
         Remove-Item -LiteralPath $localProbe -Force -ErrorAction Stop
+    }
+    if (Test-Path -LiteralPath $rsopScript) {
+        Remove-Item -LiteralPath $rsopScript -Force -ErrorAction Stop
     }
 }
