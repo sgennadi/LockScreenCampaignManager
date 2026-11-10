@@ -8,6 +8,8 @@ public sealed partial class MainForm
     private CampaignWizardDialog? _activeCampaignWizard;
     // CI-only readback for an unsaved, local wizard time-zone change.
     internal string CampaignTimeZoneForSmokeTest => _project.TimeZoneId;
+    internal CampaignContentSource CampaignSourceForSmokeTest => _project.ContentSource;
+    internal string CampaignShareRootForSmokeTest => _project.ContentShareRoot;
 
 
     // Save is optional for the guided campaign flow. The GPO Deployment
@@ -1382,7 +1384,7 @@ public sealed partial class MainForm
             var browse = new Button {
                 Name = "CampaignWizardContentShareBrowse",
                 Text = "Browse...",
-                Dock = DockStyle.Fill, Tag = "NoIcon",
+                Dock = DockStyle.Fill, AutoSize = true, Tag = "NoIcon",
                 AutoEllipsis = false,
                 Margin = new Padding(3, 1, 0, 1)
             };
