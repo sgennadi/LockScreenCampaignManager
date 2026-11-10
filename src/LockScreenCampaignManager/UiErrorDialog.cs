@@ -20,12 +20,12 @@ internal static class ManualGitHubIssueHelp
     {
         if (string.IsNullOrWhiteSpace(reviewedReport))
         {
-            MessageBox.Show(owner, "Select a saved error report first.",
-                "Report an error", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(owner, UiLocale.Display("Select a saved error report first."),
+                UiLocale.Display("Report an error"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        var choice = MessageBox.Show(owner, Explanation,
-            "Report an error — public GitHub repository", MessageBoxButtons.YesNo,
+        var choice = MessageBox.Show(owner, UiLocale.Display(Explanation),
+            UiLocale.Display("Report an error — public GitHub repository"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (choice != DialogResult.Yes) return;
         try
@@ -56,7 +56,7 @@ internal static class ManualGitHubIssueHelp
                 MessageBox.Show(owner,
                     "The report is too long to prefill safely. It was copied to the clipboard. " +
                     "Paste it into the GitHub issue body after reviewing it.",
-                    "Report copied", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    UiLocale.Display("Report copied"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
         }
@@ -65,7 +65,7 @@ internal static class ManualGitHubIssueHelp
             MessageBox.Show(owner,
                 "Cannot copy the report or open GitHub. Nothing was delivered." +
                 Environment.NewLine + UniversalDiagnosticsEmbedded.Clean(ex.Message),
-                "Error report was not sent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                UiLocale.Display("Error report was not sent"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -88,8 +88,9 @@ internal static class UiErrorDialog
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         panel.Controls.Add(new Label { Dock = DockStyle.Fill,
-            Text = "Error: " + UniversalDiagnosticsEmbedded.Clean(error.GetType().Name) + "\n" +
-                "No reports are sent automatically. Review the sanitized data." }, 0, 0);
+            Text = UiLocale.Display("Error: ") +
+                UniversalDiagnosticsEmbedded.Clean(error.GetType().Name) + "\n" +
+                UiLocale.Display("No reports are sent automatically. Review the sanitized data.") }, 0, 0);
         var detail = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true,
             ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9f),
             Text = UniversalDiagnosticsEmbedded.Preview(payload) };
@@ -97,15 +98,19 @@ internal static class UiErrorDialog
         var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, AutoScroll = true };
         Button B(string text, Action act, int width)
         {
-            var b = new Button { Text = text, Width = width, Height = 42, Margin = new Padding(0, 4, 10, 0) };
+            var b = new Button { Text = UiLocale.Display(text), Width = width, Height = 42,
+                MinimumSize = new Size(width, 42), AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowOnly, Margin = new Padding(0, 4, 10, 0) };
             b.Click += (_, _) => act(); return b;
         }
         footer.Controls.Add(B("Save locally", () => {
             try {
                 var receipt = UniversalDiagnosticsEmbedded.CaptureReviewed(detail.Text);
-                MessageBox.Show(form, "Report saved with pending status:\n" + receipt.Path +
-                    "\nNothing was sent to GitHub.");
-            } catch (Exception e) { MessageBox.Show(form, "Save error: " + UniversalDiagnosticsEmbedded.Clean(e.Message)); }
+                MessageBox.Show(form, UiLocale.Display("Report saved with pending status:") +
+                    "\n" + receipt.Path + "\n" +
+                    UiLocale.Display("Nothing was sent to GitHub."));
+            } catch (Exception e) { MessageBox.Show(form, UiLocale.Display("Save error: ") +
+                UniversalDiagnosticsEmbedded.Clean(e.Message)); }
         }, 180));
         footer.Controls.Add(B("Copy", () => Clipboard.SetText(detail.Text), 115));
         footer.Controls.Add(B("Report an error...", () =>
@@ -157,8 +162,11 @@ internal sealed class DiagnosticsWindow : Form
         };
         void Add(string title, Action act)
         {
-            var b = new Button { Text = title, Width = title.StartsWith("Report") ? 178 : 148,
-                Height = 38, Margin = new Padding(4, 4, 4, 4), Tag = "NoIcon" };
+            var b = new Button { Text = UiLocale.Display(title),
+                Width = title.StartsWith("Report") ? 178 : 148,
+                Height = 38, MinimumSize = new Size(title.StartsWith("Report") ? 178 : 148, 38),
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
+                Margin = new Padding(4, 4, 4, 4), Tag = "NoIcon" };
             b.Click += (_, _) => act(); buttons.Controls.Add(b);
         }
         Add("Refresh", Reload);

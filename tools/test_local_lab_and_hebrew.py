@@ -140,5 +140,66 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             "Computer,Condition,Stage,Image,LastSeen,Files,Registry,Task,AgentVersion,ClientType",
             health)
 
+    def test_ops_diagnostics_hebrew_display_only_actions(self):
+        locale = read("UiLocale.cs")
+        glossary = read("UiLocale.OpsDiagnostics.cs")
+        operations = read("GpoOperationsForm.cs")
+        agent = read("GpoOperationsForm.AgentManagement.cs")
+        deferred = read("GpoOperationsForm.Deferred.cs")
+        gmsa = read("GpoOperationsForm.Gmsa.cs")
+        conflict = read("GroupConflictReportDialog.cs")
+        trends = read("DiagnosticsTrendsWindow.cs")
+        diagnostic = read("UiErrorDialog.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', glossary, re.M)
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertGreaterEqual(len(keys), 160)
+        for ui_name in (
+            "GPO Operations", "Deferred Repair", "GPO: Disable / Reuse / Delete",
+            "Automatic retry when PCs return (while manager is open)",
+            "24/7 gMSA — Route new approved Repair requests to machine queue",
+            "Report an error — LockScreen Campaign Manager",
+            "Diagnostics — saved error reports",
+            "Error trends — LockScreen Campaign Manager",
+            "Full GPO conflict report (read-only)", "Report an error..."
+        ):
+            self.assertIn('["' + ui_name + '"]', glossary)
+        for control in (
+            "GpoLifecycleAction", "GpoPushPurpose", "AgentActivityFilter",
+            "GpoGmsaFilter", "GroupConflictRisk", "GpoDeferredRepairGrid",
+            "GpoGmsaQueueGrid", "GroupConflictGrid", "DiagnosticsTrendsGrid"
+        ):
+            self.assertIn('"' + control + '"', locale)
+        for marker, content in (
+            ('Name = "GpoLifecycleAction"', operations),
+            ('Name = "GpoPushPurpose"', operations),
+            ('Name = "AgentActivityFilter"', agent),
+            ('Name = "GpoGmsaQueueGrid"', gmsa),
+            ('Name = "GpoGmsaFilter"', gmsa),
+            ('Name = "GpoDeferredRepairGrid"', deferred),
+            ('Name = "DiagnosticsTrendsGrid"', trends),
+            ('Name = "GroupConflictGrid"', conflict),
+            ("CheckHebrewGpoOperationsAndDiagnostics();", smoke)
+        ):
+            self.assertIn(marker, content)
+        # Manager/PowerShell commands, queue state, source filenames and
+        # exported JSON/CSV remain canonical English: UI labels are not keys.
+        self.assertIn('"Disable", "Enable", "Unlink", "Relink", "Reuse", "Delete"', operations)
+        self.assertIn('"Push", "Repair", "Cleanup", "Report"', operations)
+        self.assertIn('"All", "High", "Warning", "Info", "Inactive/filtered"', conflict)
+        self.assertIn(
+            "Target,Scope,Risk,GPO,GPO GUID,Setting,Value,Registry key,Source,Linked at,Applicability",
+            conflict)
+        self.assertIn("_snapshot.ExportSafeJson()", trends)
+        self.assertIn("ReviewedReport", diagnostic)
+        self.assertIn("UiLocale.Display(Explanation)", diagnostic)
+        for protected in (
+            "CampaignModels.cs", "CampaignPayloadLocation.cs", "ClientFeedback.cs",
+            "DomainPowerShellRunner.cs"
+        ):
+            self.assertNotIn("UiLocale.Translate(", read(protected))
+            self.assertNotIn("UiLocale.Display(", read(protected))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

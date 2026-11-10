@@ -1,3 +1,12 @@
+## 0.4.0-preview.93 — Hebrew GPO Operations, diagnostics and conflict reports (2026-11-10)
+
+- Extend reversible English/Hebrew operator-facing translations to GPO Operations, Agent Management filters, read-only conflict report, Deferred Repair and gMSA background Repair queues, diagnostic report review and offline error trends.
+- Translate GPO action and queue/risk filters **only for display**, leaving GPO Lifecycle IDs (Disable, Enable, Unlink, Relink, Reuse, Delete), remote Push/Repair/Cleanup/Report codes, AD activity filter keys, gMSA queue states, risk selection and their selected indices unchanged.
+- Add display-only localized headers to Deferred Repair, gMSA, read-only conflict and diagnostics trend tables. **Do not change** the exported diagnostic JSON fingerprints, GroupConflict CSV headers, report row values, queue storage, GPO preview hashes or reviewed privacy warnings.
+- Keep raw AD/GPO permissions evidence, GUID confirmation entry, domain/computer DNs, technical diagnostic payloads, JSON and path data left-to-right; preserve explicit Preview, GUID and local private CSV confirmation. Label placeholders and public GitHub privacy warning now translate reversibly.
+- Add six-profile (100–200% simulated) WinForms tests for Hebrew/English form titles, gMSA/Deferred tabs, column-header reversal and canonical operations/filter values; add Python static invariants for unmodified CSV/JSON and GPO commands.
+- The interface is **not yet 100% Hebrew**. Advanced validation messages, raw technical diagnostics, dedicated schedule editor and some additional windows remain English. Actual interactive Windows 10/11 RTL at 200% DPI is still open (#36); no live domain, SMB endpoint or JPG User GPO readiness is claimed (#25/#26/#30).
+
 ## 0.4.0-preview.92 — Hebrew AD/GPO and Client Health UI (2026-11-10)
 
 - Extend the reversible English/Hebrew presentation layer to the AD Connection Wizard, alternate-account/password picker, AD/GPO deployment, and Client Health / Live. Translate commonly used headings, actions, status hints, read-only permissions explanations, and SMB feedback settings.

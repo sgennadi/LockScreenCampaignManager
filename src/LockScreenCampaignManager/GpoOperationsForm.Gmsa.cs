@@ -50,6 +50,7 @@ internal sealed partial class GpoOperationsForm
             "Install and manage directly from this host's graphical interface. " +
             "Existing per-user requests are never migrated automatically."), 0, 0);
         layout.Controls.Add(_gmsaForNewRepair, 0, 1);
+        _gmsaGrid.Name = "GpoGmsaQueueGrid";
         _gmsaGrid.Dock = DockStyle.Fill;
         _gmsaGrid.ReadOnly = true;
         _gmsaGrid.AllowUserToAddRows = false;
@@ -81,6 +82,7 @@ internal sealed partial class GpoOperationsForm
         buttons.Controls.Add(new Label {
             Text = "Filter:", AutoSize = true, Margin = new Padding(8, 18, 5, 0)
         });
+        _gmsaFilter.Name = "GpoGmsaFilter";
         _gmsaFilter.DropDownStyle = ComboBoxStyle.DropDownList;
         _gmsaFilter.Width = 144;
         _gmsaFilter.Margin = new Padding(0, 10, 6, 0);
@@ -96,7 +98,7 @@ internal sealed partial class GpoOperationsForm
         _gmsaInfo.Dock = DockStyle.Fill;
         _gmsaInfo.ForeColor = UiStyle.Muted;
         _gmsaInfo.AutoEllipsis = false;
-        _gmsaInfo.Text = "Mode is off. Setup requires local administrator rights on this Windows host.";
+        _gmsaInfo.Text = UiLocale.Display("Mode is off. Setup requires local administrator rights on this Windows host.");
         layout.Controls.Add(_gmsaInfo, 0, 4);
         _gmsaTimer.Tick += (_, _) => {
             if (!_busy && IsGmsaTabSelected() && _gmsaAutoRefresh.Checked)

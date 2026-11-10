@@ -146,7 +146,15 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('CheckScrollableUncPaths(form, profile.Name)', layout)
         self.assertIn('Name = "GpoLifecyclePreviewButton"', manager)
         self.assertIn('_lifecyclePreview.Enabled = false;', manager)
-        self.assertIn('_status.Text = "Select a managed GPO first (no action performed).";', manager)
+        self.assertIn(
+            '_status.Text = UiLocale.Display("Select a managed GPO first (no action performed).");',
+            manager)
+        self.assertIn('if (string.IsNullOrWhiteSpace(SelectedId))', manager)
+        self.assertIn('return;', manager)
+        # Issue #11 is a normal missing-selection status, not a diagnostic error.
+        preview = manager.split("private async Task PreviewLifecycleAsync()", 1)[1].split(
+            "private static bool ConfirmGuid", 1)[0]
+        self.assertNotIn("throw new InvalidOperationException", preview)
         self.assertIn('Bug #11 regression: missing GPO selection', layout)
 
     def test_screen_saver_ms_gpreg_nul_termination_and_binary_readback(self):
