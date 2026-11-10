@@ -1,3 +1,11 @@
+## 0.4.0-preview.92 — Hebrew AD/GPO and Client Health UI (2026-11-10)
+
+- Extend the reversible English/Hebrew presentation layer to the AD Connection Wizard, alternate-account/password picker, AD/GPO deployment, and Client Health / Live. Translate commonly used headings, actions, status hints, read-only permissions explanations, and SMB feedback settings.
+- Translate **display labels only** in the deployment's PowerShell/EXE and SYSVOL/SMB selectors via ComboBox formatting, preserving SelectedIndex and original strings used for campaign settings. Keep DC/domain names, selected OU/group identities, UNC paths, AD credentials, GPO preview contents, evidence and diagnostic exports unchanged.
+- Translate Client Health column headers for display only, restoring their original English captions when switching back. CSV field names, JSON report schema, computer names, raw status codes and snapshots are unchanged; UI alerts and aggregate counts use localized presentation strings.
+- Preserve LTR for technical fields and AD/ACL evidence in Hebrew RTL windows; improve action button sizing and add offline WinForms 100-200% scale smoke tests for language reversibility, selected mode/source stability and grid headers.
+- GUI localization is **still partial**: all underlying protocol/debug/PowerShell output remains English, and some contextual or exception messages are not translated. Real interactive Windows 10/11 RTL and 200% DPI acceptance is still open (#36), as are SMB endpoint acceptance (#30) and JPG User GPO rollout gates (#25/#26).
+
 ## 0.4.0-preview.91 — Seven-step Hebrew campaign Wizard and RTL layout safety (2026-11-10)
 
 - Extend English/Hebrew presentation strings across the seven-step Campaign Wizard: connection, campaign type, image selection, ordering, schedule, Save/Skip and Deploy. Include JPG Photo Screen Saver choices, separate SYSVOL/SMB source labels, source/ACL warnings and saved-project status. Untranslated technical details remain English.
