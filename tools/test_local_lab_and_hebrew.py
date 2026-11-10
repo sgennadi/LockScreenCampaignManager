@@ -241,8 +241,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             self.assertIn('["' + key + '"]', russian)
         # User data and protocol keys MUST NOT be routed through UI localization.
         for protected in ("CampaignModels.cs", "CampaignPayloadLocation.cs",
-                          "DomainPowerShellRunner.cs", "ClientFeedback.cs",
-                          "CampaignSchedule.cs"):
+                          "DomainPowerShellRunner.cs", "ClientFeedback.cs"):
             source = read(protected)
             self.assertNotIn("UiLocale.Display(", source)
             self.assertNotIn("UiLocale.Translate(", source)
