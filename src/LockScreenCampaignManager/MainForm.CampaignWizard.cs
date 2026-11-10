@@ -68,6 +68,9 @@ public sealed partial class MainForm
 
     private sealed partial class CampaignWizardDialog : Form
     {
+        private static string T(string message) =>
+            UiLocale.Translate(message, UiStyle.Preferences.Language);
+
         private static readonly string[] StepNames =
         [
             "1  AD connection", "2  Campaign type", "3  Images",
@@ -428,11 +431,11 @@ public sealed partial class MainForm
                     _host.Controls.Remove(old);
                     old.Dispose();
                 }
-                _subheading.Text = "Step " + (_step + 1) + " of 7  -  " + StepNames[_step][3..];
+                _subheading.Text = T("Step " + (_step + 1) + " of 7  -  " + StepNames[_step][3..]);
                 for (int i = 0; i < _rail.Length; i++)
                 {
                     bool skippedForSaver = HasChosenCampaignType && !NeedsLockImages && i is >= 2 and <= 4;
-                    _rail[i].Text = skippedForSaver ? StepNames[i] + " (skip)" : StepNames[i];
+                    _rail[i].Text = T(skippedForSaver ? StepNames[i] + " (skip)" : StepNames[i]);
                     _rail[i].BackColor = i == _step ? UiStyle.Accent : UiStyle.SoftBlue;
                     _rail[i].ForeColor = i == _step ? Color.White :
                         skippedForSaver ? UiStyle.Muted :
@@ -543,23 +546,23 @@ public sealed partial class MainForm
                         break;
                 }
                 _back.Enabled = _step > 0;
-                _next.Text = _step == 6 && _deployChoice?.Checked == true
+                _next.Text = T(_step == 6 && _deployChoice?.Checked == true
                     ? "Deploy GPO..." : _step == 6 ? "Finish" :
                     _step == 5 && _skipProjectSave ? "Continue (no save)" :
                     _step == 5 && !_saved ? "Save & Next" :
-                    _step == 0 ? "Continue" : "Next";
+                    _step == 0 ? "Continue" : "Next");
                 _next.Enabled = _step switch
                 {
                     1 => HasChosenCampaignType,
                     0 or 6 => true,
                     _ => !NeedsLockImages || _owner._project.ImagePaths.Count > 0
                 };
-                _footnote.Text = _step == 0 ? "AD sign-in is optional" :
+                _footnote.Text = T(_step == 0 ? "AD sign-in is optional" :
                     !HasChosenCampaignType ? "Choose a campaign type first" :
                     !NeedsLockImages ? "Screen Saver: images not needed" :
                     _step >= 5 && _skipProjectSave && !_saved
                         ? "Local project not saved"
-                        : _owner._project.ImagePaths.Count + " image(s) selected";
+                        : _owner._project.ImagePaths.Count + " image(s) selected");
                 _host.ResumeLayout(true);
                 UiStyle.Apply(this);
                 UpdateAvailableNotice();
@@ -574,7 +577,9 @@ public sealed partial class MainForm
         {
             var button = new Button
             {
-                Text = caption, Width = width, Height = 43,
+                Text = T(caption), Width = width, Height = 43,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
+                MinimumSize = new Size(width, 43),
                 Margin = new Padding(0, 0, 10, 0),
                 Tag = primary ? "PrimaryAction" : "NoIcon",
                 Cursor = Cursors.Hand
@@ -591,7 +596,7 @@ public sealed partial class MainForm
 
         private static Label Information(string text, float fontSize = 11f) => new()
         {
-            Text = text, Dock = DockStyle.Fill,
+            Text = T(text), Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", fontSize),
             ForeColor = UiStyle.Navy,
@@ -637,8 +642,8 @@ public sealed partial class MainForm
             options.Controls.Add(_offlineChoice, 0, 1);
             body.Controls.Add(options);
             status.Text = _owner.AdReady
-                ? "Connected to AD: " + _owner._adSnapshot!.Domain + ". You may continue."
-                : "No AD session yet. Choose the connection wizard or offline mode.";
+                ? T("Connected to AD: ") + _owner._adSnapshot!.Domain + T(". You may continue.")
+                : T("No AD session yet. Choose the connection wizard or offline mode.");
         }
 
         private void RenderImages(FlowLayoutPanel actions, Panel body, Label status,
@@ -1294,11 +1299,11 @@ public sealed partial class MainForm
             AddStorageSelector(storage, 0, status);
             body.Controls.Add(storage);
             FitCampaignName();
-            status.Text = _saved
+            status.Text = T(_saved
                 ? "Project saved. Continue to Deploy or finish offline."
                 : _skipProjectSave
                     ? "Local save skipped. Continue to Deploy without a project file."
-                    : "Choose Save project or Skip saving & continue. Validation is required either way.";
+                    : "Choose Save project or Skip saving & continue. Validation is required either way.");
         }
 
 
@@ -1382,11 +1387,11 @@ public sealed partial class MainForm
                 networkRow.Visible = smb;
                 if (gpoAction is not null)
                     gpoAction.Enabled = gpoActionAllowed && ValidSource();
-                detail.Text = smb
+                detail.Text = T(smb
                     ? ValidSource()
                         ? "The GPO remains in SYSVOL. Test PC accounts require READ on both the SMB share and NTFS."
                         : @"Enter an existing dedicated UNC folder: \\server\share\folder (not a mapped drive)."
-                    : "GPO and immutable campaign files use the existing SYSVOL location.";
+                    : "GPO and immutable campaign files use the existing SYSVOL location.");
             }
             void MarkStorageChanged()
             {
@@ -1397,9 +1402,9 @@ public sealed partial class MainForm
                 _storageModifiedAfterSave |= _saved;
                 _saved = false;
                 RefreshStorage();
-                status.Text = _storageModifiedAfterSave
+                status.Text = T(_storageModifiedAfterSave
                     ? "Unsaved storage changes. Save project changes before finishing if you need the JSON file up to date."
-                    : "Storage changed. The new choice is stored in the editor; save the project to keep it on disk.";
+                    : "Storage changed. The new choice is stored in the editor; save the project to keep it on disk.");
             }
             source.SelectedIndexChanged += (_, _) => MarkStorageChanged();
             networkPath.TextChanged += (_, _) => MarkStorageChanged();
@@ -1489,14 +1494,14 @@ public sealed partial class MainForm
             _deployChoice.CheckedChanged += (_, _) =>
             {
                 if (_step == 6)
-                    _next.Text = _deployChoice.Checked ? "Deploy GPO..." : "Finish";
+                    _next.Text = T(_deployChoice.Checked ? "Deploy GPO..." : "Finish");
             };
             options.Controls.Add(_deployChoice, 0, 0);
             options.Controls.Add(offline, 0, 1);
 
             AddStorageSelector(options, 2, status, gpoAction, !photoPilotOnly);
             body.Controls.Add(options);
-            status.Text = _storageModifiedAfterSave
+            status.Text = T(_storageModifiedAfterSave
                 ? "The saved project still has an older storage path. Choose Save project changes to update it."
                 : photoPilotOnly
                 ? "JPG Screen Saver: export and test the .scr package locally. " +
@@ -1505,7 +1510,7 @@ public sealed partial class MainForm
                 ? "No local project file was saved. Deploy or return to the editor."
                 : _owner.AdReady
                     ? "AD connected: select storage and deployment or finish without AD changes."
-                    : "Offline: select storage now; connect to AD in the deployment wizard if needed.";
+                    : "Offline: select storage now; connect to AD in the deployment wizard if needed.");
         }
 
         private bool ConfirmSavedProjectIsOutdated()
