@@ -265,9 +265,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
                        '"DeviceRepairFilter"', '"FeedbackSmbInstructions"'):
             self.assertIn(marker, locale)
         for marker in ('"GmsaReadinessGrid"', 'UiLocale.Display("Queue: ")',
-                       'report.Result', 'report.Checks'):
-            if marker == 'report.Result':
-                continue
+                       'report.Checks'):
             self.assertIn(marker, readiness)
         for source, markers in (
             (gmsa, ('UiLocale.Display("gMSA — Confirm installation")',
@@ -292,7 +290,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         self.assertIn('UiLocale.Display(', alerts)
         for prefix in ("Advanced95Russian", "Advanced95Hebrew"):
             start = words.index('private static readonly Dictionary<string,string> ' + prefix)
-            end = words.index('        };', start)
+            end = words.index('    };', start)
             keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', words[start:end], re.M)
             self.assertGreaterEqual(len(keys), 105)
             self.assertEqual(len(keys), len(set(keys)))
