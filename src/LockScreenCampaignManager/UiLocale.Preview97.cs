@@ -7,6 +7,7 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string,string> Preview97Russian = new(StringComparer.Ordinal)
     {
+        ["Showing "] = "Показано ",
         ["Select the dedicated SMB share root, not a local directory."] = "Выберите корень выделенного SMB-ресурса, а не локальную папку.",
         ["Select a UNC share root: "] = "Укажите корень UNC-ресурса: ",
         ["There are "] = "Есть ",
@@ -94,6 +95,7 @@ internal static partial class UiLocale
         Preview97Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
     private static readonly Dictionary<string,string> Preview97Hebrew = new(StringComparer.Ordinal)
     {
+        ["Showing "] = "מוצגים ",
         ["Select the dedicated SMB share root, not a local directory."] = "בחר את שורש שיתוף SMB הייעודי, לא תיקייה מקומית.",
         ["Select a UNC share root: "] = "בחר שורש שיתוף UNC: ",
         ["There are "] = "יש ",
