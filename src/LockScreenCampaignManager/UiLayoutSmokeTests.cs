@@ -1111,6 +1111,7 @@ internal static class UiLayoutSmokeTests
         }
         CheckHebrewRtlAndLanguageSelection();
         CheckHebrewCampaignWizardPages();
+        CheckHebrewAdAndClientHealth();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1220,6 +1221,100 @@ internal static class UiLayoutSmokeTests
             editor.CampaignShareRootForSmokeTest != originalShare)
             throw new InvalidOperationException(
                 "Language-only wizard checks unexpectedly changed campaign storage settings.");
+    }
+
+    private static void CheckHebrewAdAndClientHealth()
+    {
+        // Pure UI-only acceptance: no Shown event, directory queries,
+        // SMB reads, user passwords, deployment, exports or saved settings.
+        foreach (var profile in Profiles)
+        {
+            var he = new UiPreferences {
+                Language = "Hebrew", Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            var en = new UiPreferences {
+                Language = "English", Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+
+            using var ad = new AdConnectionStartDialog();
+            using var account = new AdAlternateAccountWizard(
+                "example.com", "dc01.example.com", "", "", false, false, true);
+            account.ShowPasswordPageForSmokeTest();
+            var campaign = new CampaignProject {
+                Name = "ui-test", TimeZoneId = "UTC",
+                StartLocal = new DateTime(2026, 11, 10, 12, 0, 0),
+                ContentSource = CampaignContentSource.Sysvol
+            };
+            using var deploy = new DomainDeploymentForm(campaign);
+            using var feedback = new FeedbackSettingsDialog(campaign);
+            using var healthWindow = new Form { Width = 1220, Height = 820 };
+            var health = new ClientFeedbackPanel("example.com", "dc01.example.com",
+                "OU=Computers,DC=example,DC=com",
+                "CN=TestPCs,DC=example,DC=com",
+                new DomainCredentials("example.com", "", ""), campaign);
+            healthWindow.Controls.Add(health);
+
+            ComboBox content = Descendants(deploy).OfType<ComboBox>()
+                .Single(x => x.Name == "DeploymentContentSource");
+            ComboBox agent = Descendants(deploy).OfType<ComboBox>()
+                .Single(x => x.Name == "DeploymentClientType");
+            var grid = Descendants(healthWindow).OfType<DataGridView>()
+                .Single(x => x.Name == "ClientHealthGrid");
+
+            string[] sourceValues = content.Items.Cast<object>()
+                .Select(x => x.ToString() ?? "").ToArray();
+            string[] agentValues = agent.Items.Cast<object>()
+                .Select(x => x.ToString() ?? "").ToArray();
+            string[] originalHeaders = grid.Columns.Cast<DataGridViewColumn>()
+                .Select(x => x.HeaderText).ToArray();
+            int sourceIndex = content.SelectedIndex, agentIndex = agent.SelectedIndex;
+            string share = campaign.FeedbackShare;
+            foreach (Form form in new Form[] { ad, account, deploy, feedback, healthWindow })
+            {
+                UiStyle.Apply(form, he);
+                form.PerformLayout();
+                if (!form.RightToLeftLayout || form.RightToLeft != RightToLeft.Yes)
+                    throw new InvalidOperationException(
+                        "AD/Client Health Hebrew RTL missing: " + form.Name + " / " + profile.Name);
+            }
+            if (!Descendants(ad).OfType<Label>()
+                    .Any(x => x.Text == "אשף חיבור ל-AD") ||
+                !Descendants(account).OfType<Label>()
+                    .Any(x => x.Text == "הזן סיסמת חשבון") ||
+                !Descendants(deploy).OfType<Label>()
+                    .Any(x => x.Text == "פריסת Active Directory / GPO") ||
+                !Descendants(healthWindow).OfType<Button>()
+                    .Any(x => x.Text == "טען מחשבים מ-AD") ||
+                grid.Columns[0].HeaderText != "מחשב" ||
+                grid.Columns[1].HeaderText != "מצב" ||
+                !agent.FormattingEnabled || !content.FormattingEnabled ||
+                content.SelectedIndex != sourceIndex || agent.SelectedIndex != agentIndex ||
+                content.Items.Cast<object>().Select(x => x.ToString()).Where(x => x is not null)
+                    .SequenceEqual(sourceValues) == false ||
+                agent.Items.Cast<object>().Select(x => x.ToString()).Where(x => x is not null)
+                    .SequenceEqual(agentValues) == false)
+                throw new InvalidOperationException(
+                    "AD/Client Health visible Hebrew or immutable selection values failed: " + profile.Name);
+
+            foreach (Form form in new Form[] { ad, account, deploy, feedback, healthWindow })
+            {
+                UiStyle.Apply(form, en);
+                if (form.RightToLeftLayout || form.RightToLeft != RightToLeft.No)
+                    throw new InvalidOperationException(
+                        "AD/Client Health could not return to English: " + profile.Name);
+            }
+            if (grid.Columns.Cast<DataGridViewColumn>()
+                    .Select(x => x.HeaderText).SequenceEqual(originalHeaders) == false ||
+                campaign.ContentSource != CampaignContentSource.Sysvol ||
+                campaign.ClientType != CampaignClientType.PowerShell ||
+                campaign.FeedbackShare != share)
+                throw new InvalidOperationException(
+                    "Language switch changed client report columns or campaign settings: " + profile.Name);
+        }
     }
 
     private static IEnumerable<Control> Descendants(Control parent)
