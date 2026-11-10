@@ -328,6 +328,27 @@ internal static class UiLayoutSmokeTests
                 catch (UnauthorizedAccessException) { }
             }
         };
+        if (page == 6)
+        {
+            var source = Descendants(wizard).OfType<ComboBox>()
+                .Single(x => x.Name == "CampaignWizardContentSource");
+            var path = Descendants(wizard).OfType<TextBox>()
+                .Single(x => x.Name == "CampaignWizardContentShareRoot");
+            if (source.SelectedIndex != 0 ||
+                editor.CampaignSourceForSmokeTest != CampaignContentSource.Sysvol)
+                throw new InvalidOperationException(
+                    "Wizard must show SYSVOL by default for existing campaigns.");
+            source.SelectedIndex = 1;
+            path.Text = @"\\files.example.com\Campaigns";
+            if (editor.CampaignSourceForSmokeTest != CampaignContentSource.SmbShare ||
+                editor.CampaignShareRootForSmokeTest != path.Text)
+                throw new InvalidOperationException(
+                    "Wizard SMB folder selection did not persist in the campaign editor.");
+            source.SelectedIndex = 0;
+            if (editor.CampaignSourceForSmokeTest != CampaignContentSource.Sysvol)
+                throw new InvalidOperationException(
+                    "Switching back to SYSVOL did not persist in the campaign project.");
+        }
         if (page == 4)
         {
             var picker = Descendants(wizard).OfType<ComboBox>()
@@ -513,6 +534,93 @@ internal static class UiLayoutSmokeTests
                 header.Padding.Vertical + header.Margin.Vertical)
             throw new InvalidOperationException(
                 $"Software updates subtitle clipped at {profile}.");
+    }
+
+    private static void CheckUpdaterFieldHeights(Form form, string profile)
+    {
+        if (form is not UniversalUpdaterWindow) return;
+        var all = Descendants(form).ToArray();
+        var source = all.OfType<ComboBox>()
+            .SingleOrDefault(x => x.Name == "UpdaterReleaseChannel");
+        var config = all.OfType<TableLayoutPanel>()
+            .SingleOrDefault(x => x.Name == "UpdaterConfiguration");
+        if (source is null || config is null ||
+            source.Parent is not TableLayoutPanel sourceField ||
+            sourceField.Parent != config ||
+            source.Items.Count != 2 ||
+            source.SelectedIndex != 0 ||
+            source.Text != "Preview + stable" ||
+            source.DropDownStyle != ComboBoxStyle.DropDownList)
+            throw new InvalidOperationException(
+                $"Updater release channel missing at {profile}.");
+        var label = sourceField.GetControlFromPosition(0, 0) as Label;
+        if (label is null || label.Text != "Release channel" ||
+            label.AutoEllipsis)
+            throw new InvalidOperationException(
+                $"Updater release channel label missing/clipped at {profile}.");
+        int labelHeight = TextRenderer.MeasureText("Agpqy", label.Font,
+            new Size(4096, 4096),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+            label.Padding.Vertical + label.Margin.Vertical + 9;
+        int editorHeight = source.PreferredHeight + source.Margin.Vertical + 8;
+        int optionTextWidth = TextRenderer.MeasureText(
+            "Preview + stable", source.Font).Width + 24;
+        if (sourceField.RowStyles[0].Height < labelHeight ||
+            sourceField.RowStyles[1].Height < editorHeight ||
+            source.Height < source.PreferredHeight ||
+            source.Width < optionTextWidth ||
+            sourceField.GetRow(source) != 1)
+            throw new InvalidOperationException(
+                $"Updater channel is clipped at {profile}: " +
+                $"label={sourceField.RowStyles[0].Height}, " +
+                $"editor={sourceField.RowStyles[1].Height}, " +
+                $"native={source.Height}/{source.PreferredHeight}, " +
+                $"width={source.Width}/{optionTextWidth}.");
+        int total = config.RowStyles.Cast<RowStyle>()
+            .Sum(x => (int)Math.Ceiling(x.Height)) +
+            config.Padding.Vertical + config.Margin.Vertical;
+        if (config.Parent is not TableLayoutPanel outer ||
+            outer.RowStyles[1].Height < total)
+            throw new InvalidOperationException(
+                $"Updater configuration panel is clipped at {profile}.");
+    }
+
+    private static void CheckMainWizardStorage(Form form, string profile)
+    {
+        if (!form.Text.Contains("Campaign Wizard", StringComparison.Ordinal) ||
+            !Descendants(form).OfType<Label>()
+                .Any(x => x.Text == "Deploy or finish offline"))
+            return;
+        var all = Descendants(form).ToArray();
+        var source = all.OfType<ComboBox>()
+            .SingleOrDefault(x => x.Name == "CampaignWizardContentSource");
+        var folder = all.OfType<TextBox>()
+            .SingleOrDefault(x => x.Name == "CampaignWizardContentShareRoot");
+        var browse = all.OfType<Button>()
+            .SingleOrDefault(x => x.Name == "CampaignWizardContentShareBrowse");
+        var field = all.OfType<TableLayoutPanel>()
+            .SingleOrDefault(x => x.Name == "CampaignWizardStorageOptions");
+        var row = all.OfType<TableLayoutPanel>()
+            .SingleOrDefault(x => x.Name == "CampaignWizardNetworkStorageRow");
+        if (source is null || folder is null || browse is null ||
+            field is null || row is null ||
+            source.Items.Count != 2 || source.SelectedIndex != 0 ||
+            source.DropDownStyle != ComboBoxStyle.DropDownList ||
+            source.Height < source.PreferredHeight ||
+            source.Width < TextRenderer.MeasureText(
+                "SMB network folder (UNC)", source.Font).Width + 22 ||
+            field.RowStyles.Cast<RowStyle>().Any(x => x.SizeType != SizeType.AutoSize))
+            throw new InvalidOperationException(
+                $"Main Wizard SYSVOL/SMB picker clipped or missing at {profile}.");
+        source.SelectedIndex = 1;
+        folder.Text = @"\\files.example.com\Campaigns";
+        form.PerformLayout();
+        if (!row.Visible || !folder.Enabled || !browse.Enabled ||
+            folder.Width < 160 ||
+            browse.Height < TextRenderer.MeasureText("Browse...", browse.Font).Height + 6)
+            throw new InvalidOperationException(
+                $"Main Wizard network UNC input or Browse button clipped at {profile}.");
+        source.SelectedIndex = 0;
     }
 
     private static void CheckAdAdvancedOptions(Form form, string profile)
@@ -749,6 +857,8 @@ internal static class UiLayoutSmokeTests
                 }
                 CheckWizardFooter(form, profile.Name);
                 CheckUpdaterHeader(form, profile.Name);
+                CheckUpdaterFieldHeights(form, profile.Name);
+                CheckMainWizardStorage(form, profile.Name);
                 CheckAdAdvancedOptions(form, profile.Name);
                 CheckDpiTableRows(form, profile.Name);
                 CheckTimeZoneDifference(form, profile.Name);
