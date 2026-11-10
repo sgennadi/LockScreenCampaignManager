@@ -46,13 +46,20 @@ internal static class UiLocale
         ["Companies..."] = "ארגונים...",
         ["History..."] = "היסטוריה...",
         ["Project"] = "פרויקט",
+        ["Help"] = "עזרה",
+        ["1  Add files..."] = "1  הוסף קבצים...",
+        ["2  Arrange / edit"] = "2  סידור ועריכה",
+        ["3  Schedule..."] = "3  תזמון...",
+        ["Review / export"] = "סקירה וייצוא",
+        ["Connected"] = "מחובר",
+        ["Refresh"] = "רענן",
+        ["Refresh reports"] = "רענן דוחות",
+        ["Choose image folder..."] = "בחר תיקיית תמונות...",
         ["Tools"] = "כלים",
         ["Help / tools"] = "עזרה וכלים",
-        ["Review / export"] = "סקירה וייצוא",
         ["AD / GPO"] = "ניהול AD / GPO",
         ["Images"] = "תמונות",
         ["Add image files..."] = "הוסף קובצי תמונה...",
-        ["Choose image folder..."] = "בחר תיקיית תמונות...",
         ["Add folder..."] = "הוסף תיקייה...",
         ["Remove selected"] = "הסר בחירה",
         ["Move up"] = "הזז למעלה",
@@ -148,6 +155,9 @@ internal static class UiLocale
 
     internal static string Translate(string value, string language)
     {
+        const string menuSuffix = "  ▾";
+        if (value.EndsWith(menuSuffix, StringComparison.Ordinal))
+            return Translate(value[..^menuSuffix.Length], language) + menuSuffix;
         if (IsHebrew(language))
         {
             if (Hebrew.TryGetValue(value, out string? he)) return he;
