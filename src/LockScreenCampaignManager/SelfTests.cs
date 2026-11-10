@@ -273,8 +273,8 @@ internal static class SelfTests
     private static void TestSmbPreflightEvidence()
     {
         // Pure offline regression: do not contact a share, DC or test endpoint.
-        const string root = @"\\\\files.example.com\\Campaigns";
-        string target = root + @"\\test-202611091200";
+        const string root = @"\\files.example.com\Campaigns";
+        string target = root + @"\test-202611091200";
         System.Text.Json.JsonElement Make(
             string ntfs = "PASS_ADVISORY_BROAD_WRITE_ACL_SCAN",
             string share = "NOT_TESTED", string computer = "NOT_TESTED",
@@ -303,7 +303,7 @@ internal static class SelfTests
         foreach (var invalid in new[] {
             Make(ntfs: "NOT_TESTED"), Make(share: "PASS"),
             Make(computer: "PASS"), Make(startup: "PASS"),
-            Make(path: @"\\\\other.example.com\\Campaigns\\test-202611091200")
+            Make(path: @"\\other.example.com\Campaigns\test-202611091200")
         })
         {
             bool rejected = false;
