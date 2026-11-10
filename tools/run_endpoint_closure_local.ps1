@@ -57,7 +57,7 @@ if ($Mode -ceq 'Baseline') {
     }
 } else {
     if (-not [string]::IsNullOrEmpty($CampaignId) -or [string]::IsNullOrWhiteSpace($ReceiptPath) -or
-        -not [IO.Path]::IsPathFullyQualified($ReceiptPath) -or
+        $ReceiptPath -cnotmatch '^[A-Za-z]:\\' -or
         $ReceiptPath.StartsWith('\') -or -not (Test-Path -LiteralPath $ReceiptPath -PathType Leaf)) {
         throw 'VerifyCleanup requires one existing LOCAL deployment receipt.'
     }
