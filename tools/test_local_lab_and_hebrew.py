@@ -301,5 +301,53 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             self.assertNotIn("UiLocale.Translate(", read(protected))
 
 
+    def test_preview96_updater_and_local_lab_tri_language_safety(self):
+        words = read("UiLocale.Preview96.cs")
+        locale = read("UiLocale.cs")
+        updater = read("UniversalUpdaterWindow.cs")
+        lab = read("LocalLabEvidenceDialog.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        for marker in ("Preview96EnglishByRussian.TryGetValue",
+                       "Preview96EnglishByHebrew.TryGetValue",
+                       "Preview96Russian.TryGetValue", "Preview96Hebrew.TryGetValue",
+                       '"UpdaterReleaseChannel"', '"UpdaterResultOutput"',
+                       '"Updates — LockScreen Campaign Manager"'):
+            self.assertIn(marker, locale if "Preview96" in marker or "Updates" in marker
+                          else updater)
+        for prefix in ("Preview96Russian", "Preview96Hebrew"):
+            start = words.index("private static readonly Dictionary<string, string> " + prefix)
+            end = words.index("    };", start)
+            keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', words[start:end], re.M)
+            self.assertGreaterEqual(len(keys), 75)
+            self.assertEqual(len(keys), len(set(keys)))
+        for needle in (
+            'T("Update check failed: ")',
+            'T("No local rollback checkpoint found.")',
+            'T("Update was not installed")',
+            'T("Install verified portable update?")',
+            'MessageBoxDefaultButton.Button2',
+            'PortableUpdateCoordinator.Launch(_staged, _options)',
+            'UpdateChannel.Stable : UpdateChannel.Prerelease',
+            'source.GetItemText(source.SelectedItem)',
+        ):
+            self.assertIn(needle, updater + smoke)
+        for marker in ('UiLocale.Display("No report imported")',
+                       'UiLocale.Display("Report rejected - invalid or incompatible JSON")',
+                       'LocalLabEvidence.LoadLocalFile',
+                       'details.Text = text.ToString();'):
+            self.assertIn(marker, lab)
+        self.assertIn("CheckPreview96UpdaterLabLanguageAndDpi();", smoke)
+        for protected in (
+            "UniversalUpdater/UpdateDownloader.cs",
+            "UniversalUpdater/GitHubReleaseClient.cs",
+            "PortableUpdateCoordinator.cs",
+            "LocalLabEvidence.cs",
+            "CampaignModels.cs",
+            "NativeGpoDeploymentApply.cs"):
+            source = read(protected)
+            self.assertNotIn("UiLocale.Translate(", source)
+            self.assertNotIn("UiLocale.Display(", source)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

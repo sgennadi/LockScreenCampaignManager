@@ -1,3 +1,11 @@
+## 0.4.0-preview.96 — Bilingual updater / Local Lab evidence and DPI contracts (2026-11-10)
+
+- Add 77 new Russian and 77 new Hebrew presentation-only captions for the Updater, package verification, signed-publisher/rollback/backup warnings, and local Windows Lab Evidence viewer. Reuse already translated common words where available.
+- Localize Updater read-only Check, verification, progress, install approval and rollback inspection. **No automatic install**: a verified package still requires a separate explicit Yes (No by default); no update is attempted against administrator-owned or running gMSA copies.
+- Keep raw release notes, SHA-256, installed version, GitHub repository, package architecture, token, check results and JSON evidence unmodified. The Preview/Stable picker is display-only; SelectedItem and SelectedIndex remain canonical.
+- Localize local lab import/rejection/status labels while keeping untrusted JSON report evidence and local-only validation intact.
+- Extend WinForms simulated DPI 100–200% LTR/RTL switching tests, text-height and localized ComboBox width checks. Interactive Windows 10/11 physical 200% DPI and live domain acceptance still pending (#36). SMB boot and JPG User GPO testing remain open (#30/#25/#26).
+
 ## 0.4.0-preview.95 — Trilingual Advanced UI and Device/Repair dashboard (2026-11-10)
 
 - Expand English/Русский/עברית presentation to native gMSA 24/7 setup, read-only readiness, SMB feedback settings, Client Health alerts and Device & Repair Dashboard. Add over 100 translated operator captions and notices per language, without changing protocol or policy data.

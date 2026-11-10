@@ -81,7 +81,7 @@ internal sealed class LocalLabEvidencePanel : UserControl
         browse.Click += (_, _) => open();
         top.Controls.Add(browse);
         host.Controls.Add(top, 0, 0);
-        status.Text = "No report imported";
+        status.Text = UiLocale.Display("No report imported");
         status.Dock = DockStyle.Fill;
         status.Name = buttonName + "Status";
         status.TextAlign = ContentAlignment.MiddleLeft;
@@ -97,8 +97,8 @@ internal sealed class LocalLabEvidencePanel : UserControl
         details.RightToLeft = RightToLeft.No;
         details.BackColor = UiStyle.Surface;
         details.Font = new Font("Segoe UI", 9.2f);
-        details.Text = "Select a local JSON produced by an approved test PC. " +
-            "Do not upload it to GitHub or treat it as authenticated evidence.";
+        details.Text = UiLocale.Display("Select a local JSON produced by an approved test PC. " +
+            "Do not upload it to GitHub or treat it as authenticated evidence.");
         host.Controls.Add(details, 0, 2);
         return host;
     }
@@ -106,8 +106,8 @@ internal sealed class LocalLabEvidencePanel : UserControl
     private void Import(string expectedKind, Label status, TextBox details)
     {
         using var open = new OpenFileDialog {
-            Title = "Select LOCAL Windows lab report",
-            Filter = "JSON report (*.json)|*.json",
+            Title = UiLocale.Display("Select LOCAL Windows lab report"),
+            Filter = UiLocale.Display("JSON report (*.json)") + "|*.json",
             CheckFileExists = true, CheckPathExists = true,
             Multiselect = false
         };
@@ -134,11 +134,11 @@ internal sealed class LocalLabEvidencePanel : UserControl
             text.AppendLine();
             text.AppendLine("FINDINGS: " + (evidence.Findings.Count == 0
                 ? "(none reported)" : string.Join(", ", evidence.Findings)));
-            status.Text = evidence.Stale ? "Stale report - review on the endpoint"
+            status.Text = UiLocale.Display(evidence.Stale ? "Stale report - review on the endpoint"
                 : evidence.Result is "FAIL_CLOSED" or "INCOMPLETE" or
                   "POSTCLEANUP_REQUIRES_REVIEW"
                     ? "Incomplete / failed checks - review needed"
-                    : "Imported locally - NOT authenticated endpoint proof";
+                    : "Imported locally - NOT authenticated endpoint proof");
             status.ForeColor = evidence.Stale ? UiStyle.Muted :
                 evidence.Result is "FAIL_CLOSED" or "INCOMPLETE" or
                     "POSTCLEANUP_REQUIRES_REVIEW" ? Color.DarkRed : UiStyle.Navy;
@@ -147,11 +147,11 @@ internal sealed class LocalLabEvidencePanel : UserControl
         catch (Exception ex) when (ex is InvalidDataException or
             IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
-            status.Text = "Report rejected - invalid or incompatible JSON";
+            status.Text = UiLocale.Display("Report rejected - invalid or incompatible JSON");
             status.ForeColor = Color.DarkRed;
-            details.Text = "The JSON failed strict offline validation. " +
-                "No data was sent and no endpoint or AD action was performed.";
-            MessageBox.Show(FindForm(), ex.Message, "Local report rejected",
+            details.Text = UiLocale.Display("The JSON failed strict offline validation. " +
+                "No data was sent and no endpoint or AD action was performed.");
+            MessageBox.Show(FindForm(), ex.Message, UiLocale.Display("Local report rejected"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

@@ -50,6 +50,9 @@ internal sealed class UniversalUpdaterWindow : Form
     private CancellationTokenSource? _operation;
     private string? _stagedPath;
     private StagedPackage? _staged;
+    // Operator captions only; release IDs, archives, hashes and session token
+    // remain untouched by localization.
+    private static string T(string text) => UiLocale.Display(text);
 
     internal UniversalUpdaterWindow(bool checkOnOpen = false)
     {
@@ -129,15 +132,19 @@ internal sealed class UniversalUpdaterWindow : Form
             _staged = null;
             _download.Enabled = false;
             _install.Enabled = false;
-            _state.Text = "Channel changed. Select Check for updates.";
+            _state.Text = T("Channel changed. Select Check for updates.");
         };
         config.Controls.Add(Field("Release channel", _channel), 0, 0);
         config.Controls.Add(Field("Installed version / architecture",
             new TextBox {
+                Name = "UpdaterInstalledVersion",
+                RightToLeft = RightToLeft.No,
                 Text = AppVersion.Current + "    |    " +
                     UpdateOptions.CurrentWindowsArchitecture(),
                 ReadOnly = true, TabStop = false
             }), 1, 0);
+
+        _sessionToken.RightToLeft = RightToLeft.No; // token bytes are not localized
 
         _sessionToken.MaxLength = 512;
         _sessionToken.AccessibleName = "Optional GitHub read-only session token";
@@ -149,10 +156,12 @@ internal sealed class UniversalUpdaterWindow : Form
             _stagedPath = null;
             _download.Enabled = false;
             _install.Enabled = false;
-            _state.Text = "Session credentials changed. Check for updates again.";
+            _state.Text = T("Session credentials changed. Check for updates again.");
         };
         config.Controls.Add(Field("GitHub token (optional; never saved)", _sessionToken), 0, 1);
         config.Controls.Add(Field("Repository", new TextBox {
+            Name = "UpdaterRepositoryValue",
+            RightToLeft = RightToLeft.No,
             Text = Repository + "  |  Public releases do not need a token",
             ReadOnly = true, TabStop = false
         }), 1, 1);
@@ -217,6 +226,8 @@ internal sealed class UniversalUpdaterWindow : Form
             Font = new Font("Segoe UI Semibold", 11f),
             ForeColor = UiStyle.Navy, TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
+        _output.Name = "UpdaterResultOutput";
+        _output.RightToLeft = RightToLeft.No; // raw hashes/paths/release notes
         _output.Dock = DockStyle.Fill;
         _output.BackColor = Color.White;
         _output.ForeColor = UiStyle.Foreground;
@@ -226,12 +237,11 @@ internal sealed class UniversalUpdaterWindow : Form
         _output.WordWrap = true;
         _output.ScrollBars = ScrollBars.Vertical;
         _output.Font = new Font("Segoe UI", 10f);
-        _output.Text = "Check for updates to compare your installed version with GitHub Releases." +
-            Environment.NewLine + Environment.NewLine +
-            "1. Check for updates (Stable or Preview)." + Environment.NewLine +
-            "2. Install: automatically download and verify, then request approval to restart." +
-            Environment.NewLine + Environment.NewLine +
-            "Updating the portable EXE never modifies GPO or gMSA installations.";
+        _output.Text = T(
+            "Check for updates to compare your installed version with GitHub Releases.\n\n" +
+            "1. Check for updates (Stable or Preview).\n" +
+            "2. Install: automatically download and verify, then request approval to restart.\n\n" +
+            "Updating the portable EXE never modifies GPO or gMSA installations.");
         resultArea.Controls.Add(_output, 0, 1);
         layout.Controls.Add(resultArea, 0, 2);
 
@@ -244,7 +254,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _state.AutoEllipsis = true;
         _state.TextAlign = ContentAlignment.MiddleLeft;
         _state.ForeColor = UiStyle.Navy;
-        _state.Text = "Ready. No network request has been made.";
+        _state.Text = T("Ready. No network request has been made.");
         statusPanel.Controls.Add(_state);
         layout.Controls.Add(statusPanel, 0, 3);
 
@@ -396,38 +406,38 @@ internal sealed class UniversalUpdaterWindow : Form
             if (found is null)
             {
                 _output.Text = options.Channel == UpdateChannel.Stable
-                    ? "No newer stable release is published. A preview is not a Stable release." +
-                      Environment.NewLine + "Choose Preview + stable to find development previews."
-                    : "No newer compatible preview or stable release is available." +
-                      Environment.NewLine + "The release must include an architecture-specific Update ZIP " +
-                      "with a GitHub SHA-256 digest.";
-                _state.Text = "No newer compatible release returned by the selected access mode.";
+                    ? T("No newer stable release is published. A preview is not a Stable release.") +
+                      Environment.NewLine + T("Choose Preview + stable to find development previews.")
+                    : T("No newer compatible preview or stable release is available.") +
+                      Environment.NewLine + T("The release must include an architecture-specific Update ZIP " +
+                      "with a GitHub SHA-256 digest.");
+                _state.Text = T("No newer compatible release returned by the selected access mode.");
             }
             else
             {
-                _output.Text = "New release: " + found.Version +
-                    Environment.NewLine + "Current: " + options.InstalledVersion +
-                    Environment.NewLine + "Asset: " + found.Rule.AssetName +
-                    Environment.NewLine + "Archive size: " + found.SizeBytes.ToString("N0") + " bytes" +
+                _output.Text = T("New release: ") + found.Version +
+                    Environment.NewLine + T("Current: ") + options.InstalledVersion +
+                    Environment.NewLine + T("Asset: ") + found.Rule.AssetName +
+                    Environment.NewLine + T("Archive size: ") + found.SizeBytes.ToString("N0") + T(" bytes") +
                     Environment.NewLine + "SHA-256: " + found.Sha256 +
                     Environment.NewLine + Environment.NewLine +
-                    "Release notes:" + Environment.NewLine +
+                    T("Release notes:") + Environment.NewLine +
                     (found.ReleaseNotes.Length > 6000 ? found.ReleaseNotes[..6000] : found.ReleaseNotes);
-                _state.Text = "New release available. Choose Install to download, verify and apply.";
+                _state.Text = T("New release available. Choose Install to download, verify and apply.");
             }
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Release check canceled.";
+            _state.Text = T("Release check canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater release check");
-            _state.Text = "Could not check GitHub Releases.";
-            _output.Text = "Update check failed: " +
+            _state.Text = T("Could not check GitHub Releases.");
+            _output.Text = T("Update check failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "Check internet access and repository visibility in the browser.";
+                T("Check internet access and repository visibility in the browser.");
         }
         finally { FinishWorking(); }
     }
@@ -449,9 +459,9 @@ internal sealed class UniversalUpdaterWindow : Form
         {
             using var downloader = new UpdateDownloader();
             var progress = new Progress<UpdateProgress>(p =>
-                _state.Text = p.Phase + ": " +
+                _state.Text = T(p.Phase.ToString()) + ": " +
                     p.ReceivedBytes.ToString("N0") + " / " +
-                    (p.TotalBytes ?? 0).ToString("N0") + " bytes");
+                    (p.TotalBytes ?? 0).ToString("N0") + T(" bytes"));
             StagedPackage staged = await downloader.StageAsync(
                 options, selected, progress, _operation!.Token,
                 _sessionToken.Text.Length == 0 ? null : _sessionToken.Text);
@@ -462,35 +472,35 @@ internal sealed class UniversalUpdaterWindow : Form
                     staged.ExtractedExecutablePath))
                 : new WindowsAuthenticodeAudit.Result(false, "NOT_AVAILABLE",
                     "No extracted EXE for native Authenticode verification.");
-            _output.Text = "SHA-256 and archive safety verified; package staged." +
-                Environment.NewLine + "Windows Authenticode: " +
-                (signature.Trusted ? "TRUSTED" : "NOT VERIFIED") +
+            _output.Text = T("SHA-256 and archive safety verified; package staged.") +
+                Environment.NewLine + T("Windows Authenticode: ") +
+                T(signature.Trusted ? "TRUSTED" : "NOT VERIFIED") +
                 " (" + signature.Code + ")" +
                 Environment.NewLine + signature.Explanation +
-                Environment.NewLine + "Archive: " + staged.ArchivePath +
-                Environment.NewLine + "Archive SHA-256: " + staged.ArchiveSha256 +
-                Environment.NewLine + "EXE SHA-256: " + staged.ExtractedExecutableSha256 +
+                Environment.NewLine + T("Archive: ") + staged.ArchivePath +
+                Environment.NewLine + T("Archive SHA-256: ") + staged.ArchiveSha256 +
+                Environment.NewLine + T("EXE SHA-256: ") + staged.ExtractedExecutableSha256 +
                 Environment.NewLine + Environment.NewLine +
-                "Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
+                T("Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
                 "For a user-profile portable EXE, approve the unsigned publisher warning before installation. " +
-                "Administrator-owned and gMSA copies require a separate maintenance window.";
-            _state.Text = signature.Trusted
+                "Administrator-owned and gMSA copies require a separate maintenance window.");
+            _state.Text = T(signature.Trusted
                 ? "Verified package ready for final installation approval."
-                : "Unsigned/untrusted publisher: installation requires explicit operator approval.";
+                : "Unsigned/untrusted publisher: installation requires explicit operator approval.");
             // InstallSelectedAsync now continues to the explicit final approval.
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Download canceled.";
+            _state.Text = T("Download canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater verified staging");
-            _state.Text = "Download/verification failed. No installation occurred.";
-            _output.Text = "Release download or verification failed: " +
+            _state.Text = T("Download/verification failed. No installation occurred.");
+            _output.Text = T("Release download or verification failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "For public releases no token is needed; private assets require a scoped read-only token.";
+                T("For public releases no token is needed; private assets require a scoped read-only token.");
         }
         finally { FinishWorking(); }
     }
@@ -500,24 +510,24 @@ internal sealed class UniversalUpdaterWindow : Form
         if (_operation is not null || _staged is null || _options is null) return;
         string exe = Application.ExecutablePath;
         var answer = MessageBox.Show(this,
-            "Install this verified update and restart LockScreen Campaign Manager?" +
+            T("Install this verified update and restart LockScreen Campaign Manager?") +
             Environment.NewLine + Environment.NewLine +
-            "The current portable EXE will be saved as .bak. The updater waits " +
+            T("The current portable EXE will be saved as .bak. The updater waits " +
             "until the manager exits, checks SHA-256, replaces the EXE, runs the " +
-            "offline self-test and restores the backup on failure." +
+            "offline self-test and restores the backup on failure.") +
             Environment.NewLine + Environment.NewLine +
-            "GitHub release hashes do NOT prove publisher identity. These preview builds " +
-            "are unsigned. Continue only if you trust the official project release." +
+            T("GitHub release hashes do NOT prove publisher identity. These preview builds " +
+            "are unsigned. Continue only if you trust the official project release.") +
             Environment.NewLine + Environment.NewLine +
-            "Existing gMSA tasks and administrator-owned installations are NOT updated. " +
-            "Save your campaign first; any unsaved changes will be confirmed on closing.",
-            "Install verified portable update?", MessageBoxButtons.YesNo,
+            T("Existing gMSA tasks and administrator-owned installations are NOT updated. " +
+            "Save your campaign first; any unsaved changes will be confirmed on closing."),
+            T("Install verified portable update?"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes) return;
         try
         {
             PortableUpdateCoordinator.Launch(_staged, _options);
-            _state.Text = "Update helper launched. Closing manager for replacement...";
+            _state.Text = T("Update helper launched. Closing manager for replacement...");
             BeginInvoke(new Action(() => {
                 Close();
                 Application.Exit();
@@ -526,13 +536,13 @@ internal sealed class UniversalUpdaterWindow : Form
         catch (Exception ex)
         {
             AppLog.Write(ex, "Portable updater launch");
-            _state.Text = "Installation not started: " +
+            _state.Text = T("Installation not started: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 230);
             MessageBox.Show(this,
-                "In-app updates require a writable portable EXE in your user profile. " +
-                "Administrator-owned/gMSA installations must be updated separately." +
+                T("In-app updates require a writable portable EXE in your user profile. " +
+                "Administrator-owned/gMSA installations must be updated separately.") +
                 Environment.NewLine + UniversalDiagnosticsEmbedded.Clean(ex.Message, 220),
-                "Update was not installed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                T("Update was not installed"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -547,10 +557,10 @@ internal sealed class UniversalUpdaterWindow : Form
             string architecture = UpdateOptions.CurrentWindowsArchitecture();
             if (!File.Exists(backup))
             {
-                _output.Text = "No local .bak checkpoint exists beside this executable." +
-                    Environment.NewLine + "Backup status is read-only and never runs a downgrade." +
-                    Environment.NewLine + "The protected gMSA worker EXE has a separate installation path.";
-                _state.Text = "No local rollback checkpoint found.";
+                _output.Text = T("No local .bak checkpoint exists beside this executable.") +
+                    Environment.NewLine + T("Backup status is read-only and never runs a downgrade.") +
+                    Environment.NewLine + T("The protected gMSA worker EXE has a separate installation path.");
+                _state.Text = T("No local rollback checkpoint found.");
                 return;
             }
             string digest = await Task.Run(async () => {
@@ -559,24 +569,24 @@ internal sealed class UniversalUpdaterWindow : Form
                 PeSafety.ValidateArchitecture(backup, architecture);
                 return await UpdateDownloader.HashFileAsync(backup, _operation!.Token);
             });
-            _output.Text = "A local .bak checkpoint exists for the current EXE." +
-                Environment.NewLine + "Architecture: " + architecture +
+            _output.Text = T("A local .bak checkpoint exists for the current EXE.") +
+                Environment.NewLine + T("Architecture: ") + architecture +
                 Environment.NewLine + "SHA-256: " + digest +
-                Environment.NewLine + "Checkpoint: " + backup +
+                Environment.NewLine + T("Checkpoint: ") + backup +
                 Environment.NewLine + Environment.NewLine +
-                "This is NOT proof of a trusted publisher or a valid rollback. " +
+                T("This is NOT proof of a trusted publisher or a valid rollback. " +
                 "Do not replace an EXE used by gMSA while Task Scheduler is running. " +
-                "A separate trusted, offline administrator action and application self-test are required.";
-            _state.Text = "Rollback candidate inspected (no changes made).";
+                "A separate trusted, offline administrator action and application self-test are required.");
+            _state.Text = T("Rollback candidate inspected (no changes made).");
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Rollback inspection canceled.";
+            _state.Text = T("Rollback inspection canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater rollback checkpoint inspection");
-            _state.Text = "Rollback checkpoint is not usable.";
+            _state.Text = T("Rollback checkpoint is not usable.");
             _output.Text = UniversalDiagnosticsEmbedded.Clean(ex.Message, 260);
         }
         finally { FinishWorking(); }
@@ -585,14 +595,14 @@ internal sealed class UniversalUpdaterWindow : Form
     private void SetWorking(string state)
     {
         _operation = new CancellationTokenSource();
-        _state.Text = state;
+        _state.Text = T(state);
         _check.Enabled = false;
         _download.Enabled = false;
         _install.Enabled = false;
         _channel.Enabled = false;
         _sessionToken.Enabled = false;
         _backupStatus.Enabled = false;
-        _close.Text = "Cancel";
+        _close.Text = T("Cancel");
     }
 
     private void FinishWorking()
@@ -606,7 +616,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _channel.Enabled = true;
         _sessionToken.Enabled = true;
         _backupStatus.Enabled = true;
-        _close.Text = "Close";
+        _close.Text = T("Close");
     }
 
     private static void OpenReleases() =>

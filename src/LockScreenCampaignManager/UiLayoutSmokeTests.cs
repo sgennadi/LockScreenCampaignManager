@@ -560,12 +560,13 @@ internal static class UiLayoutSmokeTests
             sourceField.Parent != config ||
             source.Items.Count != 2 ||
             source.SelectedIndex != 0 ||
-            source.Text != "Preview + stable" ||
+            source.SelectedItem?.ToString() != "Preview + stable" ||
             source.DropDownStyle != ComboBoxStyle.DropDownList)
             throw new InvalidOperationException(
                 $"Updater release channel missing at {profile}.");
         var label = sourceField.GetControlFromPosition(0, 0) as Label;
-        if (label is null || label.Text != "Release channel" ||
+        if (label is null ||
+            UiLocale.Translate(label.Text, "English") != "Release channel" ||
             label.AutoEllipsis)
             throw new InvalidOperationException(
                 $"Updater release channel label missing/clipped at {profile}.");
@@ -575,7 +576,7 @@ internal static class UiLayoutSmokeTests
             label.Padding.Vertical + label.Margin.Vertical + 9;
         int editorHeight = source.PreferredHeight + source.Margin.Vertical + 8;
         int optionTextWidth = TextRenderer.MeasureText(
-            "Preview + stable", source.Font).Width + 24;
+            source.GetItemText(source.SelectedItem), source.Font).Width + 24;
         if (sourceField.RowStyles[0].Height < labelHeight ||
             sourceField.RowStyles[1].Height < editorHeight ||
             source.Height < source.PreferredHeight ||
@@ -1122,6 +1123,7 @@ internal static class UiLayoutSmokeTests
         CheckHebrewGpoOperationsAndDiagnostics();
         CheckRussianThreeLanguageScheduleAndAdvanced();
         CheckRussianHebrewAdvanced95();
+        CheckPreview96UpdaterLabLanguageAndDpi();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1670,6 +1672,110 @@ internal static class UiLayoutSmokeTests
                 throw new InvalidOperationException(
                     "Advanced95 reverse switch damaged UI or technical values: " +
                     profile.Name);
+        }
+    }
+
+    private static void CheckPreview96UpdaterLabLanguageAndDpi()
+    {
+        // Offline fixtures: do not show either Form or invoke Check/Install/Import.
+        // The updater never opens GitHub, replaces an EXE or writes an AD/GPO.
+        const string intro = "Check for updates to compare your installed version with GitHub Releases.\n\n" +
+            "1. Check for updates (Stable or Preview).\n" +
+            "2. Install: automatically download and verify, then request approval to restart.\n\n" +
+            "Updating the portable EXE never modifies GPO or gMSA installations.";
+        if (!UiLocale.Translate(intro, "Russian").StartsWith(
+                "Проверьте обновления", StringComparison.Ordinal) ||
+            !UiLocale.Translate(intro, "Hebrew").StartsWith(
+                "בדוק עדכונים", StringComparison.Ordinal) ||
+            UiLocale.Translate(UiLocale.Translate(intro, "Russian"), "English") != intro ||
+            UiLocale.Translate(UiLocale.Translate(intro, "Hebrew"), "English") != intro)
+            throw new InvalidOperationException("Updater operator help is not reversible.");
+
+        const string warning = "GitHub release hashes do NOT prove publisher identity. " +
+            "These preview builds are unsigned. Continue only if you trust the official project release.";
+        if (UiLocale.Translate(warning, "Russian") == warning ||
+            UiLocale.Translate(warning, "Hebrew") == warning ||
+            UiLocale.Translate(UiLocale.Translate(warning, "Hebrew"), "English") != warning)
+            throw new InvalidOperationException(
+                "Unsigned updater warning must remain fully translated and reversible.");
+
+        foreach (var profile in Profiles)
+        {
+            UiPreferences Style(string language) => new() {
+                Language = language, Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            using var updater = new UniversalUpdaterWindow();
+            using var lab = new LocalLabEvidenceDialog();
+            Form[] forms = [updater, lab];
+            var channel = Descendants(updater).OfType<ComboBox>()
+                .Single(x => x.Name == "UpdaterReleaseChannel");
+            int originalIndex = channel.SelectedIndex;
+            string[] items = channel.Items.Cast<object>()
+                .Select(x => x.ToString() ?? "").ToArray();
+            var version = Descendants(updater).OfType<TextBox>()
+                .Single(x => x.Name == "UpdaterInstalledVersion");
+            var repository = Descendants(updater).OfType<TextBox>()
+                .Single(x => x.Name == "UpdaterRepositoryValue");
+            var output = Descendants(updater).OfType<TextBox>()
+                .Single(x => x.Name == "UpdaterResultOutput");
+            string originalVersion = version.Text;
+            string originalRepository = repository.Text;
+            var labStatus = Descendants(lab).OfType<Label>()
+                .Single(x => x.Name == "LocalLabCanaryImportStatus");
+
+            foreach (Form f in forms) UiStyle.Apply(f, Style("Russian"));
+            updater.PerformLayout();
+            CheckUpdaterHeader(updater, profile.Name + "/ru");
+            CheckUpdaterFieldHeights(updater, profile.Name + "/ru");
+            if (updater.RightToLeftLayout || lab.RightToLeftLayout ||
+                updater.Text != "Обновления — LockScreen Campaign Manager" ||
+                lab.Text != "LockScreen Campaign Manager — локальные испытания" ||
+                labStatus.Text != "Отчёт не импортирован" ||
+                !channel.FormattingEnabled ||
+                !Descendants(updater).OfType<Label>().Any(x =>
+                    x.Name == "UpdaterHeaderSubtitle" &&
+                    x.Text.StartsWith("1  Проверить обновления", StringComparison.Ordinal)) ||
+                !Descendants(lab).OfType<Button>().Any(x =>
+                    x.Name == "LocalLabCanaryImport" && x.Text.Contains("Импортировать", StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    "Preview.96 Russian Updater/Lab captions missing: " + profile.Name);
+
+            foreach (Form f in forms) UiStyle.Apply(f, Style("Hebrew"));
+            updater.PerformLayout();
+            CheckUpdaterHeader(updater, profile.Name + "/he");
+            CheckUpdaterFieldHeights(updater, profile.Name + "/he");
+            if (!updater.RightToLeftLayout || !lab.RightToLeftLayout ||
+                updater.Text != "עדכונים — LockScreen Campaign Manager" ||
+                lab.Text != "LockScreen Campaign Manager — ממצאי בדיקות מקומיות" ||
+                labStatus.Text != "לא יובא דוח" ||
+                !Descendants(updater).OfType<Label>().Any(x =>
+                    x.Name == "UpdaterHeaderSubtitle" &&
+                    x.Text.StartsWith("1  בדוק עדכונים", StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    "Preview.96 Hebrew Updater/Lab captions missing: " + profile.Name);
+
+            foreach (Form f in forms) UiStyle.Apply(f, Style("English"));
+            if (updater.RightToLeftLayout || lab.RightToLeftLayout ||
+                updater.Text != "Updates — LockScreen Campaign Manager" ||
+                lab.Text != "LockScreen Campaign Manager - Local lab evidence" ||
+                labStatus.Text != "No report imported" ||
+                !Descendants(updater).OfType<Label>().Any(x =>
+                    x.Name == "UpdaterHeaderSubtitle" &&
+                    x.Text == "1  Check for updates     2  Install update"))
+                throw new InvalidOperationException(
+                    "Preview.96 English restoration failed: " + profile.Name);
+            if (channel.SelectedIndex != originalIndex ||
+                !channel.Items.Cast<object>().Select(x => x.ToString() ?? "")
+                    .SequenceEqual(items) ||
+                !string.Equals(version.Text, originalVersion, StringComparison.Ordinal) ||
+                !string.Equals(repository.Text, originalRepository, StringComparison.Ordinal) ||
+                output.RightToLeft != RightToLeft.No ||
+                version.RightToLeft != RightToLeft.No ||
+                repository.RightToLeft != RightToLeft.No)
+                throw new InvalidOperationException(
+                    "Preview.96 translation mutated release selection, architecture or raw evidence.");
         }
     }
 

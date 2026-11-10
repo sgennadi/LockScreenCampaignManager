@@ -216,6 +216,8 @@ internal static partial class UiLocale
             ScheduleAdvancedEnglish.TryGetValue(key, out english) ||
             Advanced95EnglishByHebrew.TryGetValue(key, out english) ||
             Advanced95EnglishByRussian.TryGetValue(key, out english) ||
+            Preview96EnglishByHebrew.TryGetValue(key, out english) ||
+            Preview96EnglishByRussian.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -223,6 +225,7 @@ internal static partial class UiLocale
         {
             if (Russian.TryGetValue(key, out string? ru)) return ru;
             if (Advanced95Russian.TryGetValue(key, out ru)) return ru;
+            if (Preview96Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -232,6 +235,7 @@ internal static partial class UiLocale
             if (OpsDiagnosticsHebrew.TryGetValue(key, out he)) return he;
             if (ScheduleAdvancedHebrew.TryGetValue(key, out he)) return he;
             if (Advanced95Hebrew.TryGetValue(key, out he)) return he;
+            if (Preview96Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -273,7 +277,9 @@ internal static partial class UiLocale
             "Company Profiles — LockScreen Campaign Manager",
             "New company profile", "Edit company profile",
             "Client Health — Alert settings",
-            "gMSA 24/7 — Setup", "gMSA Production Readiness — read-only" })
+            "gMSA 24/7 — Setup", "gMSA Production Readiness — read-only",
+            "Updates — LockScreen Campaign Manager",
+            "LockScreen Campaign Manager - Local lab evidence" })
         {
             if (new[] { "English", "Hebrew", "Russian" }
                 .Any(source => form.Text == Translate(englishTitle, source)))
@@ -374,7 +380,8 @@ internal static partial class UiLocale
                  "CampaignScheduleMode" or
                  "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
-                 "CampaignClosureFilter" or "DeviceRepairFilter"))
+                 "CampaignClosureFilter" or "DeviceRepairFilter" or
+                 "UpdaterReleaseChannel"))
                 ApplyComboLocalization(combo, language);
         }
     }
