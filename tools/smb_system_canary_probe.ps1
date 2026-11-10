@@ -94,7 +94,7 @@ try {
         $root.Contains('"') -or $root.Contains('$')) {
         throw 'INVALID_CANARY_CONFIG'
     }
-    $parts=$root.Substring(2).Split('\\')
+    $parts=$root.Substring(2).Split('\')
     if ($parts.Count -lt 2 -or $parts.Count -gt 8 -or
         @($parts | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' -or
             $_.EndsWith(' ') -or $_.EndsWith('.') -or $_ -match '[;\[\]]' }).Count -ne 0 -or
@@ -124,8 +124,10 @@ try {
     if ($observedManifest -ine $expectedManifest) { throw 'MANIFEST_HASH_MISMATCH' }
     $checks.manifestSha256Verified=$true
     $manifest=Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    $actualMethod=if($null -eq $manifest.clientType -or
-        [string]$manifest.clientType -eq ''){'PowerShell'}else{[string]$manifest.clientType}
+    $actualMethod=if($manifest.PSObject.Properties.Name -notcontains 'clientType' -or
+        [string]$manifest.PSObject.Properties['clientType'].Value -eq ''){
+        'PowerShell'
+    }else{[string]$manifest.clientType}
     $slides=@($manifest.slides)
     if ([int]$manifest.schemaVersion -ne 1 -or
         [string]$manifest.campaignId -cne $id -or
