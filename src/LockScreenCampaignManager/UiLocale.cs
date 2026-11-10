@@ -317,6 +317,14 @@ internal static partial class UiLocale
             if (child is TextBox placeholder &&
                 !string.IsNullOrEmpty(placeholder.PlaceholderText))
                 placeholder.PlaceholderText = Translate(placeholder.PlaceholderText, language);
+            // This is a fixed instructional paragraph, not a saved report or
+            // user-entered UNC string. Unlike raw diagnostics, it may use RTL.
+            if (child is TextBox instructions &&
+                instructions.Name == "FeedbackSmbInstructions")
+            {
+                instructions.Text = Translate(instructions.Text, language);
+                instructions.RightToLeft = hebrew ? RightToLeft.Yes : RightToLeft.No;
+            }
             if (child is DataGridView or ListBox or ListView)
                 child.RightToLeft = RightToLeft.No;
             if (child is ListView view)
