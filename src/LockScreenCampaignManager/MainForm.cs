@@ -524,6 +524,7 @@ public sealed partial class MainForm : Form
         AddActionMenu(actions, "Tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Settings...", OpenUiSettings, null),
             ("Diagnostics...", OpenDiagnostics, null),
+            ("Review local lab evidence...", OpenLocalLabEvidence, null),
             ("Check updates...", OpenUniversalUpdater, null)
         });
         _status.Text = "Ready — add images or open a project";
@@ -1518,6 +1519,12 @@ public sealed partial class MainForm : Form
     {
         using var form = new UniversalUpdaterWindow();
         form.ShowDialog(this);
+    }
+
+    private void OpenLocalLabEvidence()
+    {
+        using var dialog = new LocalLabEvidenceDialog();
+        dialog.ShowDialog(this);
     }
 
     private void OpenDiagnostics()

@@ -47,6 +47,8 @@ internal static class SelfTests
         TestNativeGpoDeploymentPlanContracts();
         TestSmbCampaignContentSource();
         TestSmbPreflightEvidence();
+        TestLocalLabEvidenceImport();
+        TestHebrewUiPreferences();
         TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
@@ -311,6 +313,96 @@ internal static class SelfTests
             catch (InvalidDataException) { rejected = true; }
             Check(rejected, "SMB Preview must fail closed for inconsistent source/evidence.");
         }
+    }
+
+    private static void TestLocalLabEvidenceImport()
+    {
+        var now = DateTimeOffset.UtcNow;
+        System.Text.Json.JsonElement Canary(bool system = true,
+            bool image = true, string result = "POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY",
+            string[]? findings = null, DateTimeOffset? observed = null) =>
+            System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                schema = "lscm-smb-system-canary/v1",
+                utc = (observed ?? now).ToString("o"), osBuild = 26100,
+                localSystem = system, windowsClient = true,
+                approvedComputer = true, approvedDomain = true,
+                smbSourceReadable = true, manifestSha256Verified = true,
+                agentSha256Verified = true, allImagesVerified = image,
+                imageCount = 5, localCachePresent = true,
+                localCacheHashVerified = true, computerGpresultAvailable = true,
+                actualGpoAppliedVerified = true,
+                gpoRsopStatus = "AppliedComputerGpo",
+                rebootAfterDeployment = true,
+                realLockScreenDisplayVerified = false,
+                registryRestorationVerified = false,
+                result, findings = findings ?? Array.Empty<string>()
+            });
+        var good = LocalLabEvidence.Parse(Canary(), now);
+        Check(good.Kind == "SMB LocalSystem canary" && !good.Stale &&
+            !good.IsAttestation && good.Checks.Count >= 9,
+            "SMB canary import is local/untrusted and retains independent evidence flags.");
+        Check(LocalLabEvidence.Parse(Canary(observed: now.AddHours(-25)), now).Stale,
+            "Lab evidence older than 24 h is visibly stale.");
+        System.Text.Json.JsonElement Cleanup(bool receipt = true,
+            string result = "POSTCLEANUP_LOCAL_STATE_MATCHES_BASELINE") =>
+            System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                schema = "lscm-endpoint-closure/v1",
+                observedUtc = now.ToString("o"), osBuild = 26100,
+                localSystem = true, authorizedTestComputer = true,
+                baselineBeforeDeployment = true,
+                registryValuesMatchBaseline = true,
+                registryKeyPresenceMatchesBaseline = true,
+                campaignFolderAbsent = true, mainTaskAbsent = true,
+                feedbackTaskAbsent = true, ownerRecordAbsent = true,
+                cleanupReceiptVerified = receipt,
+                computerGpresultAvailable = true, expectedGpoNotApplied = true,
+                gpoRsopStatus = "NotApplied",
+                lockScreenDisplayVisuallyVerified = false,
+                result, findings = Array.Empty<string>()
+            });
+        var cleaned = LocalLabEvidence.Parse(Cleanup(), now);
+        Check(cleaned.Kind == "Endpoint cleanup audit" && !cleaned.IsAttestation,
+            "Local cleanup result must not be treated as authenticated computer proof.");
+        foreach (var invalid in new[]
+        {
+            Canary(system: false),
+            Canary(image: false),
+            Canary(findings: ["\\\\files.example.com\\Campaigns"]),
+            Canary(result: "FULLY_VERIFIED_ONLINE"),
+            Canary(observed: now.AddDays(1)),
+            Cleanup(receipt: false)
+        })
+        {
+            bool rejected = false;
+            try { _ = LocalLabEvidence.Parse(invalid, now); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected,
+                "Local evidence JSON with a success/evidence contradiction or private finding fails closed.");
+        }
+    }
+
+    private static void TestHebrewUiPreferences()
+    {
+        var hebrew = new UiPreferences {
+            Language = "Hebrew", Density = "Comfortable",
+            UiScalePercent = 200, FontScalePercent = 125
+        }.Validate();
+        Check(hebrew.Language == "Hebrew" && hebrew.UiScalePercent == 200,
+            "Hebrew UI language and DPI preferences can coexist.");
+        var saved = System.Text.Json.JsonSerializer.Deserialize<UiPreferences>(
+            System.Text.Json.JsonSerializer.Serialize(hebrew));
+        Check(saved?.Validate().Language == "Hebrew",
+            "Hebrew language is persisted and loaded in per-user settings.");
+        Check(new UiPreferences { Language = "Unknown" }.Validate().Language == "English",
+            "Unsupported language settings must fail safely back to English.");
+        Check(UiLocale.Translate("Wizard", "Hebrew") == "אשף" &&
+              UiLocale.Translate("אשף", "English") == "Wizard" &&
+              UiLocale.Translate(@"\\server\share", "Hebrew") == @"\\server\share" &&
+              UiLocale.Translate("12345678-1234-1234-1234-123456789012", "Hebrew") ==
+                  "12345678-1234-1234-1234-123456789012",
+            "Hebrew UI translations are reversible and never alter UNC or GUID data.");
     }
 
     private static void TestPhotoJpegSaverLocal()

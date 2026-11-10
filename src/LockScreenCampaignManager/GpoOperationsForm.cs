@@ -199,6 +199,7 @@ internal sealed partial class GpoOperationsForm : Form
             () => tabs.SelectedTab = clientHealthTab);
         tabs.TabPages.Add(_deviceDashboard.AsTabPage());
         tabs.TabPages.Add(clientHealthTab);
+        tabs.TabPages.Add(new LocalLabEvidencePanel().AsTabPage());
         tabs.TabPages.Add(BuildDeferredTab());
         tabs.TabPages.Add(BuildGmsaTab());
         _status.Text = "Read-only until explicit Preview + Apply. No automatic AD changes.";
