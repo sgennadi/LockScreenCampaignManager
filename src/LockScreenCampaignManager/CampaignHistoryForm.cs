@@ -30,6 +30,7 @@ internal sealed class CampaignHistoryForm : Form
         Controls.Add(root);
         root.Controls.Add(new Label { Text = "Campaign history and report archive", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 16f), ForeColor = UiStyle.Foreground }, 0, 0);
+        _table.Name = "CampaignHistoryGrid";
         _table.Dock = DockStyle.Fill;
         _table.ReadOnly = true;
         _table.AllowUserToAddRows = false;
@@ -76,7 +77,9 @@ internal sealed class CampaignHistoryForm : Form
 
     private static Button Button(string title, Action action, int width)
     {
-        var button = new Button { Text = title, Width = width, Height = 38,
+        var button = new Button { Text = UiLocale.Display(title), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(0, 4, 9, 6), BackColor = UiStyle.Surface,
             FlatStyle = FlatStyle.Flat };
         button.Click += (_, _) => action();
