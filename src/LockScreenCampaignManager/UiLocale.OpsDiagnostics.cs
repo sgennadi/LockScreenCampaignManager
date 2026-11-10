@@ -179,6 +179,8 @@ internal static partial class UiLocale
             ["Open Client Health"] = "פתח מצב לקוחות",
             ["Run on selected"] = "הפעל על נבחרים",
             ["No reports are sent automatically."] = "דוחות אינם נשלחים אוטומטית.",
+            ["This report may contain private domain, OU, group and GPO values. Export only to a protected LOCAL folder. Never post raw CSV to a public issue.\r\n\r\nContinue?"] = "דוח זה עשוי להכיל פרטי דומיין, OU, קבוצות ו-GPO פרטיים. ייצא רק לתיקייה מקומית מוגנת. אין לפרסם CSV גולמי בבעיה ציבורית.\r\n\r\nלהמשיך?",
+            ["An AD or remote PC operation is still running. Check its result before closing."] = "פעולה ב-AD או במחשב מרוחק עדיין מתבצעת. בדוק את התוצאה לפני סגירה.",
         };
 
     private static readonly Dictionary<string, string> OpsDiagnosticsEnglish =
