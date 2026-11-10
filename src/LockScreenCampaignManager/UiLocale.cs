@@ -197,6 +197,23 @@ internal static partial class UiLocale
         bool hebrew = IsHebrew(language);
         form.RightToLeft = hebrew ? RightToLeft.Yes : RightToLeft.No;
         form.RightToLeftLayout = hebrew;
+        // The version/company portion of a window title is technical data.
+        // Only the fixed caption segment after the app version is localized.
+        foreach (string englishCaption in new[] {
+            "AD Connection Wizard", "Select AD account",
+            "Active Directory Deployment", "Campaign Wizard" })
+        {
+            string hebrewCaption = Translate(englishCaption, "Hebrew");
+            string original = " - " + (hebrew ? englishCaption : hebrewCaption);
+            int position = form.Text.IndexOf(original, StringComparison.Ordinal);
+            if (position >= 0)
+                form.Text = form.Text[..position] + " - " +
+                    (hebrew ? hebrewCaption : englishCaption) +
+                    form.Text[(position + original.Length)..];
+        }
+        if (form.Text == "Client feedback — SMB" ||
+            form.Text == Translate("Client feedback — SMB", "Hebrew"))
+            form.Text = Translate(form.Text, language);
         foreach (Control child in All(form))
         {
             if (child is Button or Label or CheckBox or RadioButton or
