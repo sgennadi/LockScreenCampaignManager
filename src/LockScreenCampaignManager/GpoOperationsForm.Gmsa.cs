@@ -318,9 +318,10 @@ internal sealed partial class GpoOperationsForm
             .Select(x => x.Tag as string).FirstOrDefault();
         var config = CurrentGmsaConfig();
         if (config is null || string.IsNullOrWhiteSpace(id)) return;
-        if (MessageBox.Show(this, "Cancel this gMSA request?\n" +
-                "This will NOT cancel a task already running on a remote PC.",
-                "gMSA Repair", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+        if (MessageBox.Show(this, UiLocale.Display("Cancel this gMSA request?\n" +
+                "This will NOT cancel a task already running on a remote PC."),
+                UiLocale.Display("gMSA Repair"), MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
         try
         {
