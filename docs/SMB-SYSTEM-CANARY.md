@@ -63,7 +63,9 @@ check could not be completed. It is **not** safe to deploy. Inspect the
 **new** immutable campaign if the source changed. Never overwrite a deployed
 campaign ID.
 
-The tool also reports whether the test computer rebooted after the recorded deployment time and whether the **exact expected Computer GPO GUID** appears applied in the endpoint's `gpresult /scope computer /x` RSoP, with permissive filtering flags. This does **not** prove that the Startup script ran at boot or that any particular setting won. A new `POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY` status requires the post-deploy boot, matching RSoP, source hashes and verified local cache. The simpler source-only result remains available during early testing.\n\nThe tool does **not** prove the share was reachable *during computer boot*,
+The tool also reports whether the test computer rebooted after the recorded deployment time and whether the **exact expected Computer GPO GUID** appears applied in the endpoint's `gpresult /scope computer /x` RSoP, with enabled/valid/allowed filtering flags. This does **not** prove that the Startup script ran at boot or that any particular setting won. A new `POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY` status requires the post-deploy boot, matching RSoP, source hashes and verified local cache. The simpler source-only result remains available during early testing.
+
+The tool does **not** prove the share was reachable *during computer boot*,
 that the lock screen policy was the winning registry setting, or that Windows displayed the lock screen,
 that scheduled image rotation worked, or that original registry values were
 restored. Those remain separate hands-on acceptance checks:
