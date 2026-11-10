@@ -235,10 +235,10 @@ internal sealed class CampaignClosureAuditDialog : Form
         int unknown = _remote.Values.Count(x => x.Status == "Unknown");
         int pending = _remote.Values.Count(x => x.Status == "Pending");
         _footer.Text = UiLocale.Display("Showing ") + _visible.Count + "/" + _audit.Total +
-            "; " + UiLocale.Display("last observed clean: ") + verified +
-            ", " + UiLocale.Display("pending: ") + pending +
-            ", " + UiLocale.Display("unknown: ") + unknown +
-            ", " + UiLocale.Display("not checked: ") + (_audit.Total - _remote.Count) +
+            ";" + UiLocale.Display(" last observed clean: ") + verified +
+            "," + UiLocale.Display(" pending: ") + pending +
+            "," + UiLocale.Display(" unknown: ") + unknown +
+            "," + UiLocale.Display(" not checked: ") + (_audit.Total - _remote.Count) +
             ". " + UiLocale.Display("Results are historical observations; no automatic rechecks or remote changes.");
     }
 
