@@ -754,6 +754,7 @@ class ClientManagementContracts(unittest.TestCase):
         allowed_russian_ui = {
             'UiLocale.cs', 'UiLocale.Wizard.cs', 'UiLocale.Russian.cs',
             'UiSettingsDialog.cs', 'UiLayoutSmokeTests.cs',
+            'UiLocale.Advanced95.cs',
             'ImageFilenameMatcher.cs', 'SelfTests.cs'
         }
         for source in APP.glob('*.cs'):
