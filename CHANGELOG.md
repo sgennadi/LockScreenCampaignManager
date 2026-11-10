@@ -1,3 +1,12 @@
+## 0.4.0-preview.95 — Trilingual Advanced UI and Device/Repair dashboard (2026-11-10)
+
+- Expand English/Русский/עברית presentation to native gMSA 24/7 setup, read-only readiness, SMB feedback settings, Client Health alerts and Device & Repair Dashboard. Add over 100 translated operator captions and notices per language, without changing protocol or policy data.
+- Translate gMSA installation, disable, task removal and Repair queue cancellation warnings. All original permissions and confirmation gates remain, with **No** as default. Do not change stored machine queue, worker or GPO operation IDs.
+- Translate readiness UI table headers and operator counts while keeping the original check results, raw evidence, file paths, GUIDs and privacy-safe exported JSON unchanged.
+- Translate verified AD fleet totals, dashboard errors and manual Repair warnings while preserving selected device filters and the existing Preview + complete GPO GUID approval before RPC.
+- Translate feedback folder/ACL warnings and Client Health alert descriptions while retaining exact UNC strings, actual filesystem ACL logic, serialized health reports and alert settings.
+- Add six-profile 100–200% simulated WinForms tests (Russian LTR → Hebrew RTL → English LTR), immutable values and improved translated action-button sizing. Real Windows 10/11 interactive DPI acceptance still open (#36). SMB startup and JPG User GPO pilot gates remain open (#30/#25/#26).
+
 ## 0.4.0-preview.94 — Russian LTR, expanded Hebrew scheduler and Advanced UI (2026-11-10)
 
 - Add **Русский (Russian)** as a third persisted Interface Settings language alongside English and עברית. Russian uses normal LTR; Hebrew keeps RTL. Switching among all three languages and returning to English preserves selected campaign/GPO modes and technical identities.
