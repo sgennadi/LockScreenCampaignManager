@@ -80,6 +80,7 @@ internal sealed class EffectiveGpoConflictDialog : Form
         bar.Controls.Add(new Label { Text = "Assessment:",
             AutoSize = true, Margin = new Padding(1, 13, 8, 0) });
         _filter.Width = 265;
+        _filter.Name = "EffectiveGpoFilter";
         _filter.DropDownStyle = ComboBoxStyle.DropDownList;
         _filter.Items.AddRange([
             "All", "Potentially applicable", "Needs RSoP / verification",
@@ -92,6 +93,7 @@ internal sealed class EffectiveGpoConflictDialog : Form
         _search.Width = 280;
         _search.Margin = new Padding(16, 7, 7, 0);
         _search.PlaceholderText = "Search GPO or policy setting...";
+        _search.RightToLeft = RightToLeft.No;
         _search.TextChanged += (_, _) => Draw();
         bar.Controls.Add(_search);
         bar.Controls.Add(MakeButton("Import gpresult XML", 195, ImportRsopXml));
@@ -100,6 +102,7 @@ internal sealed class EffectiveGpoConflictDialog : Form
         bar.Controls.Add(_clearRsop);
         root.Controls.Add(bar, 0, 2);
 
+        _grid.Name = "EffectiveGpoGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -166,7 +169,9 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         var result = new Button
         {
-            Text = title, Width = width, Height = 38, FlatStyle = FlatStyle.Flat,
+            Text = UiLocale.Display(title), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly, FlatStyle = FlatStyle.Flat,
             BackColor = UiStyle.Surface, Margin = new Padding(0, 4, 11, 4)
         };
         result.Click += (_, _) => action();
