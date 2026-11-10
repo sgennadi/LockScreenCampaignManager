@@ -1,4 +1,4 @@
-# English / Hebrew / Russian interface — iterative localization (Preview.95)
+# English / Hebrew / Russian interface — iterative localization (Preview.96)
 
 Use **Settings → Language → English / עברית (Hebrew) / Русский → Apply**. Language is stored in the existing per-user `ui-settings.json` beside density, UI scale and font size. No AD privileges, additional installation or language packs are required.
 
@@ -13,6 +13,8 @@ Use **Settings → Language → English / עברית (Hebrew) / Русский �
 **Expanded in Preview.94:** Russian now joins English and Hebrew in the per-user language selector. The main editor, campaign wizard, AD/GPO, Client Health, diagnostics, schedule and major advanced windows gain Russian display strings; Hebrew is expanded through the dedicated schedule editor, company profiles, assignment matrix and history/advanced views. An original English per-control caption is retained for reliable Russian ↔ Hebrew ↔ English switching, including dynamically changed schedule table headers. Never translate actual enum/ComboBox item values or JSON/report data.
 
 **Expanded in Preview.95:** Native gMSA 24/7 setup/readiness, SMB Client Health/alert settings and Device & Repair Dashboard now have reversible Russian and Hebrew captions, consent warnings, local status text and table headers. Protected queues, RPC/GPO commands, verified scopes, diagnostic payloads and exported readiness JSON remain unchanged. CI exercises six simulated 100–200% font/scale profiles with all three languages; real Windows 10/11 interactive RTL and visual QA are still required.
+
+**Expanded in Preview.96:** The Updater and local Windows Lab Evidence viewer now include Russian and Hebrew status, verification, rollback and safety/consent messages. UI-only release-channel text can be translated without changing original ComboBox items. SHA-256, version, URLs, package files, passwords, local JSON/technical results and raw GitHub Release notes are not translated. Six simulated scaling profiles check three-language switching; real 200% Windows visual acceptance remains open.
 
 **Partial translation by design:** some advanced AD/GPO dialogs, validation details, raw diagnostic evidence, settings/status subdialogs, some Client Health text and additional dynamic status messages remain English. English and Hebrew are not yet 100% complete, nor is Russian. JPG photo saver deployment still requires real Windows/AD pilot acceptance. A missing translation is displayed in English rather than being silently changed. Restart/reopen a dialog after changing language if a status was generated before the switch.
 
