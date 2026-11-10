@@ -76,7 +76,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             '"JPG photo slideshow', '"Require Windows sign-in on resume"'
         ):
             self.assertIn(label, dictionary)
-        keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', dictionary, re.M)
+        keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', dictionary, re.M)
         self.assertEqual(len(keys), len(set(keys)))
         self.assertGreaterEqual(len(keys), 100)
         self.assertIn("TranslateWizardDynamic", dictionary)
