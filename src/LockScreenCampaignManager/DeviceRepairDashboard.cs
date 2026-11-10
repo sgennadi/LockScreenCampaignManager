@@ -97,12 +97,14 @@ internal sealed class DeviceRepairDashboard : UserControl
         _snapshot = null;
         _detailRequest++;
         _grid.Rows.Clear();
-        _details.Text = "Load verified computers before reviewing per-device reports.";
+        _details.Text = UiLocale.Display("Load verified computers before reviewing per-device reports.");
         _headline.Text = string.IsNullOrWhiteSpace(campaignId)
-            ? "Choose a managed GPO in the GPO tab."
-            : "Selected campaign: " + campaignId + " | Read-only until AD scope is verified.";
-        _summary.Text = "No current device data. Health reports are not proof of on-screen display.";
-        _status.Text = "Click Load verified AD devices, then Refresh reports.";
+            ? UiLocale.Display("Choose a managed GPO in the GPO tab.")
+            : UiLocale.Display("Selected campaign: ") + campaignId +
+                UiLocale.Display(" | Read-only until AD scope is verified.");
+        _summary.Text = UiLocale.Display(
+            "No current device data. Health reports are not proof of on-screen display.");
+        _status.Text = UiLocale.Display("Click Load verified AD devices, then Refresh reports.");
         SetButtons();
     }
 
@@ -133,7 +135,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         _headline.Dock = DockStyle.Fill;
         _headline.ForeColor = UiStyle.Muted;
         _headline.AutoEllipsis = true;
-        _headline.Text = "Choose a managed GPO and load the authorized AD devices.";
+        _headline.Text = UiLocale.Display(
+            "Choose a managed GPO and load the authorized AD devices.");
         title.Controls.Add(_headline, 0, 1);
         layout.Controls.Add(title, 0, 0);
 
@@ -154,6 +157,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         commands.Controls.Add(new Label {
             Text = "Filter:", AutoSize = true, Margin = new Padding(8, 15, 7, 0)
         });
+        _filter.Name = "DeviceRepairFilter";
         _filter.DropDownStyle = ComboBoxStyle.DropDownList;
         _filter.Width = 150;
         _filter.Items.AddRange(new object[] {
@@ -163,6 +167,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => DrawRows();
         commands.Controls.Add(_filter);
+        _search.RightToLeft = RightToLeft.No;
         _search.PlaceholderText = "Search computer...";
         _search.Width = 175;
         _search.Margin = new Padding(4, 7, 8, 0);
@@ -180,9 +185,11 @@ internal sealed class DeviceRepairDashboard : UserControl
         _summary.AutoEllipsis = false;
         _summary.Padding = new Padding(5, 8, 5, 10);
         _summary.ForeColor = UiStyle.Foreground;
-        _summary.Text = "Load verified AD devices. This view never sends RPC automatically.";
+        _summary.Text = UiLocale.Display(
+            "Load verified AD devices. This view never sends RPC automatically.");
         layout.Controls.Add(_summary, 0, 2);
 
+        _grid.Name = "DeviceRepairGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -226,21 +233,24 @@ internal sealed class DeviceRepairDashboard : UserControl
         };
         layout.Controls.Add(_grid, 0, 3);
 
+        _details.RightToLeft = RightToLeft.No; // raw per-device diagnostic evidence
         _details.Dock = DockStyle.Fill;
         _details.Multiline = true;
         _details.ReadOnly = true;
         _details.WordWrap = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.BackColor = UiStyle.Surface;
-        _details.Text = "Select a verified computer to view fresh agent evidence, " +
-            "pending Repair status and locally archived Client Health snapshots.";
+        _details.Text = UiLocale.Display(
+            "Select a verified computer to view fresh agent evidence, " +
+            "pending Repair status and locally archived Client Health snapshots.");
         layout.Controls.Add(_details, 0, 4);
 
         _status.Dock = DockStyle.Fill;
         _status.AutoEllipsis = false;
         _status.Padding = new Padding(5, 9, 5, 12);
         _status.ForeColor = UiStyle.Muted;
-        _status.Text = "No automatic Repair. A manual Repair always uses Preview and full GPO GUID confirmation.";
+        _status.Text = UiLocale.Display(
+            "No automatic Repair. A manual Repair always uses Preview and full GPO GUID confirmation.");
         layout.Controls.Add(_status, 0, 5);
         SetButtons();
     }
@@ -248,7 +258,9 @@ internal sealed class DeviceRepairDashboard : UserControl
     private static Button Button(string text, int width, Action action)
     {
         var button = new Button {
-            Text = text, Width = width, Height = 38,
+            Text = UiLocale.Display(text), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(0, 4, 8, 5),
             BackColor = UiStyle.Surface, ForeColor = UiStyle.Foreground,
             FlatStyle = FlatStyle.Flat
