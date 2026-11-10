@@ -763,6 +763,13 @@ StartExecutePSFirst=true
             Check(proof.Id == "selftest-one" && proof.Count == 1 &&
                 proof.Bytes == new FileInfo(slide).Length,
                 "Native GPO preflight verifies local agent, manifest and JPEG SHA-256");
+            var pinned = NativeGpoDeploymentPlan.VerifyImmutablePackageForTest(folder);
+            string manifestHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(Path.Combine(folder, "campaign.json"))));
+            Check(pinned.Id == "selftest-one" &&
+                pinned.ManifestSha256.Equals(manifestHash, StringComparison.OrdinalIgnoreCase) &&
+                pinned.AgentSha256.Equals(agentHash, StringComparison.OrdinalIgnoreCase),
+                "SMB canary receipts pin the exact manifest and agent binary bytes.");
             File.AppendAllText(slide, "tampered");
             bool corruptDenied = false;
             try { _ = NativeGpoDeploymentPlan.VerifyLocalPackageForTest(folder); }
