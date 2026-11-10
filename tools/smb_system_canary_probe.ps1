@@ -26,6 +26,8 @@ $checks=[ordered]@{
     localCacheHashVerified=$false
     computerGpresultAvailable=$false
     actualGpoAppliedVerified=$false
+    gpoRsopStatus='NotCollected'
+    rebootAfterDeployment=$false
     realLockScreenDisplayVerified=$false
     registryRestorationVerified=$false
     result='INCOMPLETE'
@@ -82,12 +84,20 @@ try {
     $expectedComputer=[string]$conf.expectedComputer
     $expectedDomain=[string]$conf.expectedDomain
     $method=[string]$conf.clientType
+    $expectedGpoId=[string]$conf.expectedGpoId
+    $deployedUtc=[string]$conf.deployedUtc
+    [Guid]$gpoGuid=[Guid]::Empty
+    [DateTimeOffset]$deployTime=[DateTimeOffset]::MinValue
     if ($id -cnotmatch '^[a-z0-9-]{5,75}$' -or
         $expectedManifest -notmatch '^[A-Fa-f0-9]{64}$' -or
         $expectedAgent -notmatch '^[A-Fa-f0-9]{64}$' -or
         $expectedComputer -cnotmatch '^[A-Za-z0-9-]{3,15}$' -or
         $expectedDomain -cnotmatch '^[a-zA-Z0-9][a-zA-Z0-9.-]{2,252}$' -or
         $method -cnotin @('PowerShell','Executable') -or
+        -not [Guid]::TryParseExact($expectedGpoId,'D',[ref]$gpoGuid) -or
+        -not [DateTimeOffset]::TryParseExact($deployedUtc,'o',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,[ref]$deployTime) -or
         $root -notmatch '^\\\\[a-zA-Z0-9][a-zA-Z0-9.-]+\\[a-zA-Z0-9_][a-zA-Z0-9_. -]*' -or
         $root.Length -gt 200 -or $root.Contains('..') -or
         $root.Contains('/') -or $root.Contains(':') -or
@@ -112,6 +122,11 @@ try {
     if (-not $checks.windowsClient -or -not $checks.approvedDomain) {
         throw 'UNAPPROVED_ENDPOINT_OR_DOMAIN'
     }
+    $lastBoot=[Management.ManagementDateTimeConverter]::ToDateTime(
+        [string]$os.LastBootUpTime).ToUniversalTime()
+    $checks.rebootAfterDeployment=($lastBoot -gt $deployTime.UtcDateTime -and
+        $lastBoot -le [datetime]::UtcNow)
+    if (-not $checks.rebootAfterDeployment) { Finding 'REBOOT_AFTER_DEPLOYMENT_NOT_OBSERVED' }
 
     $folder=Join-Path $root $id
     $agentName=if($method -eq 'Executable'){'LockScreen-Agent.exe'}else{'LockScreen-Agent.ps1'}
@@ -163,14 +178,52 @@ try {
     } else {
         Finding 'LOCAL_CACHE_NOT_INSTALLED_YET'
     }
-    # GPRESULT is inspected only for command success. Actual winning policy
-    # applicability and displayed lock screen still require a human lab review.
+    # GPRESULT /x is local RSoP observation, NOT proof a winning registry
+    # setting was set or that startup ran at boot. Raw XML contains identities:
+    # keep it only in the protected canary folder, then delete it in finally.
+    $rsopTemp=Join-Path (Split-Path -Parent $ReportPath) (
+        'rsop-'+[Guid]::NewGuid().ToString('N')+'.xml')
     try {
-        $null= & "$env:SystemRoot\System32\gpresult.exe" /scope computer /r 2>&1
-        $checks.computerGpresultAvailable=($LASTEXITCODE -eq 0)
-    } catch {}
+        $parser=Join-Path $PSScriptRoot 'smb_canary_rsop.ps1'
+        if (-not (Test-Path -LiteralPath $parser -PathType Leaf)) {
+            throw 'MISSING_RSOP_PARSER'
+        }
+        . $parser
+        $null= & "$env:SystemRoot\System32\gpresult.exe" /scope computer /x $rsopTemp /f 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $rsopTemp -PathType Leaf)) {
+            throw 'RSOP_EXPORT_FAILED'
+        }
+        $rsopFile=Get-Item -LiteralPath $rsopTemp -Force
+        if ($rsopFile.Length -lt 100 -or $rsopFile.Length -gt 16MB -or
+            ($rsopFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'RSOP_EXPORT_INVALID'
+        }
+        $settings=New-Object System.Xml.XmlReaderSettings
+        $settings.DtdProcessing=[System.Xml.DtdProcessing]::Prohibit
+        $settings.XmlResolver=$null
+        $reader=[System.Xml.XmlReader]::Create($rsopTemp,$settings)
+        try {
+            $doc=New-Object System.Xml.XmlDocument
+            $doc.XmlResolver=$null
+            $doc.Load($reader)
+        } finally { $reader.Dispose() }
+        $checks.computerGpresultAvailable=$true
+        $evidence=Get-LscmComputerGpoEvidence -Report $doc -ExpectedGpoId $gpoGuid
+        $checks.actualGpoAppliedVerified=[bool]$evidence.applied
+        $checks.gpoRsopStatus=[string]$evidence.status
+    }
+    catch {
+        $checks.gpoRsopStatus='UnavailableOrUnparseable'
+    }
+    finally {
+        if (Test-Path -LiteralPath $rsopTemp) {
+            Remove-Item -LiteralPath $rsopTemp -Force -ErrorAction Stop
+        }
+    }
     if (-not $checks.computerGpresultAvailable) {
         Finding 'COMPUTER_GPO_RSOP_UNAVAILABLE'
+    } elseif (-not $checks.actualGpoAppliedVerified) {
+        Finding 'EXPECTED_COMPUTER_GPO_NOT_APPLIED'
     }
     Finding 'MANUAL_GPO_WINNER_REVIEW_REQUIRED'
     Finding 'MANUAL_DISPLAY_AND_ROLLBACK_REQUIRED'
@@ -178,6 +231,10 @@ try {
     # even when the remote source itself is still readable and pinned.
     if ($checks.localCachePresent -and -not $checks.localCacheHashVerified) {
         $checks.result='FAIL_CLOSED'
+    } elseif ($checks.rebootAfterDeployment -and
+              $checks.actualGpoAppliedVerified -and
+              $checks.localCacheHashVerified) {
+        $checks.result='POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY'
     } else {
         $checks.result='SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY'
     }
@@ -206,4 +263,5 @@ finally {
     [IO.File]::WriteAllText($partial,$json,[Text.UTF8Encoding]::new($false))
     [IO.File]::Move($partial,$ReportPath)
 }
-if ($checks.result -ne 'SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY') { exit 2 }
+if ($checks.result -notin @('SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY',
+    'POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY')) { exit 2 }
