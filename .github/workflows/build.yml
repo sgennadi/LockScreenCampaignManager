@@ -142,6 +142,7 @@ jobs:
           }
           Remove-Item -LiteralPath $report -Force
           Write-Host 'PASS: SYSTEM-only canary refuses hosted Windows non-SYSTEM user.'
+          exit 0  # The intentional child exit code 2 must not fail this negative test.
 
       - name: Verify client integrity and recovery functions
         shell: pwsh
