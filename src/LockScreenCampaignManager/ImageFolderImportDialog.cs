@@ -42,7 +42,9 @@ internal sealed class ImageFolderImportDialog : Form
     private static Button MakeButton(string text, int width, Action action)
     {
         var result = new Button {
-            Text = text, Width = width, Height = 38, AutoEllipsis = true,
+            Text = UiLocale.Display(text), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly, AutoEllipsis = false,
             Margin = new Padding(2, 4, 8, 4)
         };
         result.Click += (_, _) => action();
@@ -77,12 +79,14 @@ internal sealed class ImageFolderImportDialog : Form
         pathBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         _folder.ReadOnly = true;
         _folder.Dock = DockStyle.Fill;
+        _folder.RightToLeft = RightToLeft.No;
         _folder.PlaceholderText = "Choose a folder with up to 30 images...";
         pathBar.Controls.Add(_folder, 0, 0);
         _browse = MakeButton("Choose folder...", 151, Browse);
         pathBar.Controls.Add(_browse, 1, 0);
         layout.Controls.Add(pathBar, 0, 1);
 
+        _grid.Name = "ImageFolderMappingGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = false;
         _grid.AllowUserToAddRows = false;
@@ -145,6 +149,9 @@ internal sealed class ImageFolderImportDialog : Form
         }));
         _accept.Text = "Apply image mapping";
         _accept.Width = 190;
+        _accept.MinimumSize = new Size(190, 38);
+        _accept.AutoSize = true;
+        _accept.AutoSizeMode = AutoSizeMode.GrowOnly;
         _accept.Height = 38;
         _accept.BackColor = UiStyle.Accent;
         _accept.ForeColor = Color.White;
@@ -174,7 +181,7 @@ internal sealed class ImageFolderImportDialog : Form
             _proposal = null;
             _grid.Rows.Clear();
             _accept.Enabled = false;
-            _notice.Text = "Import failed: " +
+            _notice.Text = UiLocale.Display("Import failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 175);
             UiErrorDialog.Show(this, "Import image folder", ex);
         }

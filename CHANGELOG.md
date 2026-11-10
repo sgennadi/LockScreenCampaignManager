@@ -1,3 +1,12 @@
+## 0.4.0-preview.94 — Russian LTR, expanded Hebrew scheduler and Advanced UI (2026-11-10)
+
+- Add **Русский (Russian)** as a third persisted Interface Settings language alongside English and עברית. Russian uses normal LTR; Hebrew keeps RTL. Switching among all three languages and returning to English preserves selected campaign/GPO modes and technical identities.
+- Create a Russian presentation dictionary with 690+ localized strings covering the main editor, seven-step Campaign Wizard, AD connection and user selection, SYSVOL/SMB choice, PS1/EXE Deployment, Client Health, GPO Operations, Deferred Repair/gMSA, diagnostics, schedule, company profiles, assignment matrix, history and advanced read-only views. Unknown labels intentionally fall back to English; this is **not** 100% localization.
+- Expand Hebrew localization to the independent Campaign Schedule editor, image-folder matching, company profiles, group assignments, history, several advanced GPO analysis dialogs and Client Health alerts. UTC/timezone ID, computer and domain paths, GIF/JPG file names, JSON report bodies and GUID values remain LTR.
+- Normalize UI captions through canonical English keys, preserving original control and grid-header meaning when switching Russian → Hebrew → English in one open window; provide display-only formatting for mode, source, group and filter ComboBoxes. Locale switching never changes SelectedIndex, persisted JSON, GPO operation IDs or remote commands.
+- Auto-grow translated action buttons and keep scrollable advanced pages usable with simulated 100–200% DPI/font profiles. Add both WinForms and Python regression checks, without network/AD/GPO/SYSVOL writes.
+- Real interactive Win10/11 Hebrew RTL/Russian 200% visual QA, untranslated dynamic/advanced messages, SMB startup/cleanup and JPG Screen Saver User GPO pilot acceptance remain open (#36, #30, #25/#26).
+
 ## 0.4.0-preview.93 — Hebrew GPO Operations, diagnostics and conflict reports (2026-11-10)
 
 - Extend reversible English/Hebrew operator-facing translations to GPO Operations, Agent Management filters, read-only conflict report, Deferred Repair and gMSA background Repair queues, diagnostic report review and offline error trends.

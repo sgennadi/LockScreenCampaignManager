@@ -76,6 +76,7 @@ internal sealed class CompanyProfilesDialog : Form
         });
         _search.Width = 270;
         _search.PlaceholderText = "Company or AD domain...";
+        _search.RightToLeft = RightToLeft.No;
         _search.Margin = new Padding(0, 7, 10, 0);
         _search.TextChanged += (_, _) => DisplayList();
         toolbar.Controls.Add(_search);
@@ -123,17 +124,25 @@ internal sealed class CompanyProfilesDialog : Form
         };
         _select.Text = "Select company";
         _select.Width = 179; _select.Height = 38;
+        _select.MinimumSize = new Size(179, 38);
+        _select.AutoSize = true; _select.AutoSizeMode = AutoSizeMode.GrowOnly;
         _select.BackColor = UiStyle.Accent; _select.ForeColor = Color.White;
         _select.Click += (_, _) => SelectCompany();
         commands.Controls.Add(_select);
         commands.Controls.Add(Button("Unassigned", 143, SelectUnassigned));
         _edit.Text = "Edit"; _edit.Width = 108; _edit.Height = 38;
+        _edit.MinimumSize = new Size(108, 38);
+        _edit.AutoSize = true; _edit.AutoSizeMode = AutoSizeMode.GrowOnly;
         _edit.Click += (_, _) => Edit();
         commands.Controls.Add(_edit);
         _duplicate.Text = "Duplicate"; _duplicate.Width = 136; _duplicate.Height = 38;
+        _duplicate.MinimumSize = new Size(136, 38);
+        _duplicate.AutoSize = true; _duplicate.AutoSizeMode = AutoSizeMode.GrowOnly;
         _duplicate.Click += (_, _) => Duplicate();
         commands.Controls.Add(_duplicate);
         _delete.Text = "Delete"; _delete.Width = 108; _delete.Height = 38;
+        _delete.MinimumSize = new Size(108, 38);
+        _delete.AutoSize = true; _delete.AutoSizeMode = AutoSizeMode.GrowOnly;
         _delete.Click += (_, _) => Delete();
         commands.Controls.Add(_delete);
         commands.Controls.Add(Button("Close", 108, Close));
@@ -150,7 +159,9 @@ internal sealed class CompanyProfilesDialog : Form
     private static Button Button(string text, int width, Action action)
     {
         var button = new Button {
-            Text = text, Width = width, Height = 38, AutoEllipsis = true,
+            Text = UiLocale.Display(text), Width = width, Height = 38,
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
+            MinimumSize = new Size(width, 38), AutoEllipsis = false,
             Margin = new Padding(0, 4, 8, 4)
         };
         button.Click += (_, _) => action();

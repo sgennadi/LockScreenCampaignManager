@@ -72,7 +72,9 @@ internal sealed class CampaignAssignmentsDialog : Form
     private static Button Action(string name, Action callback, int width)
     {
         var button = new Button {
-            Text = name, Width = width, Height = 43,
+            Text = UiLocale.Display(name), Width = width, Height = 43,
+            MinimumSize = new Size(width, 43), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(4, 5, 7, 5), Tag = "NoIcon"
         };
         button.Click += (_, _) => callback();
@@ -170,6 +172,7 @@ internal sealed class CampaignAssignmentsDialog : Form
         split.Panel2.Controls.Add(details);
 
         _name.Name = "AssignmentName";
+        _name.RightToLeft = RightToLeft.No; // user-provided exact campaign assignment
         _name.TextChanged += (_, _) => CommitRow();
         fields.Controls.Add(Field("Assignment name", _name), 0, 0);
         _mode.Name = "AssignmentTargetMode";

@@ -16,7 +16,7 @@ internal sealed class UiPreferences
     public UiPreferences Validate()
     {
         if (Density is not ("Auto" or "Compact" or "Comfortable")) Density = "Auto";
-        if (Language is not ("English" or "Hebrew")) Language = "English";
+        if (Language is not ("English" or "Hebrew" or "Russian")) Language = "English";
         UiScalePercent = Math.Clamp(UiScalePercent, 100, 200);
         FontScalePercent = Math.Clamp(FontScalePercent, 90, 125);
         return this;

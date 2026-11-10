@@ -43,8 +43,10 @@ internal sealed class UiSettingsDialog : Form
             AutoEllipsis = false, Margin = new Padding(5, 8, 6, 8)
         }, 0, row);
         var language = Combo("UiSettingsLanguage");
-        language.Items.AddRange(["English", "עברית (Hebrew)"]);
-        language.SelectedIndex = UiStyle.Preferences.Language == "Hebrew" ? 1 : 0;
+        language.Items.AddRange(["English", "עברית (Hebrew)", "Русский"]);
+        language.SelectedIndex = UiStyle.Preferences.Language switch {
+            "Hebrew" => 1, "Russian" => 2, _ => 0
+        };
         AddLabel(0, "Language");
         panel.Controls.Add(language, 1, 0);
 
@@ -71,12 +73,19 @@ internal sealed class UiSettingsDialog : Form
 
         var info = new Label {
             Dock = DockStyle.Fill, AutoSize = false, AutoEllipsis = false,
-            Text = UiStyle.Preferences.Language == "Hebrew"
-                ? "Windows DPI מזוהה אוטומטית. השפה והגדרות התצוגה נשמרות למשתמש הנוכחי. " +
-                  "פתח מחדש חלונות קיימים כדי לרענן טקסט דינמי שטרם תורגם."
-                : "Windows DPI is detected automatically (PerMonitorV2). " +
-                  "Language and display settings are saved for the current user. " +
-                  "Reopen existing windows to refresh dynamic text not yet localized.",
+            Text = UiStyle.Preferences.Language switch {
+                "Hebrew" =>
+                    "Windows DPI מזוהה אוטומטית. השפה והגדרות התצוגה נשמרות למשתמש הנוכחי. " +
+                    "פתח מחדש חלונות קיימים כדי לרענן טקסט דינמי שטרם תורגם.",
+                "Russian" =>
+                    "Windows DPI определяется автоматически (PerMonitorV2). " +
+                    "Язык и масштаб сохраняются для текущего пользователя. " +
+                    "Откройте окна заново, если динамические сообщения ещё не переведены.",
+                _ =>
+                    "Windows DPI is detected automatically (PerMonitorV2). " +
+                    "Language and display settings are saved for the current user. " +
+                    "Reopen existing windows to refresh dynamic text not yet localized."
+            },
             ForeColor = UiStyle.Muted, TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(5, 10, 5, 5)
         };
@@ -94,7 +103,9 @@ internal sealed class UiSettingsDialog : Form
             try
             {
                 UiStyle.ChangePreferences(new UiPreferences {
-                    Language = language.SelectedIndex == 1 ? "Hebrew" : "English",
+                    Language = language.SelectedIndex switch {
+                        1 => "Hebrew", 2 => "Russian", _ => "English"
+                    },
                     Density = densities[Math.Clamp(density.SelectedIndex, 0, 2)],
                     UiScalePercent = int.Parse(((string)(scale.SelectedItem ?? "100%")).TrimEnd('%')),
                     FontScalePercent = int.Parse(((string)(fonts.SelectedItem ?? "100%")).TrimEnd('%'))

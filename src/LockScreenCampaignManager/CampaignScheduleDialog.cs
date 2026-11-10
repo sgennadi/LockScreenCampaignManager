@@ -69,8 +69,10 @@ internal sealed class CampaignScheduleDialog : Form
     private static Button Button(string text, int width, Action click)
     {
         var result = new Button {
-            Text = text, Width = width, Height = 36,
-            AutoEllipsis = true, Margin = new Padding(3, 4, 7, 4)
+            Text = UiLocale.Display(text), Width = width, Height = 36,
+            MinimumSize = new Size(width, 36), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
+            AutoEllipsis = false, Margin = new Padding(3, 4, 7, 4)
         };
         result.Click += (_, _) => click();
         return result;
@@ -102,6 +104,7 @@ internal sealed class CampaignScheduleDialog : Form
         choices.Controls.Add(new Label {
             Text = "Schedule:", AutoSize = true, Margin = new Padding(3, 12, 8, 0)
         });
+        _mode.Name = "CampaignScheduleMode";
         _mode.DropDownStyle = ComboBoxStyle.DropDownList;
         _mode.Width = 211;
         _mode.Items.AddRange(new object[] {
@@ -113,7 +116,10 @@ internal sealed class CampaignScheduleDialog : Form
         _importFolder.Text = "Import image folder...";
         _importFolder.Width = 180;
         _importFolder.Height = 35;
-        _importFolder.AutoEllipsis = true;
+        _importFolder.MinimumSize = new Size(180, 35);
+        _importFolder.AutoSize = true;
+        _importFolder.AutoSizeMode = AutoSizeMode.GrowOnly;
+        _importFolder.AutoEllipsis = false;
         _importFolder.Click += (_, _) => ImportFolder();
         choices.Controls.Add(_importFolder);
         _intervalInputs.AutoSize = true;
@@ -175,6 +181,7 @@ internal sealed class CampaignScheduleDialog : Form
             Text = "Preview device:", AutoSize = true,
             Margin = new Padding(10, 12, 4, 0)
         });
+        _previewComputer.RightToLeft = RightToLeft.No;
         _previewComputer.Width = 120;
         _previewComputer.PlaceholderText = "e.g. PC001";
         _previewComputer.TextChanged += (_, _) => Draw();
@@ -201,6 +208,7 @@ internal sealed class CampaignScheduleDialog : Form
             Font = new Font("Segoe UI Semibold", 10f)
         }, 0, 0);
         _timeZone.Name = "ScheduleTimeZoneSelect";
+        _timeZone.RightToLeft = RightToLeft.No;
         _timeZone.Dock = DockStyle.Fill;
         _timeZone.DropDownWidth = 540;
         _timeZone.AccessibleName = "Windows time zone for scheduled images";
@@ -217,6 +225,7 @@ internal sealed class CampaignScheduleDialog : Form
         };
         zoneRow.Controls.Add(_timeZone, 1, 0);
         _timeZoneDifference.Name = "ScheduleTimeZoneDifference";
+        _timeZoneDifference.RightToLeft = RightToLeft.No;
         _timeZoneDifference.Dock = DockStyle.Fill;
         _timeZoneDifference.TextAlign = ContentAlignment.MiddleLeft;
         _timeZoneDifference.Padding = new Padding(6, 5, 6, 7);
@@ -232,6 +241,7 @@ internal sealed class CampaignScheduleDialog : Form
         middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66));
         middle.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
         root.Controls.Add(middle, 0, 3);
+        _grid.Name = "CampaignScheduleGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -280,10 +290,12 @@ internal sealed class CampaignScheduleDialog : Form
         pickers.Controls.Add(_time);
         right.Controls.Add(pickers, 0, 1);
         _assign.Text = "Set selected date/time";
+        _assign.AutoEllipsis = false;
         _assign.Dock = DockStyle.Fill;
         _assign.Click += (_, _) => Assign();
         right.Controls.Add(_assign, 0, 2);
         _repeat.Text = "Repeat selected image";
+        _repeat.AutoEllipsis = false;
         _repeat.Dock = DockStyle.Fill;
         _repeat.Click += (_, _) => RepeatImage();
         right.Controls.Add(_repeat, 0, 3);
@@ -307,6 +319,9 @@ internal sealed class CampaignScheduleDialog : Form
         _apply.Text = "Apply schedule";
         _apply.Width = 175;
         _apply.Height = 38;
+        _apply.MinimumSize = new Size(175, 38);
+        _apply.AutoSize = true;
+        _apply.AutoSizeMode = AutoSizeMode.GrowOnly;
         _apply.BackColor = UiStyle.Accent;
         _apply.ForeColor = Color.White;
         _apply.Click += (_, _) => Apply();
@@ -380,7 +395,7 @@ internal sealed class CampaignScheduleDialog : Form
                 _draft.IntervalMinutes is < 1 or > CampaignSchedule.MaxIntervalMinutes)
             {
                 _calendar.BoldedDates = Array.Empty<DateTime>();
-                _summary.Text = "Enter an interval from 00:01 to 168:00 (hours:minutes).";
+                _summary.Text = UiLocale.Display("Enter an interval from 00:01 to 168:00 (hours:minutes).");
                 _apply.Enabled = false;
                 return;
             }
@@ -388,7 +403,7 @@ internal sealed class CampaignScheduleDialog : Form
                 _draft.WeekdayMask == 0)
             {
                 _calendar.BoldedDates = Array.Empty<DateTime>();
-                _summary.Text = "Select at least one weekday.";
+                _summary.Text = UiLocale.Display("Select at least one weekday.");
                 _apply.Enabled = false;
                 return;
             }
@@ -402,8 +417,8 @@ internal sealed class CampaignScheduleDialog : Form
                     CampaignSchedule.BuildId(_draft), _previewComputer.Text.Trim(),
                     _draft.ImagePaths.Count, randomize: true);
             }
-            _grid.Columns[2].HeaderText = devicePreview
-                ? "Image (sample device)" : "Image (editing order)";
+            _grid.Columns[2].HeaderText = UiLocale.Display(devicePreview
+                ? "Image (sample device)" : "Image (editing order)");
             for (int i = 0; i < _draft.ImagePaths.Count; i++)
             {
                 var day = CampaignSchedule.At(_draft, i);
@@ -413,14 +428,15 @@ internal sealed class CampaignScheduleDialog : Form
             }
             _calendar.BoldedDates = dates.Select(x => x.Date).ToArray();
             _calendar.UpdateBoldedDates();
-            _summary.Text = $"Scheduled images: {dates.Count}  |  " +
-                $"First: {(dates.Count == 0 ? _draft.StartLocal : dates[0]):dd.MM.yyyy HH:mm}  |  " +
-                $"Restore: {CampaignSchedule.End(_draft):dd.MM.yyyy HH:mm}  |  " +
-                $"Time zone: {_draft.TimeZoneId}" +
+            _summary.Text = UiLocale.Display("Scheduled images: ") + dates.Count + "  |  " +
+                UiLocale.Display("First: ") + (dates.Count == 0 ? _draft.StartLocal : dates[0]).ToString("dd.MM.yyyy HH:mm") +
+                "  |  " + UiLocale.Display("Restore: ") +
+                CampaignSchedule.End(_draft).ToString("dd.MM.yyyy HH:mm") +
+                "  |  " + UiLocale.Display("Time zone: ") + _draft.TimeZoneId +
                 (_draft.RandomizePerDevice
                     ? (devicePreview
-                        ? "  |  Stable preview for: " + _previewComputer.Text.Trim()
-                        : "  |  Enter a computer name to preview its stable shuffle")
+                        ? "  |  " + UiLocale.Display("Stable preview for: ") + _previewComputer.Text.Trim()
+                        : "  |  " + UiLocale.Display("Enter a computer name to preview its stable shuffle"))
                     : "");
             _apply.Enabled = true;
             _grid.ClearSelection();
@@ -434,7 +450,7 @@ internal sealed class CampaignScheduleDialog : Form
         catch (Exception ex)
         {
             _apply.Enabled = false;
-            _summary.Text = "Schedule invalid: " +
+            _summary.Text = UiLocale.Display("Schedule invalid: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 180);
         }
         finally { _grid.ResumeLayout(); }

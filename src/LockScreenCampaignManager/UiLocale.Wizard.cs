@@ -129,32 +129,31 @@ internal static partial class UiLocale
 
     // Wizard step captions contain the current step number, so they cannot be
     // looked up as a single fixed dictionary entry.
-    private static string TranslateWizardDynamic(string value, string language)
+    // Multi-language dynamic step numbering, independent of serialized values.
+    private static bool TryTranslateWizardStep(string value, string language,
+        out string translated)
     {
-        const string englishMarker = " of 7  -  ";
-        const string hebrewMarker = " מתוך 7 — ";
-        if (IsHebrew(language) && value.StartsWith("Step ", StringComparison.Ordinal))
+        translated = value;
+        foreach (var format in new[] {
+            (Prefix: "Step ", Marker: " of 7  -  "),
+            (Prefix: "שלב ", Marker: " מתוך 7 — "),
+            (Prefix: "Шаг ", Marker: " из 7 — ")
+        })
         {
-            int position = value.IndexOf(englishMarker, StringComparison.Ordinal);
-            if (position > 5)
-            {
-                string number = value[5..position];
-                string step = value[(position + englishMarker.Length)..];
-                if (int.TryParse(number, out int index) && index is >= 1 and <= 7)
-                    return $"שלב {number} מתוך 7 — {Translate(step, language)}";
-            }
+            if (!value.StartsWith(format.Prefix, StringComparison.Ordinal))
+                continue;
+            int position = value.IndexOf(format.Marker, StringComparison.Ordinal);
+            if (position <= format.Prefix.Length) continue;
+            string number = value[format.Prefix.Length..position];
+            if (!int.TryParse(number, out int index) || index is < 1 or > 7)
+                continue;
+            string step = value[(position + format.Marker.Length)..];
+            string caption = Translate(step, language);
+            translated = IsHebrew(language) ? $"שלב {number} מתוך 7 — {caption}" :
+                IsRussian(language) ? $"Шаг {number} из 7 — {caption}" :
+                $"Step {number} of 7  -  {caption}";
+            return true;
         }
-        if (!IsHebrew(language) && value.StartsWith("שלב ", StringComparison.Ordinal))
-        {
-            int position = value.IndexOf(hebrewMarker, StringComparison.Ordinal);
-            if (position > 4)
-            {
-                string number = value[4..position];
-                string step = value[(position + hebrewMarker.Length)..];
-                if (int.TryParse(number, out int index) && index is >= 1 and <= 7)
-                    return $"Step {number} of 7  -  {Translate(step, language)}";
-            }
-        }
-        return value;
+        return false;
     }
 }

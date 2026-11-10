@@ -1113,6 +1113,7 @@ internal static class UiLayoutSmokeTests
         CheckHebrewCampaignWizardPages();
         CheckHebrewAdAndClientHealth();
         CheckHebrewGpoOperationsAndDiagnostics();
+        CheckRussianThreeLanguageScheduleAndAdvanced();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1438,6 +1439,125 @@ internal static class UiLayoutSmokeTests
                 campaign.ClientType != CampaignClientType.PowerShell)
                 throw new InvalidOperationException(
                     "Display-only localization changed GPO action or client type.");
+        }
+    }
+
+    private static void CheckRussianThreeLanguageScheduleAndAdvanced()
+    {
+        // No Show(), no saved settings, no AD/SMB/GPO writes. All UI fixtures
+        // use synthetic domains and local-only campaign values.
+        if (new UiPreferences { Language = "Russian" }.Validate().Language != "Russian")
+            throw new InvalidOperationException("Russian must remain a persisted UI option.");
+        if (new UiPreferences { Language = "Unknown" }.Validate().Language != "English")
+            throw new InvalidOperationException("Unknown language must fail back to English.");
+
+        const string englishStep = "Step 4 of 7  -  Schedule";
+        const string russianStep = "Шаг 4 из 7 — Расписание";
+        const string hebrewStep = "שלב 4 מתוך 7 — תזמון";
+        if (UiLocale.Translate(englishStep, "Russian") != russianStep ||
+            UiLocale.Translate(russianStep, "Hebrew") != hebrewStep ||
+            UiLocale.Translate(hebrewStep, "English") != englishStep ||
+            UiLocale.Translate(UiLocale.Translate("Schedule:", "Hebrew"), "Russian") !=
+                "Расписание:" ||
+            UiLocale.Translate(UiLocale.Translate("Apply", "Russian"), "English") !=
+                "Apply")
+            throw new InvalidOperationException("Three-language captions are not reversible.");
+
+        foreach (var profile in Profiles)
+        {
+            UiPreferences Style(string language) => new() {
+                Language = language, Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            using var settings = new UiSettingsDialog();
+            using var schedule = Windows.Single(x => x.Name == "Campaign schedule").Factory();
+            using var company = Windows.Single(x => x.Name == "Company profile editor").Factory();
+            using var assignments = Windows.Single(x => x.Name == "Campaign assignment matrix").Factory();
+            using var operations = Windows.Single(
+                x => x.Name == "Agent Management - read-only desktop layout").Factory();
+
+            var allForms = new Form[] { settings, schedule, company, assignments, operations };
+            var options = Descendants(settings).OfType<ComboBox>()
+                .Single(x => x.Name == "UiSettingsLanguage");
+            if (options.Items.Count != 3 ||
+                options.Items[0]?.ToString() != "English" ||
+                options.Items[1]?.ToString() != "עברית (Hebrew)" ||
+                options.Items[2]?.ToString() != "Русский")
+                throw new InvalidOperationException(
+                    "English / Hebrew / Russian language picker is incomplete.");
+
+            ComboBox mode = Descendants(schedule).OfType<ComboBox>()
+                .Single(x => x.Name == "CampaignScheduleMode");
+            ComboBox target = Descendants(assignments).OfType<ComboBox>()
+                .Single(x => x.Name == "AssignmentTargetMode");
+            ComboBox lifecycle = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "GpoLifecycleAction");
+            ComboBox remote = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "GpoPushPurpose");
+            var pickers = new[] { mode, target, lifecycle, remote };
+            var keys = pickers.Select(x => x.Items.Cast<object>()
+                .Select(item => item.ToString() ?? "").ToArray()).ToArray();
+            var selectedIndices = pickers.Select(x => x.SelectedIndex).ToArray();
+            var grid = Descendants(schedule).OfType<DataGridView>()
+                .Single(x => x.Name == "CampaignScheduleGrid");
+            string[] originalColumns = grid.Columns.Cast<DataGridViewColumn>()
+                .Select(x => x.HeaderText).ToArray();
+
+            foreach (Form form in allForms)
+            {
+                UiStyle.Apply(form, Style("Russian"));
+                form.PerformLayout();
+                if (form.RightToLeft != RightToLeft.No || form.RightToLeftLayout)
+                    throw new InvalidOperationException(
+                        "Russian must use LTR: " + form.Name + " / " + profile.Name);
+            }
+            if (!Descendants(settings).OfType<Label>().Any(x => x.Text == "Язык") ||
+                !Descendants(schedule).OfType<Label>().Any(x => x.Text == "Расписание:") ||
+                !Descendants(company).OfType<Label>().Any(x => x.Text == "Название компании") ||
+                !Descendants(assignments).OfType<CheckBox>().Any(x =>
+                    x.Text.StartsWith("Использовать слайд-шоу JPG", StringComparison.Ordinal)) ||
+                schedule.Text != "Расписание кампании — изображения и даты" ||
+                company.Text != "Новый профиль компании" ||
+                grid.Columns[1].HeaderText != "Дата / время смены" ||
+                !mode.FormattingEnabled || !target.FormattingEnabled ||
+                !lifecycle.FormattingEnabled || !remote.FormattingEnabled)
+                throw new InvalidOperationException(
+                    "Russian schedule/advanced translation missing: " + profile.Name);
+
+            foreach (Form form in allForms)
+                UiStyle.Apply(form, Style("Hebrew"));
+            if (!schedule.RightToLeftLayout ||
+                schedule.Text != "תזמון הקמפיין — תמונות ותאריכים" ||
+                grid.Columns[1].HeaderText != "תאריך / שעת החלפה")
+                throw new InvalidOperationException(
+                    "Hebrew translation after Russian failed: " + profile.Name);
+            foreach (Form form in allForms)
+                UiStyle.Apply(form, Style("English"));
+            if (schedule.RightToLeftLayout ||
+                schedule.Text != "Campaign Schedule - Images and Dates" ||
+                company.Text != "New company profile" ||
+                grid.Columns.Cast<DataGridViewColumn>()
+                    .Select(x => x.HeaderText).SequenceEqual(originalColumns) == false)
+                throw new InvalidOperationException(
+                    "English translation after Russian/Hebrew failed: " + profile.Name);
+
+            for (int i = 0; i < pickers.Length; i++)
+            {
+                if (pickers[i].SelectedIndex != selectedIndices[i] ||
+                    !pickers[i].Items.Cast<object>()
+                        .Select(item => item.ToString() ?? "").SequenceEqual(keys[i]))
+                    throw new InvalidOperationException(
+                        "Locale switch changed schedule, group or GPO operation values.");
+            }
+            var zone = Descendants(schedule).OfType<ComboBox>()
+                .Single(x => x.Name == "ScheduleTimeZoneSelect");
+            var difference = Descendants(schedule).OfType<Label>()
+                .Single(x => x.Name == "ScheduleTimeZoneDifference");
+            if (zone.RightToLeft != RightToLeft.No ||
+                difference.RightToLeft != RightToLeft.No)
+                throw new InvalidOperationException(
+                    "Language switch reversed a technical Windows timezone ID.");
         }
     }
 

@@ -97,6 +97,7 @@ internal sealed class CampaignClosureAuditDialog : Form
         {
             Text = "State:", AutoSize = true, Margin = new Padding(2, 14, 6, 0)
         });
+        _category.Name = "CampaignClosureFilter";
         _category.DropDownStyle = ComboBoxStyle.DropDownList;
         _category.Width = 220;
         _category.Items.AddRange(new object[]
@@ -109,11 +110,13 @@ internal sealed class CampaignClosureAuditDialog : Form
         filters.Controls.Add(_category);
         _search.Width = 260;
         _search.PlaceholderText = "Search computer...";
+        _search.RightToLeft = RightToLeft.No;
         _search.Margin = new Padding(16, 7, 7, 0);
         _search.TextChanged += (_, _) => Draw();
         filters.Controls.Add(_search);
         root.Controls.Add(filters, 0, 3);
 
+        _grid.Name = "CampaignClosureGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
