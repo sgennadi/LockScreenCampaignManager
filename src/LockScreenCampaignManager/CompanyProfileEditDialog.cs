@@ -82,6 +82,7 @@ internal sealed class CompanyProfileEditDialog : Form
         AddField(fields, 5, "Client Health SMB share", _share,
             @"\\fileserver\LockScreenReports$");
 
+        _zone.RightToLeft = RightToLeft.No;
         _zone.DropDownStyle = ComboBoxStyle.DropDown;
         _zone.Dock = DockStyle.Fill;
         _zone.DropDownWidth = 320;
@@ -141,6 +142,7 @@ internal sealed class CompanyProfileEditDialog : Form
     {
         field.Dock = DockStyle.Fill;
         field.PlaceholderText = placeholder;
+        field.RightToLeft = RightToLeft.No;
         field.Margin = new Padding(3, 7, 8, 7);
         table.Controls.Add(Caption(title), 0, row);
         table.Controls.Add(field, 1, row);
@@ -153,7 +155,9 @@ internal sealed class CompanyProfileEditDialog : Form
     };
 
     private static Button MakeButton(string text, int width) => new() {
-        Text = text, Width = width, Height = 39,
+        Text = UiLocale.Display(text), Width = width, Height = 39,
+        MinimumSize = new Size(width, 39), AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowOnly,
         Margin = new Padding(2, 4, 8, 4), AutoEllipsis = true
     };
 
@@ -173,7 +177,7 @@ internal sealed class CompanyProfileEditDialog : Form
         catch (Exception ex)
         {
             ResultProfile = null;
-            _notice.Text = "Please correct the profile: " +
+            _notice.Text = UiLocale.Display("Please correct the profile: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 170);
             UiErrorDialog.Show(this, "Company profile validation", ex);
         }
