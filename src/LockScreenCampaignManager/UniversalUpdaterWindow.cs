@@ -50,6 +50,9 @@ internal sealed class UniversalUpdaterWindow : Form
     private CancellationTokenSource? _operation;
     private string? _stagedPath;
     private StagedPackage? _staged;
+    // Operator captions only; release IDs, archives, hashes and session token
+    // remain untouched by localization.
+    private static string T(string text) => UiLocale.Display(text);
 
     internal UniversalUpdaterWindow(bool checkOnOpen = false)
     {
@@ -129,7 +132,7 @@ internal sealed class UniversalUpdaterWindow : Form
             _staged = null;
             _download.Enabled = false;
             _install.Enabled = false;
-            _state.Text = "Channel changed. Select Check for updates.";
+            _state.Text = T("Channel changed. Select Check for updates.");
         };
         config.Controls.Add(Field("Release channel", _channel), 0, 0);
         config.Controls.Add(Field("Installed version / architecture",
@@ -149,7 +152,7 @@ internal sealed class UniversalUpdaterWindow : Form
             _stagedPath = null;
             _download.Enabled = false;
             _install.Enabled = false;
-            _state.Text = "Session credentials changed. Check for updates again.";
+            _state.Text = T("Session credentials changed. Check for updates again.");
         };
         config.Controls.Add(Field("GitHub token (optional; never saved)", _sessionToken), 0, 1);
         config.Controls.Add(Field("Repository", new TextBox {
@@ -226,12 +229,11 @@ internal sealed class UniversalUpdaterWindow : Form
         _output.WordWrap = true;
         _output.ScrollBars = ScrollBars.Vertical;
         _output.Font = new Font("Segoe UI", 10f);
-        _output.Text = "Check for updates to compare your installed version with GitHub Releases." +
-            Environment.NewLine + Environment.NewLine +
-            "1. Check for updates (Stable or Preview)." + Environment.NewLine +
-            "2. Install: automatically download and verify, then request approval to restart." +
-            Environment.NewLine + Environment.NewLine +
-            "Updating the portable EXE never modifies GPO or gMSA installations.";
+        _output.Text = T(
+            "Check for updates to compare your installed version with GitHub Releases.\n\n" +
+            "1. Check for updates (Stable or Preview).\n" +
+            "2. Install: automatically download and verify, then request approval to restart.\n\n" +
+            "Updating the portable EXE never modifies GPO or gMSA installations.");
         resultArea.Controls.Add(_output, 0, 1);
         layout.Controls.Add(resultArea, 0, 2);
 
@@ -244,7 +246,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _state.AutoEllipsis = true;
         _state.TextAlign = ContentAlignment.MiddleLeft;
         _state.ForeColor = UiStyle.Navy;
-        _state.Text = "Ready. No network request has been made.";
+        _state.Text = T("Ready. No network request has been made.");
         statusPanel.Controls.Add(_state);
         layout.Controls.Add(statusPanel, 0, 3);
 
@@ -396,38 +398,38 @@ internal sealed class UniversalUpdaterWindow : Form
             if (found is null)
             {
                 _output.Text = options.Channel == UpdateChannel.Stable
-                    ? "No newer stable release is published. A preview is not a Stable release." +
-                      Environment.NewLine + "Choose Preview + stable to find development previews."
-                    : "No newer compatible preview or stable release is available." +
-                      Environment.NewLine + "The release must include an architecture-specific Update ZIP " +
-                      "with a GitHub SHA-256 digest.";
-                _state.Text = "No newer compatible release returned by the selected access mode.";
+                    ? T("No newer stable release is published. A preview is not a Stable release.") +
+                      Environment.NewLine + T("Choose Preview + stable to find development previews.")
+                    : T("No newer compatible preview or stable release is available.") +
+                      Environment.NewLine + T("The release must include an architecture-specific Update ZIP " +
+                      "with a GitHub SHA-256 digest.");
+                _state.Text = T("No newer compatible release returned by the selected access mode.");
             }
             else
             {
-                _output.Text = "New release: " + found.Version +
-                    Environment.NewLine + "Current: " + options.InstalledVersion +
-                    Environment.NewLine + "Asset: " + found.Rule.AssetName +
-                    Environment.NewLine + "Archive size: " + found.SizeBytes.ToString("N0") + " bytes" +
+                _output.Text = T("New release: ") + found.Version +
+                    Environment.NewLine + T("Current: ") + options.InstalledVersion +
+                    Environment.NewLine + T("Asset: ") + found.Rule.AssetName +
+                    Environment.NewLine + T("Archive size: ") + found.SizeBytes.ToString("N0") + T(" bytes") +
                     Environment.NewLine + "SHA-256: " + found.Sha256 +
                     Environment.NewLine + Environment.NewLine +
-                    "Release notes:" + Environment.NewLine +
+                    T("Release notes:") + Environment.NewLine +
                     (found.ReleaseNotes.Length > 6000 ? found.ReleaseNotes[..6000] : found.ReleaseNotes);
-                _state.Text = "New release available. Choose Install to download, verify and apply.";
+                _state.Text = T("New release available. Choose Install to download, verify and apply.");
             }
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Release check canceled.";
+            _state.Text = T("Release check canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater release check");
-            _state.Text = "Could not check GitHub Releases.";
-            _output.Text = "Update check failed: " +
+            _state.Text = T("Could not check GitHub Releases.");
+            _output.Text = T("Update check failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "Check internet access and repository visibility in the browser.";
+                T("Check internet access and repository visibility in the browser.");
         }
         finally { FinishWorking(); }
     }
@@ -449,9 +451,9 @@ internal sealed class UniversalUpdaterWindow : Form
         {
             using var downloader = new UpdateDownloader();
             var progress = new Progress<UpdateProgress>(p =>
-                _state.Text = p.Phase + ": " +
+                _state.Text = T(p.Phase.ToString()) + ": " +
                     p.ReceivedBytes.ToString("N0") + " / " +
-                    (p.TotalBytes ?? 0).ToString("N0") + " bytes");
+                    (p.TotalBytes ?? 0).ToString("N0") + T(" bytes"));
             StagedPackage staged = await downloader.StageAsync(
                 options, selected, progress, _operation!.Token,
                 _sessionToken.Text.Length == 0 ? null : _sessionToken.Text);
