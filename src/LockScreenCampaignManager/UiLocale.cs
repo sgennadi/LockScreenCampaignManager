@@ -165,33 +165,53 @@ internal static partial class UiLocale
         Hebrew.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.Ordinal);
 
     internal static bool IsHebrew(string language) => language == "Hebrew";
+    internal static bool IsRussian(string language) => language == "Russian";
 
+    /// <summary>
+    /// Translate only known display captions. First normalize a label from
+    /// English, Hebrew OR Russian back to the canonical English UI key.
+    /// This makes Hebrew -> Russian -> English reversible on a live form and
+    /// never changes ComboBox item values, AD objects, JSON or file paths.
+    /// </summary>
     internal static string Translate(string value, string language)
     {
+        if (string.IsNullOrEmpty(value)) return value;
         const string menuSuffix = "  ▾";
         if (value.EndsWith(menuSuffix, StringComparison.Ordinal))
             return Translate(value[..^menuSuffix.Length], language) + menuSuffix;
-        const string skippedEnglish = " (skip)";
-        const string skippedHebrew = " (דילוג)";
-        if (IsHebrew(language) && value.EndsWith(skippedEnglish, StringComparison.Ordinal))
-            return Translate(value[..^skippedEnglish.Length], language) + skippedHebrew;
-        if (!IsHebrew(language) && value.EndsWith(skippedHebrew, StringComparison.Ordinal))
-            return Translate(value[..^skippedHebrew.Length], language) + skippedEnglish;
+
+        foreach (string suffix in new[] { " (skip)", " (דילוג)", " (пропуск)" })
+        {
+            if (!value.EndsWith(suffix, StringComparison.Ordinal)) continue;
+            string translated = Translate(value[..^suffix.Length], language);
+            string targetSuffix = IsHebrew(language) ? " (דילוג)" :
+                IsRussian(language) ? " (пропуск)" : " (skip)";
+            return translated + targetSuffix;
+        }
+
+        if (TryTranslateWizardStep(value, language, out string dynamicStep))
+            return dynamicStep;
+
+        string key = value;
+        if (EnglishByHebrew.TryGetValue(key, out string? english) ||
+            WizardEnglish.TryGetValue(key, out english) ||
+            AdHealthEnglish.TryGetValue(key, out english) ||
+            OpsDiagnosticsEnglish.TryGetValue(key, out english) ||
+            ScheduleAdvancedEnglish.TryGetValue(key, out english) ||
+            EnglishByRussian.TryGetValue(key, out english))
+            key = english;
+
+        if (IsRussian(language))
+            return Russian.TryGetValue(key, out string? ru) ? ru : key;
         if (IsHebrew(language))
         {
-            if (Hebrew.TryGetValue(value, out string? he)) return he;
-            if (WizardHebrew.TryGetValue(value, out he)) return he;
-            if (AdHealthHebrew.TryGetValue(value, out he)) return he;
-            if (OpsDiagnosticsHebrew.TryGetValue(value, out he)) return he;
+            if (Hebrew.TryGetValue(key, out string? he)) return he;
+            if (WizardHebrew.TryGetValue(key, out he)) return he;
+            if (AdHealthHebrew.TryGetValue(key, out he)) return he;
+            if (OpsDiagnosticsHebrew.TryGetValue(key, out he)) return he;
+            if (ScheduleAdvancedHebrew.TryGetValue(key, out he)) return he;
         }
-        else
-        {
-            if (EnglishByHebrew.TryGetValue(value, out string? en)) return en;
-            if (WizardEnglish.TryGetValue(value, out en)) return en;
-            if (AdHealthEnglish.TryGetValue(value, out en)) return en;
-            if (OpsDiagnosticsEnglish.TryGetValue(value, out en)) return en;
-        }
-        return TranslateWizardDynamic(value, language);
+        return key;
     }
 
     internal static void Apply(Form form, string language)
@@ -204,32 +224,52 @@ internal static partial class UiLocale
         foreach (string englishCaption in new[] {
             "AD Connection Wizard", "Select AD account",
             "Active Directory Deployment", "Campaign Wizard",
-            "Full GPO conflict report (read-only)" })
+            "Full GPO conflict report (read-only)",
+            "Effective GPO candidates", "Winning Policy Analysis",
+            "Campaign closure audit", "Repair history" })
         {
-            string hebrewCaption = Translate(englishCaption, "Hebrew");
-            string original = " - " + (hebrew ? englishCaption : hebrewCaption);
-            int position = form.Text.IndexOf(original, StringComparison.Ordinal);
-            if (position >= 0)
-                form.Text = form.Text[..position] + " - " +
-                    (hebrew ? hebrewCaption : englishCaption) +
-                    form.Text[(position + original.Length)..];
+            string destination = Translate(englishCaption, language);
+            foreach (string sourceLanguage in new[] { "English", "Hebrew", "Russian" })
+            {
+                string suffix = " - " + Translate(englishCaption, sourceLanguage);
+                int position = form.Text.IndexOf(suffix, StringComparison.Ordinal);
+                if (position >= 0)
+                {
+                    form.Text = form.Text[..position] + " - " + destination +
+                        form.Text[(position + suffix.Length)..];
+                    break;
+                }
+            }
         }
-        if (form.Text == "Client feedback — SMB" ||
-            form.Text == Translate("Client feedback — SMB", "Hebrew") ||
-            form.Text == "Diagnostics — saved error reports" ||
-            form.Text == Translate("Diagnostics — saved error reports", "Hebrew") ||
-            form.Text == "Report an error — LockScreen Campaign Manager" ||
-            form.Text == Translate("Report an error — LockScreen Campaign Manager", "Hebrew") ||
-            form.Text == "Error trends — LockScreen Campaign Manager" ||
-            form.Text == Translate("Error trends — LockScreen Campaign Manager", "Hebrew"))
-            form.Text = Translate(form.Text, language);
-        const string gpoTitleMarker = " - GPO Operations ";
-        const string hebrewGpoTitleMarker = " - פעולות GPO ";
-        if (form.Text.Contains(hebrew ? gpoTitleMarker : hebrewGpoTitleMarker,
-            StringComparison.Ordinal))
-            form.Text = form.Text.Replace(hebrew ? gpoTitleMarker : hebrewGpoTitleMarker,
-                hebrew ? hebrewGpoTitleMarker : gpoTitleMarker,
-                StringComparison.Ordinal);
+
+        foreach (string englishTitle in new[] {
+            "Client feedback — SMB",
+            "Diagnostics — saved error reports",
+            "Report an error — LockScreen Campaign Manager",
+            "Error trends — LockScreen Campaign Manager",
+            "Campaign Schedule - Images and Dates",
+            "Company Profiles — LockScreen Campaign Manager",
+            "New company profile", "Edit company profile",
+            "Client Health — Alert settings" })
+        {
+            if (new[] { "English", "Hebrew", "Russian" }
+                .Any(source => form.Text == Translate(englishTitle, source)))
+            {
+                form.Text = Translate(englishTitle, language);
+                break;
+            }
+        }
+        foreach (string sourceLanguage in new[] { "English", "Hebrew", "Russian" })
+        {
+            string oldMarker = " - " + Translate("GPO Operations", sourceLanguage) + " ";
+            if (form.Text.Contains(oldMarker, StringComparison.Ordinal))
+            {
+                form.Text = form.Text.Replace(oldMarker,
+                    " - " + Translate("GPO Operations", language) + " ",
+                    StringComparison.Ordinal);
+                break;
+            }
+        }
         foreach (Control child in All(form))
         {
             if (child is Button or Label or CheckBox or RadioButton or
@@ -252,7 +292,11 @@ internal static partial class UiLocale
             if (child is DataGridView healthGrid &&
                 healthGrid.Name is ("ClientHealthGrid" or
                     "GpoDeferredRepairGrid" or "GpoGmsaQueueGrid" or
-                    "DiagnosticsTrendsGrid" or "GroupConflictGrid"))
+                    "DiagnosticsTrendsGrid" or "GroupConflictGrid" or
+                    "CampaignScheduleGrid" or "EffectiveGpoGrid" or
+                    "WinningPolicyGrid" or "CampaignHistoryGrid" or
+                    "RepairHistoryGrid" or "CampaignClosureGrid" or
+                    "ImageFolderMappingGrid"))
             {
                 foreach (DataGridViewColumn column in healthGrid.Columns)
                 {
@@ -271,7 +315,10 @@ internal static partial class UiLocale
                 ("WizardCampaignType" or "CampaignWizardContentSource" or
                  "DeploymentContentSource" or "DeploymentClientType" or
                  "GpoLifecycleAction" or "GpoPushPurpose" or
-                 "GpoGmsaFilter" or "AgentActivityFilter" or "GroupConflictRisk"))
+                 "GpoGmsaFilter" or "AgentActivityFilter" or "GroupConflictRisk" or
+                 "CampaignScheduleMode" or "EffectiveGpoFilter" or
+                 "WinningPolicyFilter" or "RepairHistorySource" or
+                 "CampaignClosureFilter"))
                 ApplyComboLocalization(combo, language);
         }
     }
