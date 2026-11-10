@@ -1,3 +1,11 @@
+## 0.4.0-preview.87 — Wizard storage selector and Updater HiDPI field fix (2026-11-10)
+
+- Expose **Campaign files: SYSVOL / SMB network folder (UNC)** on the main seven-step Campaign Wizard **Step 7 Deploy**, not only in the separate AD deployment wizard. Type or Browse for the existing share; a rejected UNC stays local with an actionable warning. No GPO write or server connection occurs merely from changing the field.
+- Carry the chosen storage mode and UNC root from the editor through the deployment copy and back again; existing projects default to SYSVOL.
+- Size the Updater **Release channel** label, native ComboBox and other fields from font and preferred control heights instead of fixed 24px label / 50% rows. Refit on DPI/font changes; preserve the two-step Check / Install interaction.
+- Expand Windows UI smoke tests at 100%, 125%, 150%, 175%, scaled-font and 200% profiles for the full `Preview + stable` text, UNC Browse visibility, and Wizard project persistence.
+- No AD/SYSVOL/SMB writes during UI selection. JPG Screen Saver automatic User GPO remains blocked pending real domain acceptance.
+
 ## 0.4.0-preview.86 — Independent endpoint closure acceptance (2026-11-10)
 
 - Add explicit two-stage **Baseline before GPO creation / VerifyCleanup after unlink** LocalSystem acceptance for one isolated Windows 10/11 computer (SYSVOL or SMB). VerifyCleanup independently compares the original registry SHA-256 to actual HKLM policy, local tasks/files/ownership, final agent postcleanup receipt and exact Computer GPO GUID absence in local RSoP.
