@@ -1,3 +1,11 @@
+## 0.4.0-preview.86 — Independent endpoint closure acceptance (2026-11-10)
+
+- Add explicit two-stage **Baseline before GPO creation / VerifyCleanup after unlink** LocalSystem acceptance for one isolated Windows 10/11 computer (SYSVOL or SMB). VerifyCleanup independently compares the original registry SHA-256 to actual HKLM policy, local tasks/files/ownership, final agent postcleanup receipt and exact Computer GPO GUID absence in local RSoP.
+- Do not mistake client `Completed` feedback for verified cleanup. Baseline is immutable and excludes prior completed campaign IDs; an incomplete registry, task, RSoP, owner or receipt check fails closed. No settings, GPO, SYSVOL or SMB files are modified by the probe.
+- A temporary LOCAL SYSTEM Scheduled Task is removed after inspection. A private evidence directory keeps baseline metadata and sanitized reports while temporary raw GPRESULT XML is deleted. No automatic uploads or remote execution.
+- Include `run_endpoint_closure_local.ps1`, `endpoint_closure_probe.ps1` and instructions in the verified offline Windows lab kit. Add PS 5.1 parsing, CI source contracts and explicit non-SYSTEM rejection tests on x64/x86.
+- Does NOT satisfy real Windows 10/11 domain acceptance or visual JPG Screen Saver acceptance. Production native EXE and JPG User GPO still gated.
+
 ## 0.4.0-preview.85 — RSoP GPO GUID / post-deployment reboot evidence (2026-11-10)
 
 - Add completed deployment UTC and exact GPO ID to the read-only LocalSystem canary input so a *disposable* Windows 10/11 client can report whether it has rebooted after GPO creation.
