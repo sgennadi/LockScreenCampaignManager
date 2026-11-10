@@ -1,3 +1,11 @@
+## 0.4.0-preview.97 — Russian/Hebrew GPO safety and Client Health warnings (2026-11-10)
+
+- Add over 80 new display strings per language for Client Health SMB browsing/repair/final-report confirmation, read-only RSoP XML and remote HKLM verification, GPO candidate report export, Campaign Closure Audit, inventory counts and manual remote task status.
+- Operator-facing read-only RSoP/HKLM/SMB prompts and local confidential CSV export consent now use English/Russian/Hebrew, retaining **No** as the default. Verified GPO/OU/group scope and per-operation revalidation remain mandatory, as do exact GPO GUID confirmation and fail-closed state transitions.
+- Client Health feedback messages and warnings localize but do not alter UNC source values, actual SMB ACL, JSON report schema, original CSV column names, agent status identifiers or reports. Exporting a final report still requires the same explicit confirmation when any clients remain unresolved.
+- Add six-profile simulated 100–200% WinForms smoke and roundtrip checks for Client Health labels/technical paths and source-level privacy/consent contracts. The tests are offline only and do not contact AD, RPC, SMB or remote Registry.
+- Localization is **not yet complete** (#36); real Windows 10/11 200% Hebrew RTL visual review, SMB LocalSystem startup/cleanup (#30) and automatic JPG User GPO pilot (#25/#26) remain open.
+
 ## 0.4.0-preview.96 — Bilingual updater / Local Lab evidence and DPI contracts (2026-11-10)
 
 - Add 77 new Russian and 77 new Hebrew presentation-only captions for the Updater, package verification, signed-publisher/rollback/backup warnings, and local Windows Lab Evidence viewer. Reuse already translated common words where available.
