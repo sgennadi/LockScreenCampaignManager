@@ -47,9 +47,10 @@ internal sealed class ClientAlertSettingsDialog : Form
         _stale.AutoSize = true;
         grid.Controls.Add(_stale, 0, 4);
         var info = new Label {
-            Text = "The first refresh establishes the baseline. Notifications appear " +
+            Text = UiLocale.Display(
+                   "The first refresh establishes the baseline. Notifications appear " +
                    "only when problems increase while the manager is open. " +
-                   "No endpoint changes are performed automatically.",
+                   "No endpoint changes are performed automatically."),
             Dock = DockStyle.Fill, ForeColor = UiStyle.Muted,
             AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft
         };
@@ -57,6 +58,8 @@ internal sealed class ClientAlertSettingsDialog : Form
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill,
             AutoScroll = true, FlowDirection = FlowDirection.RightToLeft };
         var save = new Button { Text = "Save", Width = 135, Height = 39,
+            MinimumSize = new Size(135, 39), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             BackColor = UiStyle.Accent, ForeColor = Color.White };
         save.Click += (_, _) =>
         {
@@ -69,7 +72,9 @@ internal sealed class ClientAlertSettingsDialog : Form
             try { prefs.Save(); Result = prefs; DialogResult = DialogResult.OK; }
             catch (Exception ex) { UiErrorDialog.Show(this, "Save alert preferences", ex); }
         };
-        var cancel = new Button { Text = "Cancel", Width = 105, Height = 39 };
+        var cancel = new Button { Text = "Cancel", Width = 105, Height = 39,
+            MinimumSize = new Size(105, 39), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly };
         cancel.Click += (_, _) => DialogResult = DialogResult.Cancel;
         actions.Controls.Add(save); actions.Controls.Add(cancel);
         grid.Controls.Add(actions, 0, 5); grid.SetColumnSpan(actions, 2);
