@@ -75,6 +75,7 @@ internal sealed class GroupConflictReportDialog : Form
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 135));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+        _risk.RightToLeft = RightToLeft.No;
         _risk.Dock = DockStyle.Fill;
         _risk.DropDownStyle = ComboBoxStyle.DropDownList;
         _risk.Items.AddRange(new object[] {
@@ -83,7 +84,8 @@ internal sealed class GroupConflictReportDialog : Form
         _risk.SelectedIndex = 0;
         _risk.SelectedIndexChanged += (_, _) => Draw();
         _search.Dock = DockStyle.Fill;
-        _search.PlaceholderText = "Search group, OU, policy, setting, value...";
+        _search.PlaceholderText = UiLocale.Display("Search group, OU, policy, setting, value...");
+        _search.RightToLeft = RightToLeft.No;
         _search.TextChanged += (_, _) => Draw();
         filters.Controls.Add(_risk, 0, 0);
         filters.Controls.Add(_search, 1, 0);
@@ -115,6 +117,7 @@ internal sealed class GroupConflictReportDialog : Form
         _grid.SelectionChanged += (_, _) => ShowDetails();
         root.Controls.Add(_grid, 0, 1);
 
+        _details.RightToLeft = RightToLeft.No; // raw AD and policy evidence
         _details.Dock = DockStyle.Fill;
         _details.ReadOnly = true;
         _details.Multiline = true;
@@ -153,7 +156,9 @@ internal sealed class GroupConflictReportDialog : Form
     }
 
     private static Button MakeButton(string label, int width) => new() {
-        Text = label, Width = width, Height = 40,
+        Text = UiLocale.Display(label), Width = width, Height = 40,
+        AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
+        MinimumSize = new Size(width, 40),
         FlatStyle = FlatStyle.Flat, BackColor = UiStyle.Surface,
         Margin = new Padding(4, 4, 0, 4)
     };
@@ -192,9 +197,10 @@ internal sealed class GroupConflictReportDialog : Form
         }
         ShowDetails();
         _status.Text = _visible.Count + "/" + _all.Length +
-            " findings | " + _targets.Count + " GPO targets | " +
-            _targets.Sum(x => x.HighRisk) + " high-risk | " +
-            _targets.Sum(x => x.Warnings) + " warnings | NOT RSoP";
+            UiLocale.Display(" findings | ") + _targets.Count +
+            UiLocale.Display(" GPO targets | ") +
+            _targets.Sum(x => x.HighRisk) + UiLocale.Display(" high-risk | ") +
+            _targets.Sum(x => x.Warnings) + UiLocale.Display(" warnings | NOT RSoP");
     }
 
     private void ShowDetails()
