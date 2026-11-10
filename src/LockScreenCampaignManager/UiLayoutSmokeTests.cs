@@ -48,7 +48,7 @@ internal static class UiLayoutSmokeTests
             new[] { "Validate campaign", "Save project...",
                 "Skip saving & continue", "Save & Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(6),
-            new[] { "Open GPO Deployment Wizard...", "Finish offline", "Finish", "Back" }),
+            new[] { "Open GPO Deployment Wizard...", "Save project changes...", "Finish offline", "Finish", "Back" }),
         ("Agent Management - read-only desktop layout", () =>
             new GpoOperationsForm("example.com", "dc01.example.com",
                 "OU=Computers,DC=example,DC=com",
@@ -328,7 +328,7 @@ internal static class UiLayoutSmokeTests
                 catch (UnauthorizedAccessException) { }
             }
         };
-        if (page == 6)
+        if (page is 5 or 6)
         {
             var source = Descendants(wizard).OfType<ComboBox>()
                 .Single(x => x.Name == "CampaignWizardContentSource");
@@ -587,11 +587,14 @@ internal static class UiLayoutSmokeTests
 
     private static void CheckMainWizardStorage(Form form, string profile)
     {
-        if (!form.Text.Contains("Campaign Wizard", StringComparison.Ordinal) ||
-            !Descendants(form).OfType<Label>()
-                .Any(x => x.Text == "Deploy or finish offline"))
+        if (!form.Text.Contains("Campaign Wizard", StringComparison.Ordinal))
             return;
         var all = Descendants(form).ToArray();
+        bool isDeploy = all.OfType<Label>()
+            .Any(x => x.Text == "Deploy or finish offline");
+        bool isSave = all.OfType<Label>()
+            .Any(x => x.Text == "Save or skip saving");
+        if (!isDeploy && !isSave) return;
         var source = all.OfType<ComboBox>()
             .SingleOrDefault(x => x.Name == "CampaignWizardContentSource");
         var folder = all.OfType<TextBox>()
@@ -599,7 +602,8 @@ internal static class UiLayoutSmokeTests
         var browse = all.OfType<Button>()
             .SingleOrDefault(x => x.Name == "CampaignWizardContentShareBrowse");
         var field = all.OfType<TableLayoutPanel>()
-            .SingleOrDefault(x => x.Name == "CampaignWizardStorageOptions");
+            .SingleOrDefault(x => x.Name == (isSave
+                ? "CampaignWizardSaveStorageOptions" : "CampaignWizardStorageOptions"));
         var row = all.OfType<TableLayoutPanel>()
             .SingleOrDefault(x => x.Name == "CampaignWizardNetworkStorageRow");
         if (source is null || folder is null || browse is null ||
@@ -611,7 +615,7 @@ internal static class UiLayoutSmokeTests
                 "SMB network folder (UNC)", source.Font).Width + 22 ||
             field.RowStyles.Cast<RowStyle>().Any(x => x.SizeType != SizeType.AutoSize))
             throw new InvalidOperationException(
-                $"Main Wizard SYSVOL/SMB picker clipped or missing at {profile}.");
+                $"Main Wizard { (isSave ? "Save" : "Deploy") } SYSVOL/SMB picker clipped or missing at {profile}.");
         source.SelectedIndex = 1;
         folder.Text = @"\\files.example.com\Campaigns";
         form.PerformLayout();

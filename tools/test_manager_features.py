@@ -265,7 +265,14 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn("WizardScreenSaverSlideSeconds", wizard)
         self.assertIn("selected == CampaignTargetMode.ScreenSaver && !photo.Checked", wizard)
         self.assertIn('Action(actions, "Export JPG .scr pilot..."', save)
-        self.assertIn("gpoAction.Enabled = !photoPilotOnly", save)
+        # The storage selector is now shared between Save and Deploy pages.
+        # Require the pilot-only GPO block AND fail-closed SMB validation:
+        # it must not be enough to have a checkbox that LOOKS disabled.
+        self.assertIn("AddStorageSelector(options, 2, status, gpoAction, !photoPilotOnly)", save)
+        self.assertIn("gpoAction.Enabled = gpoActionAllowed && ValidSource()", save)
+        self.assertIn("if (gpoAction is not null)", save)
+        self.assertIn("Automatic user GPO delivery is not enabled.", save)
+        self.assertIn("CampaignPayloadLocation.ValidateRoot(_owner._project.ContentShareRoot)", save)
         self.assertIn("UseJpegSlideshow = _photo.Checked", assign)
         self.assertIn("PhotoJpegSaver.IsScrProcess", startup)
         self.assertLess(startup.index("PhotoJpegSaver.IsScrProcess"),

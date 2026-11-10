@@ -96,6 +96,8 @@ public sealed partial class MainForm
         private RadioButton? _deployChoice;
         private int _step;
         private bool _saved;
+        // A previously saved JSON project may become stale if deployment options change.
+        private bool _storageModifiedAfterSave;
         private bool _skipProjectSave;
         private bool _editingPage;
         private bool _everConfiguredSchedule;
@@ -1212,6 +1214,7 @@ public sealed partial class MainForm
                     {
                         _saved = true;
                         _skipProjectSave = false;
+                        _storageModifiedAfterSave = false;
                     }
                     RenderPage();
                 }
@@ -1278,12 +1281,143 @@ public sealed partial class MainForm
                 "settings remain in the editor; deployment exports its " +
                 "own campaign package."), 0, 2);
             body.Controls.Add(group);
+            var storage = new TableLayoutPanel
+            {
+                Name = "CampaignWizardSaveStorageOptions",
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1, RowCount = 4,
+                Padding = new Padding(12, 10, 12, 12)
+            };
+            for (int row = 0; row < 4; row++)
+                storage.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            AddStorageSelector(storage, 0, status);
+            body.Controls.Add(storage);
             FitCampaignName();
             status.Text = _saved
                 ? "Project saved. Continue to Deploy or finish offline."
                 : _skipProjectSave
                     ? "Local save skipped. Continue to Deploy without a project file."
                     : "Choose Save project or Skip saving & continue. Validation is required either way.";
+        }
+
+
+        // Shared between step 6 (Save) and step 7 (Deploy): the storage
+        // location must be chosen BEFORE the user saves a reusable JSON file.
+        private void AddStorageSelector(TableLayoutPanel host, int firstRow,
+            Label status, Button? gpoAction = null, bool gpoActionAllowed = true)
+        {
+            host.Controls.Add(new Label {
+                Text = "Campaign files — choose where the agent and images are stored",
+                Dock = DockStyle.Top, AutoSize = true, AutoEllipsis = false,
+                ForeColor = UiStyle.Navy,
+                Font = new Font("Segoe UI Semibold", 10.5f),
+                Margin = new Padding(4, 0, 4, 8)
+            }, 0, firstRow + 0);
+
+            var source = new ComboBox {
+                Name = "CampaignWizardContentSource",
+                Dock = DockStyle.Top,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(4, 3, 4, 12)
+            };
+            source.Items.AddRange(new object[] {
+                "SYSVOL (default)",
+                "SMB network folder (UNC)"
+            });
+            source.SelectedIndex = _owner._project.ContentSource ==
+                CampaignContentSource.SmbShare ? 1 : 0;
+            host.Controls.Add(source, 0, firstRow + 1);
+
+            var networkRow = new TableLayoutPanel {
+                Name = "CampaignWizardNetworkStorageRow",
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowOnly,
+                MinimumSize = new Size(490, 0),
+                ColumnCount = 2, RowCount = 1,
+                Margin = new Padding(4, 0, 4, 9)
+            };
+            networkRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            networkRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+            networkRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var networkPath = new TextBox {
+                Name = "CampaignWizardContentShareRoot",
+                Dock = DockStyle.Fill,
+                Text = _owner._project.ContentShareRoot,
+                PlaceholderText = @"\\files.example.com\Campaigns",
+                Margin = new Padding(0, 4, 8, 4)
+            };
+            var browse = new Button {
+                Name = "CampaignWizardContentShareBrowse",
+                Text = "Browse...",
+                Dock = DockStyle.Fill, AutoSize = true, Tag = "NoIcon",
+                AutoEllipsis = false,
+                Margin = new Padding(3, 1, 0, 1)
+            };
+            networkRow.Controls.Add(networkPath, 0, 0);
+            networkRow.Controls.Add(browse, 1, 0);
+            host.Controls.Add(networkRow, 0, firstRow + 2);
+            var detail = new Label {
+                Name = "CampaignWizardContentSourceHint",
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoEllipsis = false, ForeColor = UiStyle.Muted,
+                Margin = new Padding(4, 2, 4, 5)
+            };
+            host.Controls.Add(detail, 0, firstRow + 3);
+
+            bool ValidSource()
+            {
+                if (source.SelectedIndex != 1) return true;
+                try {
+                    _ = CampaignPayloadLocation.ValidateRoot(networkPath.Text);
+                    return true;
+                }
+                catch (CampaignValidationException) { return false; }
+            }
+            void RefreshStorage()
+            {
+                bool smb = source.SelectedIndex == 1;
+                networkPath.Enabled = smb;
+                browse.Enabled = smb;
+                networkRow.Visible = smb;
+                if (gpoAction is not null)
+                    gpoAction.Enabled = gpoActionAllowed && ValidSource();
+                detail.Text = smb
+                    ? ValidSource()
+                        ? "The GPO remains in SYSVOL. Test PC accounts require READ on both the SMB share and NTFS."
+                        : @"Enter an existing dedicated UNC folder: \\server\share\folder (not a mapped drive)."
+                    : "GPO and immutable campaign files use the existing SYSVOL location.";
+            }
+            void MarkStorageChanged()
+            {
+                _owner._project.ContentSource = source.SelectedIndex == 1
+                    ? CampaignContentSource.SmbShare : CampaignContentSource.Sysvol;
+                _owner._project.ContentShareRoot = networkPath.Text.Trim();
+                _owner._projectDirty = true;
+                _storageModifiedAfterSave |= _saved;
+                _saved = false;
+                RefreshStorage();
+                status.Text = _storageModifiedAfterSave
+                    ? "Unsaved storage changes. Save project changes before finishing if you need the JSON file up to date."
+                    : "Storage changed. The new choice is stored in the editor; save the project to keep it on disk.";
+            }
+            source.SelectedIndexChanged += (_, _) => MarkStorageChanged();
+            networkPath.TextChanged += (_, _) => MarkStorageChanged();
+            browse.Click += (_, _) => {
+                using var pick = new FolderBrowserDialog {
+                    Description = "Choose an existing dedicated SMB UNC folder (computer accounts require READ)",
+                    ShowNewFolderButton = false
+                };
+                if (pick.ShowDialog(this) != DialogResult.OK) return;
+                try {
+                    networkPath.Text = CampaignPayloadLocation.ValidateRoot(pick.SelectedPath);
+                } catch (CampaignValidationException ex) {
+                    MessageBox.Show(this, ex.Message, "SMB content folder",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+
+            RefreshStorage();
         }
 
         private void RenderDeploy(FlowLayoutPanel actions, Panel body, Label status)
@@ -1295,11 +1429,29 @@ public sealed partial class MainForm
                 _deployChoice!.Checked = true;
                 Deploy();
             }, 290, true);
-            Action(actions, "Finish offline", () =>
+            Action(actions, "Save project changes...", () =>
             {
-                DialogResult = DialogResult.OK;
-                Close();
-            }, 175);
+                try
+                {
+                    _owner.ReadControls();
+                    CampaignSchedule.Validate(_owner._project, requireImages: true);
+                    if (_owner.TrySaveProject())
+                    {
+                        _saved = true;
+                        _skipProjectSave = false;
+                        _storageModifiedAfterSave = false;
+                        RenderPage();
+                    }
+                }
+                catch (Exception ex) when (ex is CampaignValidationException
+                    or FileNotFoundException)
+                {
+                    MessageBox.Show(this, ex.Message, "Save campaign",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (Exception ex) { UiErrorDialog.Show(this, "Save campaign", ex); }
+            }, 215);
+            Action(actions, "Finish offline", () => FinishOffline(), 175);
 
             // Source selection belongs to the main, seven-step Wizard.
             // The AD deployment sub-wizard will receive exactly this choice,
@@ -1342,115 +1494,11 @@ public sealed partial class MainForm
             options.Controls.Add(_deployChoice, 0, 0);
             options.Controls.Add(offline, 0, 1);
 
-            options.Controls.Add(new Label {
-                Text = "Campaign files — choose where the agent and images are stored",
-                Dock = DockStyle.Top, AutoSize = true, AutoEllipsis = false,
-                ForeColor = UiStyle.Navy,
-                Font = new Font("Segoe UI Semibold", 10.5f),
-                Margin = new Padding(4, 0, 4, 8)
-            }, 0, 2);
-
-            var source = new ComboBox {
-                Name = "CampaignWizardContentSource",
-                Dock = DockStyle.Top,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Margin = new Padding(4, 3, 4, 12)
-            };
-            source.Items.AddRange(new object[] {
-                "SYSVOL (default)",
-                "SMB network folder (UNC)"
-            });
-            source.SelectedIndex = _owner._project.ContentSource ==
-                CampaignContentSource.SmbShare ? 1 : 0;
-            options.Controls.Add(source, 0, 3);
-
-            var networkRow = new TableLayoutPanel {
-                Name = "CampaignWizardNetworkStorageRow",
-                Dock = DockStyle.Top, AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowOnly,
-                MinimumSize = new Size(490, 0),
-                ColumnCount = 2, RowCount = 1,
-                Margin = new Padding(4, 0, 4, 9)
-            };
-            networkRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            networkRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-            networkRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var networkPath = new TextBox {
-                Name = "CampaignWizardContentShareRoot",
-                Dock = DockStyle.Fill,
-                Text = _owner._project.ContentShareRoot,
-                PlaceholderText = @"\\files.example.com\Campaigns",
-                Margin = new Padding(0, 4, 8, 4)
-            };
-            var browse = new Button {
-                Name = "CampaignWizardContentShareBrowse",
-                Text = "Browse...",
-                Dock = DockStyle.Fill, AutoSize = true, Tag = "NoIcon",
-                AutoEllipsis = false,
-                Margin = new Padding(3, 1, 0, 1)
-            };
-            networkRow.Controls.Add(networkPath, 0, 0);
-            networkRow.Controls.Add(browse, 1, 0);
-            options.Controls.Add(networkRow, 0, 4);
-            var detail = new Label {
-                Name = "CampaignWizardContentSourceHint",
-                Dock = DockStyle.Top, AutoSize = true,
-                AutoEllipsis = false, ForeColor = UiStyle.Muted,
-                Margin = new Padding(4, 2, 4, 5)
-            };
-            options.Controls.Add(detail, 0, 5);
-
-            bool ValidSource()
-            {
-                if (source.SelectedIndex != 1) return true;
-                try {
-                    _ = CampaignPayloadLocation.ValidateRoot(networkPath.Text);
-                    return true;
-                }
-                catch (CampaignValidationException) { return false; }
-            }
-            void RefreshStorage()
-            {
-                bool smb = source.SelectedIndex == 1;
-                networkPath.Enabled = smb;
-                browse.Enabled = smb;
-                networkRow.Visible = smb;
-                gpoAction.Enabled = !photoPilotOnly && ValidSource();
-                detail.Text = smb
-                    ? ValidSource()
-                        ? "The GPO remains in SYSVOL. Test PC accounts require READ on both the SMB share and NTFS."
-                        : @"Enter an existing dedicated UNC folder: \\server\share\folder (not a mapped drive)."
-                    : "GPO and immutable campaign files use the existing SYSVOL location.";
-            }
-            void MarkStorageChanged()
-            {
-                _owner._project.ContentSource = source.SelectedIndex == 1
-                    ? CampaignContentSource.SmbShare : CampaignContentSource.Sysvol;
-                _owner._project.ContentShareRoot = networkPath.Text.Trim();
-                _owner._projectDirty = true;
-                _saved = false;
-                RefreshStorage();
-                status.Text = "Storage changed in the campaign editor. Save the project again if you need it on disk.";
-            }
-            source.SelectedIndexChanged += (_, _) => MarkStorageChanged();
-            networkPath.TextChanged += (_, _) => MarkStorageChanged();
-            browse.Click += (_, _) => {
-                using var pick = new FolderBrowserDialog {
-                    Description = "Choose an existing dedicated SMB UNC folder (computer accounts require READ)",
-                    ShowNewFolderButton = false
-                };
-                if (pick.ShowDialog(this) != DialogResult.OK) return;
-                try {
-                    networkPath.Text = CampaignPayloadLocation.ValidateRoot(pick.SelectedPath);
-                } catch (CampaignValidationException ex) {
-                    MessageBox.Show(this, ex.Message, "SMB content folder",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            };
-
+            AddStorageSelector(options, 2, status, gpoAction, !photoPilotOnly);
             body.Controls.Add(options);
-            RefreshStorage();
-            status.Text = photoPilotOnly
+            status.Text = _storageModifiedAfterSave
+                ? "The saved project still has an older storage path. Choose Save project changes to update it."
+                : photoPilotOnly
                 ? "JPG Screen Saver: export and test the .scr package locally. " +
                   "AD deployment is blocked until group/photo delivery is pilot-verified."
                 : _skipProjectSave && !_saved
@@ -1458,6 +1506,26 @@ public sealed partial class MainForm
                 : _owner.AdReady
                     ? "AD connected: select storage and deployment or finish without AD changes."
                     : "Offline: select storage now; connect to AD in the deployment wizard if needed.";
+        }
+
+        private bool ConfirmSavedProjectIsOutdated()
+        {
+            if (!_storageModifiedAfterSave) return true;
+            return MessageBox.Show(this,
+                "You saved this project before changing its storage location.\r\n\r\n" +
+                "The saved .json file still contains the earlier SYSVOL/SMB choice.\r\n" +
+                "Choose 'Save project changes...' to update your file.\r\n\r\n" +
+                "Continue without updating the saved project?",
+                "Unsaved campaign storage changes", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+                == DialogResult.Yes;
+        }
+
+        private void FinishOffline()
+        {
+            if (!ConfirmSavedProjectIsOutdated()) return;
+            DialogResult = DialogResult.OK;
+            Close();
         }
 
         private void Deploy()
@@ -1482,12 +1550,22 @@ public sealed partial class MainForm
                     MessageBoxIcon.Warning);
                 return;
             }
+            if (!ConfirmSavedProjectIsOutdated()) return;
             if (!_owner.AdReady)
             {
                 _owner.ConnectAndReadAd();
                 if (!_owner.AdReady) { RenderPage(); return; }
             }
+            var earlierSource = _owner._project.ContentSource;
+            var earlierShare = _owner._project.ContentShareRoot;
             _owner.OpenDomainDeployment();
+            if (earlierSource != _owner._project.ContentSource ||
+                !string.Equals(earlierShare, _owner._project.ContentShareRoot,
+                    StringComparison.Ordinal))
+            {
+                _storageModifiedAfterSave |= _saved;
+                _saved = false;
+            }
             RenderPage();
         }
 
@@ -1537,12 +1615,12 @@ public sealed partial class MainForm
                     {
                         if (!_owner.TrySaveProject()) return;
                         _saved = true;
+                        _storageModifiedAfterSave = false;
                     }
                     break;
                 case 6:
                     if (_deployChoice?.Checked == true) { Deploy(); return; }
-                    DialogResult = DialogResult.OK;
-                    Close();
+                    FinishOffline();
                     return;
             }
             // Screen Saver-only has no image selection, ordering or JPEG
