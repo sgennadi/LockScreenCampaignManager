@@ -48,6 +48,7 @@ internal sealed class RepairHistoryDialog : Form
         bar.Controls.Add(new Label {
             Text = "Source:", AutoSize = true, Margin = new Padding(2, 14, 6, 0)
         });
+        _source.Name = "RepairHistorySource";
         _source.DropDownStyle = ComboBoxStyle.DropDownList;
         _source.Width = 118;
         _source.Items.AddRange(["All", "User", "gMSA"]);
@@ -55,6 +56,7 @@ internal sealed class RepairHistoryDialog : Form
         _source.SelectedIndexChanged += (_, _) => RefreshRows();
         bar.Controls.Add(_source);
         _search.PlaceholderText = "Filter computer or action...";
+        _search.RightToLeft = RightToLeft.No;
         _search.Width = 260;
         _search.Margin = new Padding(15, 7, 8, 0);
         _search.Text = selectedComputer ?? "";
@@ -62,6 +64,7 @@ internal sealed class RepairHistoryDialog : Form
         bar.Controls.Add(_search);
         root.Controls.Add(bar, 0, 1);
 
+        _grid.Name = "RepairHistoryGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.MultiSelect = false;
