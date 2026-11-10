@@ -128,6 +128,21 @@ jobs:
           & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_effective_gpo.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Check SYSTEM SMB probe refuses non-SYSTEM CI execution
+        shell: powershell
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'lscm-canary-nonsystem.json'
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/smb_system_canary_probe.ps1 -ConfigPath (Join-Path $env:RUNNER_TEMP 'missing-probe-config.json') -ReportPath $report
+          if ($LASTEXITCODE -eq 0) { throw 'SMB SYSTEM probe accepted an unprivileged CI session.' }
+          if (-not (Test-Path -LiteralPath $report -PathType Leaf)) { throw 'SMB probe must write a local sanitized denial.' }
+          $evidence = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+          if ($evidence.result -ne 'FAIL_CLOSED' -or $evidence.localSystem -or
+              @($evidence.findings) -notcontains 'NOT_LOCAL_SYSTEM') {
+            throw 'SMB canary non-SYSTEM denial is invalid.'
+          }
+          Remove-Item -LiteralPath $report -Force
+          Write-Host 'PASS: SYSTEM-only canary refuses hosted Windows non-SYSTEM user.'
+
       - name: Verify client integrity and recovery functions
         shell: pwsh
         run: |
