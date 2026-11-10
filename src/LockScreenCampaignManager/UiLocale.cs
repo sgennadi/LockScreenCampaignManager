@@ -18,8 +18,13 @@ internal static partial class UiLocale
 
     private static readonly ConditionalWeakTable<ComboBox, ComboLanguage> ComboLanguages = new();
     // Header text is UI only. Preserve original column names and row values.
-    private sealed class ColumnHeaderSource { internal readonly string Caption;
-        internal ColumnHeaderSource(string caption) => Caption = caption; }
+    private sealed class ColumnHeaderSource
+    {
+        internal string Caption;
+        internal string LastApplied;
+        internal ColumnHeaderSource(string caption)
+        { Caption = caption; LastApplied = caption; }
+    }
     private static readonly ConditionalWeakTable<DataGridViewColumn, ColumnHeaderSource> Headers = new();
     // Save each control's ORIGINAL caption, so in-place switching among three
     // languages does not confuse similar translated labels or command values.
@@ -319,7 +324,11 @@ internal static partial class UiLocale
                 {
                     var header = Headers.GetValue(column,
                         key => new ColumnHeaderSource(key.HeaderText));
+                    if (!string.Equals(column.HeaderText, header.LastApplied,
+                        StringComparison.Ordinal))
+                        header.Caption = Translate(column.HeaderText, "English");
                     column.HeaderText = Translate(header.Caption, language);
+                    header.LastApplied = column.HeaderText;
                 }
             }
             if (child is Label technicalLabel && technicalLabel.Name is
