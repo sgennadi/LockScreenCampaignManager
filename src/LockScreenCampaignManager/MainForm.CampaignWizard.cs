@@ -1367,7 +1367,8 @@ public sealed partial class MainForm
             var networkRow = new TableLayoutPanel {
                 Name = "CampaignWizardNetworkStorageRow",
                 Dock = DockStyle.Top, AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoSizeMode = AutoSizeMode.GrowOnly,
+                MinimumSize = new Size(490, 0),
                 ColumnCount = 2, RowCount = 1,
                 Margin = new Padding(4, 0, 4, 9)
             };
