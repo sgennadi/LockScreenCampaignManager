@@ -1,3 +1,10 @@
+## 0.4.0-preview.90 — Initial Hebrew/RTL UI and local lab evidence reader (2026-11-10)
+
+- Add **English / עברית (Hebrew)** to Interface settings (saved to existing per-user UI preferences JSON) and apply a central Hebrew dictionary to primary navigation, buttons, wizard actions, updater, GPO operations, and new evidence viewer. Enable right-to-left form layout for Hebrew while preserving LTR technical data, UNC paths, GUIDs, hash/JSON and troubleshooting logs. Dynamic/non-dictionary text intentionally remains English until fully localized.
+- Revise Interface settings as a high-DPI scrollable panel, preserving density, UI scale and font scale selections. Verify Hebrew/English switching at 100–200% simulated scale without saving CI preferences.
+- Add a **local-only, read-only Lab evidence** pane to main Tools and GPO Operations; import existing `lscm-smb-system-canary/v1` or `lscm-endpoint-closure/v1` JSON reports individually with max 256KB file size, strict schemas, timestamp/boolean checks, unknown result rejection, 24h stale indicator and explicit unsigned evidence disclaimer. Do not read AD, connect SMB, execute clients or upload reports.
+- Strict import tests reject success-result contradictions, future timestamps, private/raw finding text and unsupported schemas. No claim that on-screen display or remote device status is verified. Existing JPG Photo Screen Saver User GPO is still blocked pending live acceptance.
+
 ## 0.4.0-preview.89 — Clear SMB permissions evidence in GPO Preview (2026-11-10)
 
 - For SMB content, omit unrelated Smart SYSVOL duplicate-image audit; preserve it for SYSVOL content and label the storage comparison accordingly.
