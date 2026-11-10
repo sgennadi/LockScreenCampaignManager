@@ -25,7 +25,8 @@ internal static class NativeGpoDeploymentPlan
     private static readonly Regex Digest = new(@"^[0-9a-fA-F]{64}$",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private sealed record VerifiedPackage(string Id, int Count, long Bytes,
-        CampaignClientType ClientType);
+        CampaignClientType ClientType, string ManifestSha256,
+        string AgentSha256, bool AgentHashPinned);
     internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
     {
         if (!OperatingSystem.IsWindows())
@@ -96,6 +97,9 @@ internal static class NativeGpoDeploymentPlan
             int memberCount = CountDirectMembers(group);
 
             VerifiedPackage package = ValidatePackage(localPackage);
+            if (contentSource == CampaignContentSource.SmbShare && !package.AgentHashPinned)
+                throw new InvalidDataException(
+                    "SMB campaign requires an immutable pinned agent SHA-256 in the manifest.");
             if (package.ClientType != requestedClient)
                 throw new InvalidDataException("Selected client does not match the immutable campaign package.");
             string dfsSource = @"\\" + domain + @"\SYSVOL\" + domain +
@@ -141,6 +145,8 @@ internal static class NativeGpoDeploymentPlan
                     groupSam, directGroupMembers = memberCount,
                     gpoName, campaignId = package.Id,
                     imageCount = package.Count, imageBytes = package.Bytes,
+                    manifestSha256 = package.ManifestSha256,
+                    agentSha256 = package.AgentSha256,
                     // sysvolOnDc is retained for the original SYSVOL path only.
                     sysvolOnDc = contentSource == CampaignContentSource.Sysvol ? dcCampaign : "",
                     packageStoragePath = dcCampaign,
@@ -259,7 +265,7 @@ internal static class NativeGpoDeploymentPlan
         VerifyDirectory(packagePath);
         VerifyDirectory(Path.Combine(packagePath, "images"));
         string jsonPath = Path.Combine(packagePath, "campaign.json");
-        _ = VerifyFile(jsonPath, 1_048_576);
+        var manifestInfo = VerifyFile(jsonPath, 1_048_576);
         using var doc = JsonDocument.Parse(File.ReadAllBytes(jsonPath),
             new JsonDocumentOptions { MaxDepth = 12 });
         var cfg = doc.RootElement;
@@ -313,7 +319,21 @@ internal static class NativeGpoDeploymentPlan
                 throw new InvalidDataException("Campaign image SHA-256 differs from manifest.");
             imageBytes = checked(imageBytes + file.Bytes);
         }
-        return new VerifiedPackage(id, slides.GetArrayLength(), imageBytes, clientType);
+        return new VerifiedPackage(id, slides.GetArrayLength(), imageBytes, clientType,
+            manifestInfo.Hash, agentInfo.Hash,
+            cfg.TryGetProperty("agentSha256", out var pinned) &&
+            pinned.ValueKind == JsonValueKind.String &&
+            agentInfo.Hash.Equals(pinned.GetString(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Apply checks the staged share files a second time before GPO linking.
+    internal static (string Id, string ManifestSha256, string AgentSha256)
+        VerifyImmutablePackageForTest(string path)
+    {
+        var verified = ValidatePackage(path);
+        if (!verified.AgentHashPinned)
+            throw new InvalidDataException("Campaign has no pinned agent hash.");
+        return (verified.Id, verified.ManifestSha256, verified.AgentSha256);
     }
 
     // Offline CI can verify the same package validation without LDAP,
