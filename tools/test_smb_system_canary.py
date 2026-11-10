@@ -51,11 +51,13 @@ class SmbSystemCanaryContracts(unittest.TestCase):
             self.assertIn(part, PROBE)
         for forbidden in ("Set-ItemProperty", "New-ItemProperty",
                           "Remove-ItemProperty", "Set-Acl", "Copy-Item",
-                          "Remove-Item", "Start-Process", "Invoke-Expression",
+                          "Start-Process", "Invoke-Expression",
                           "Invoke-Command", "New-GPO", "Set-GPRegistryValue",
                           "Register-ScheduledTask", "net use",
                           "Invoke-WebRequest", "Invoke-RestMethod"):
             self.assertNotIn(forbidden, PROBE)
+        self.assertIn("Remove-Item -LiteralPath $rsopTemp", PROBE)
+        self.assertIn("rsop-\u0027+[Guid]::NewGuid()", PROBE)
         self.assertNotIn("Exception.ToString()", PROBE)
         self.assertNotIn("error=$_.Exception.Message", PROBE)
         self.assertNotIn("sourcePath=$", PROBE)
