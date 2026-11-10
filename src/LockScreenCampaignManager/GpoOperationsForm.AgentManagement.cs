@@ -31,12 +31,14 @@ internal sealed partial class GpoOperationsForm
 
     private void SetupAgentManagement(FlowLayoutPanel toolbar)
     {
-        _agentSearch.PlaceholderText = "Filter computer or SAM...";
+        _agentSearch.PlaceholderText = UiLocale.Display("Filter computer or SAM...");
+        _agentSearch.RightToLeft = RightToLeft.No;
         _agentSearch.Width = 192;
         _agentSearch.Margin = new Padding(5, 7, 7, 3);
         _agentSearch.TextChanged += (_, _) => DrawAgentInventory();
         toolbar.Controls.Add(_agentSearch);
 
+        _agentActivityFilter.Name = "AgentActivityFilter";
         _agentActivityFilter.DropDownStyle = ComboBoxStyle.DropDownList;
         _agentActivityFilter.Width = 189;
         _agentActivityFilter.Items.AddRange(new object[] {
@@ -136,7 +138,8 @@ internal sealed partial class GpoOperationsForm
         _agentSelectedDetails.ScrollBars = ScrollBars.Vertical;
         _agentSelectedDetails.BackColor = UiStyle.Surface;
         _agentSelectedDetails.Font = new Font("Segoe UI", 9f);
-        _agentSelectedDetails.Text = "Select a verified computer to see RPC hints, client-reported health and latest command outcome.";
+        _agentSelectedDetails.Text = UiLocale.Display(
+            "Select a verified computer to see RPC hints, client-reported health and latest command outcome.");
         panel.Controls.Add(_agentSelectedDetails, 0, 4);
         return panel;
     }
@@ -222,8 +225,9 @@ internal sealed partial class GpoOperationsForm
         finally { _computers.EndUpdate(); }
         InvalidatePlans();
         _status.Text = count == 0
-            ? "No RPC-reachable computer in the visible list. Check reachability or clear the filter."
-            : "Selected " + count + " RPC-reachable AD computers. Preview and confirm any remote action.";
+            ? UiLocale.Display("No RPC-reachable computer in the visible list. Check reachability or clear the filter.")
+            : UiLocale.Display("Selected ") + count +
+                UiLocale.Display(" RPC-reachable AD computers. Preview and confirm any remote action.");
     }
 
     private PcRow[] ProbeCandidates()
