@@ -312,7 +312,7 @@ public sealed partial class MainForm
             // An unavailable API is NOT the same as an up-to-date install.
             _updateAvailable.Visible = true;
             _updateAvailable.Text = version is not null
-                ? "Update " + version : _owner.UpdateNoticeCaption;
+                ? T("Update ") + version : T(_owner.UpdateNoticeCaption);
             if (_owner.UpdateNoticeWarning)
             {
                 _updateAvailable.Tag = "UpdateNotice";
@@ -604,7 +604,7 @@ public sealed partial class MainForm
                     !NeedsLockImages ? "Screen Saver: images not needed" :
                     _step >= 5 && _skipProjectSave && !_saved
                         ? "Local project not saved"
-                        : _owner._project.ImagePaths.Count + " image(s) selected");
+                        : _owner._project.ImagePaths.Count + T(" image(s) selected"));
                 _host.ResumeLayout(true);
                 UiStyle.Apply(this);
                 FitWizardPageText(page, imagePage);
@@ -1022,8 +1022,8 @@ public sealed partial class MainForm
                         id, DateTimeOffset.UtcNow);
                     _everConfiguredSchedule = true;
                     _saved = false;
-                    status.Text = "Selected time zone: " + id +
-                        ". Check image times and continue to Save.";
+                    status.Text = T("Selected time zone: ") + id +
+                        T(". Check image times and continue to Save.");
                 }
                 catch (Exception ex)
                 {
@@ -1064,8 +1064,8 @@ public sealed partial class MainForm
             schedule.Controls.Add(list, 0, 4);
             body.AutoScroll = true;
             body.Controls.Add(schedule);
-            status.Text = "Time zone: " + _owner._project.TimeZoneId +
-                (_everConfiguredSchedule || _owner._wizardScheduleConfigured
+            status.Text = T("Time zone: ") + _owner._project.TimeZoneId +
+                T(_everConfiguredSchedule || _owner._wizardScheduleConfigured
                     ? " | Schedule edited. Continue to Save."
                     : " | Select a time zone and review scheduled changes.");
         }
