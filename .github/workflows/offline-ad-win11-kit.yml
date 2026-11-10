@@ -32,10 +32,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_smb_campaign_source.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_smb_system_canary.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $scripts = @(
             'tools/run_lab_local.ps1',
             'tools/lab_ad_integration.ps1',
             'tools/lab_win11_probe.ps1',
+            'tools/run_smb_canary_local.ps1',
+            'tools/smb_system_canary_probe.ps1',
             'src/LockScreenCampaignManager/Assets/LockScreen-Agent.ps1',
             'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
             'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
@@ -72,7 +76,9 @@ jobs:
           Copy-Item 'tools/lab.config.sample.json' (Join-Path $root 'lab.config.sample.json')
           Copy-Item 'tools/Run-Preflight.cmd','tools/Run-Full-Lab.cmd' $root
           Copy-Item 'docs/OFFLINE-AD-WIN11-LAB.md' (Join-Path $root 'README.md')
-          foreach ($name in @('run_lab_local.ps1','lab_ad_integration.ps1','lab_win11_probe.ps1')) {
+          Copy-Item 'docs/SMB-SYSTEM-CANARY.md' (Join-Path $root 'SMB-SYSTEM-CANARY.md')
+          foreach ($name in @('run_lab_local.ps1','lab_ad_integration.ps1','lab_win11_probe.ps1',
+              'run_smb_canary_local.ps1','smb_system_canary_probe.ps1')) {
             Copy-Item ("tools/"+$name) $tools
           }
           foreach ($name in @('LockScreen-Agent.ps1','GPO-Deploy.ps1',
@@ -89,9 +95,10 @@ jobs:
           Compress-Archive -Path "$root/*" -DestinationPath $zip
           $verify = Join-Path $env:RUNNER_TEMP 'LSCM-kit-verify'
           Expand-Archive -LiteralPath $zip -DestinationPath $verify
-          foreach ($path in @('README.md','Run-Preflight.cmd','Run-Full-Lab.cmd',
+          foreach ($path in @('README.md','SMB-SYSTEM-CANARY.md','Run-Preflight.cmd','Run-Full-Lab.cmd',
               'lab.config.sample.json','tools/run_lab_local.ps1',
               'tools/lab_ad_integration.ps1','tools/lab_win11_probe.ps1',
+              'tools/run_smb_canary_local.ps1','tools/smb_system_canary_probe.ps1',
               'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
               'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
               'src/LockScreenCampaignManager/Assets/Gpo-ConflictScan.ps1',
