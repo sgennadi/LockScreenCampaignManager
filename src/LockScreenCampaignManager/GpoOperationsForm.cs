@@ -97,8 +97,8 @@ internal sealed partial class GpoOperationsForm : Form
             if (!_busy) return;
             e.Cancel = true;
             MessageBox.Show(this,
-                "An AD or remote PC operation is still running. Check its result before closing.",
-                "GPO Operations", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                UiLocale.Display("An AD or remote PC operation is still running. Check its result before closing."),
+                UiLocale.Display("GPO Operations"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
         FormClosed += (_, _) => { CloseDeferred(); StopAgentManagement(); RemoveTempPackage(); };
         // Centralized UI font/DPI and Windows 11 styling; same tokens as the main window.
