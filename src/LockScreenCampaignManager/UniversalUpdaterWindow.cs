@@ -106,15 +106,19 @@ internal sealed class UniversalUpdaterWindow : Form
         bannerSubtitle.FontChanged += (_, _) => FitUpdatesHeader();
 
         var config = new TableLayoutPanel {
+            Name = "UpdaterConfiguration",
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
             BackColor = UiStyle.Surface, Padding = new Padding(15, 12, 15, 9),
             Margin = new Padding(0, 8, 0, 6)
         };
         config.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         config.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        config.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        config.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        // Absolute measured rows, rather than 50/50: at 200% a 24px label
+        // plus the native ComboBox cannot fit in half of the old 154px area.
+        config.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+        config.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
 
+        _channel.Name = "UpdaterReleaseChannel";
         _channel.DropDownStyle = ComboBoxStyle.DropDownList;
         _channel.Items.AddRange(new object[] { "Preview + stable", "Stable only" });
         _channel.SelectedIndex = 0;
@@ -153,6 +157,52 @@ internal sealed class UniversalUpdaterWindow : Form
             ReadOnly = true, TabStop = false
         }), 1, 1);
         layout.Controls.Add(config, 0, 1);
+        void FitUpdateFields()
+        {
+            if (config.IsDisposed || layout.IsDisposed) return;
+            int total = 0;
+            config.SuspendLayout();
+            try
+            {
+                for (int row = 0; row < 2; row++)
+                {
+                    int minimum = 0;
+                    for (int col = 0; col < 2; col++)
+                    {
+                        if (config.GetControlFromPosition(col, row) is not TableLayoutPanel field)
+                            continue;
+                        if (field.GetControlFromPosition(0, 0) is not Label label ||
+                            field.GetControlFromPosition(0, 1) is not Control editor)
+                            continue;
+                        int captionHeight = TextRenderer.MeasureText("Agpqy", label.Font,
+                            new Size(4096, 4096),
+                            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height +
+                            label.Padding.Vertical + label.Margin.Vertical + 9;
+                        int nativeHeight = editor switch
+                        {
+                            ComboBox picker => picker.PreferredHeight,
+                            TextBox input => input.PreferredSize.Height,
+                            _ => editor.PreferredSize.Height
+                        };
+                        int editorHeight = nativeHeight + editor.Margin.Vertical + 10;
+                        field.RowStyles[0].SizeType = SizeType.Absolute;
+                        field.RowStyles[0].Height = captionHeight;
+                        field.RowStyles[1].SizeType = SizeType.Absolute;
+                        field.RowStyles[1].Height = editorHeight;
+                        minimum = Math.Max(minimum, captionHeight + editorHeight +
+                            field.Padding.Vertical + field.Margin.Vertical + 5);
+                    }
+                    minimum = Math.Max(70, minimum);
+                    config.RowStyles[row].SizeType = SizeType.Absolute;
+                    config.RowStyles[row].Height = minimum;
+                    total += minimum;
+                }
+                layout.RowStyles[1].SizeType = SizeType.Absolute;
+                layout.RowStyles[1].Height = total + config.Padding.Vertical +
+                    config.Margin.Vertical + 8;
+            }
+            finally { config.ResumeLayout(true); }
+        }
 
         var resultArea = new TableLayoutPanel {
             Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1,
@@ -257,10 +307,18 @@ internal sealed class UniversalUpdaterWindow : Form
         FormClosed += (_, _) => _sessionToken.Clear();
         UiStyle.Apply(this);
         FitUpdatesHeader();
+        FitUpdateFields();
+        _channel.FontChanged += (_, _) => FitUpdateFields();
+        _sessionToken.FontChanged += (_, _) => FitUpdateFields();
+        Shown += (_, _) => FitUpdateFields();
         DpiChanged += (_, _) =>
         {
             if (IsHandleCreated && !IsDisposed)
-                BeginInvoke(new Action(FitUpdatesHeader));
+                BeginInvoke(new Action(() =>
+                {
+                    FitUpdatesHeader();
+                    FitUpdateFields();
+                }));
         };
         UiWindowPlacement.Attach(this, "updater");
         if (checkOnOpen)
@@ -277,11 +335,11 @@ internal sealed class UniversalUpdaterWindow : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
             Margin = new Padding(4, 1, 12, 3)
         };
-        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        holder.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         holder.Controls.Add(new Label {
             Text = caption, Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
-            AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft
+            AutoEllipsis = false, TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         control.Dock = DockStyle.Fill;
         control.Margin = new Padding(0, 1, 0, 1);
