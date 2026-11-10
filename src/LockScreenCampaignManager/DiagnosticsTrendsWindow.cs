@@ -51,7 +51,8 @@ internal sealed class DiagnosticsTrendsWindow : Form
         tools.Controls.Add(new Label {
             Text = "Filter:", AutoSize = true, Margin = new Padding(0, 12, 8, 0)
         });
-        _filter.PlaceholderText = "Component, error type, code...";
+        _filter.PlaceholderText = UiLocale.Display("Component, error type, code...");
+        _filter.RightToLeft = RightToLeft.No;
         _filter.Width = 290;
         _filter.TextChanged += (_, _) => ShowRows();
         tools.Controls.Add(_filter);
@@ -62,6 +63,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
         });
         layout.Controls.Add(tools, 0, 1);
 
+        _grid.Name = "DiagnosticsTrendsGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.MultiSelect = false;
@@ -97,6 +99,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
         _grid.SelectionChanged += (_, _) => ShowDetails();
         layout.Controls.Add(_grid, 0, 2);
 
+        _detail.RightToLeft = RightToLeft.No; // Preserve fingerprint and code direction
         _detail.Dock = DockStyle.Fill;
         _detail.Multiline = true;
         _detail.ReadOnly = true;
@@ -126,10 +129,13 @@ internal sealed class DiagnosticsTrendsWindow : Form
 
     private static void Configure(Button b, string text, int width)
     {
-        b.Text = text;
+        b.Text = UiLocale.Display(text);
         b.Width = width;
         b.Height = 37;
-        b.AutoEllipsis = true;
+        b.MinimumSize = new Size(width, 37);
+        b.AutoSize = true;
+        b.AutoSizeMode = AutoSizeMode.GrowOnly;
+        b.AutoEllipsis = false;
         b.Margin = new Padding(0, 4, 8, 4);
     }
 
@@ -138,7 +144,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
         if (_running || IsDisposed) return;
         _running = true;
         _refresh.Enabled = _export.Enabled = false;
-        _summary.Text = "Validating saved reports and counting repeated fingerprints...";
+        _summary.Text = UiLocale.Display("Validating saved reports and counting repeated fingerprints...");
         UseWaitCursor = true;
         try
         {
@@ -147,10 +153,12 @@ internal sealed class DiagnosticsTrendsWindow : Form
             if (IsDisposed) return;
             _snapshot = snap;
             _summary.Text =
-                $"Locally saved: {snap.ValidReports} validated reports | " +
-                $"Rejected / invalid: {snap.InvalidReports} | " +
-                $"Unique errors: {snap.Groups.Count}" + Environment.NewLine +
-                "Offline, operator-initiated analysis. Export omits summaries, paths, hostnames and report IDs.";
+                UiLocale.Display("Locally saved: ") + snap.ValidReports +
+                UiLocale.Display(" validated reports | ") +
+                UiLocale.Display("Rejected / invalid: ") + snap.InvalidReports +
+                UiLocale.Display(" | Unique errors: ") + snap.Groups.Count +
+                Environment.NewLine + UiLocale.Display(
+                    "Offline, operator-initiated analysis. Export omits summaries, paths, hostnames and report IDs.");
             ShowRows();
         }
         catch (Exception ex)
@@ -158,8 +166,8 @@ internal sealed class DiagnosticsTrendsWindow : Form
             if (IsDisposed) return;
             _snapshot = null;
             _grid.Rows.Clear();
-            _detail.Text = "No validated local analysis could be produced.";
-            _summary.Text = "Analysis failed: " +
+            _detail.Text = UiLocale.Display("No validated local analysis could be produced.");
+            _summary.Text = UiLocale.Display("Analysis failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 170);
             AppLog.Write(ex, "Local UniversalDiagnostics trends");
         }
@@ -205,7 +213,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
             _grid.CurrentCell = null;
         }
         finally { _grid.ResumeLayout(); }
-        _detail.Text = "Select one group. The exported file never includes raw error text.";
+        _detail.Text = UiLocale.Display("Select one group. The exported file never includes raw error text.");
     }
 
     private void ShowDetails()
@@ -229,7 +237,7 @@ internal sealed class DiagnosticsTrendsWindow : Form
     {
         if (_running || _snapshot is null) return;
         using var dialog = new SaveFileDialog {
-            Title = "Export sanitized local error trends",
+            Title = UiLocale.Display("Export sanitized local error trends"),
             Filter = "JSON (*.json)|*.json",
             FileName = "LSCM-Diagnostics-Trends-" +
                 DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json"
@@ -239,8 +247,8 @@ internal sealed class DiagnosticsTrendsWindow : Form
         {
             File.WriteAllText(dialog.FileName,
                 _snapshot.ExportSafeJson(), new UTF8Encoding(false));
-            _summary.Text = "Sanitized trends exported locally after explicit confirmation. " +
-                "Nothing was uploaded to GitHub.";
+            _summary.Text = UiLocale.Display(
+                "Sanitized trends exported locally after explicit confirmation. Nothing was uploaded to GitHub.");
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Export local diagnostic trends", ex); }
     }
