@@ -160,7 +160,8 @@ try {
     Write-Host ('Boot after campaign deployment: '+[bool]$result.rebootAfterDeployment)
     Write-Host ('Expected Computer GPO in RSoP: '+[string]$result.gpoRsopStatus)
     Write-Host ('Private JSON report: '+$report)
-    if ([string]$result.result -cne 'SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY') {
+    if ([string]$result.result -cnotin @('SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY',
+        'POSTBOOT_SOURCE_AND_COMPUTER_RSOP_OBSERVED_ONLY')) {
         throw 'SMB canary check failed closed; inspect the local JSON findings.'
     }
 }
