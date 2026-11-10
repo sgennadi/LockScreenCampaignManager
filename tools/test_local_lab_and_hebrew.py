@@ -201,5 +201,53 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             self.assertNotIn("UiLocale.Display(", read(protected))
 
 
+    def test_russian_three_language_display_contract(self):
+        preferences = read("UiStyle.cs")
+        options = read("UiSettingsDialog.cs")
+        locale = read("UiLocale.cs")
+        wizard = read("UiLocale.Wizard.cs")
+        russian = read("UiLocale.Russian.cs")
+        schedule_he = read("UiLocale.ScheduleAdvanced.cs")
+        schedule = read("CampaignScheduleDialog.cs")
+        layouts = read("UiLayoutSmokeTests.cs")
+        manager = read("GpoOperationsForm.cs")
+        for key in ('"English" or "Hebrew" or "Russian"',):
+            self.assertIn(key, preferences)
+        for label in ('"English", "עברית (Hebrew)", "Русский"',
+                      '2 => "Russian"', '"Russian" => 2'):
+            self.assertIn(label, options)
+        for token in ("EnglishByRussian.TryGetValue", "Russian.TryGetValue",
+                      "ScheduleAdvancedHebrew.TryGetValue",
+                      "ScheduleAdvancedEnglish.TryGetValue",
+                      "CaptionSource", "Caption = Translate(column.HeaderText",
+                      '"CampaignScheduleMode"', '"AssignmentTargetMode"'):
+            self.assertIn(token, locale)
+        self.assertIn('Prefix: "Шаг "', wizard)
+        self.assertIn("CheckRussianThreeLanguageScheduleAndAdvanced();", layouts)
+        self.assertIn('Name = "CampaignScheduleMode"', schedule)
+        self.assertIn('Name = "CampaignScheduleGrid"', schedule)
+        self.assertIn('UiLocale.Display("Scheduled images: ")', schedule)
+        self.assertIn('Name = "GpoLifecycleAction"', manager)
+        for source, minimum in ((russian, 650), (schedule_he, 140)):
+            keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', source, re.M)
+            self.assertGreaterEqual(len(keys), minimum)
+            self.assertEqual(len(keys), len(set(keys)))
+        for key in ("Campaign Schedule - Images and Dates",
+                    "Company Profiles — LockScreen Campaign Manager",
+                    "Campaign type", "Screen Saver (.scr)",
+                    "AD Connection Wizard", "Active Directory / GPO Deployment",
+                    "Client Health / Live", "GPO Operations", "Deferred Repair",
+                    "Error trends — LockScreen Campaign Manager"):
+            self.assertIn('["' + key + '"]', russian)
+        # User data and protocol keys MUST NOT be routed through UI localization.
+        for protected in ("CampaignModels.cs", "CampaignPayloadLocation.cs",
+                          "DomainPowerShellRunner.cs", "ClientFeedback.cs",
+                          "CampaignSchedule.cs"):
+            source = read(protected)
+            self.assertNotIn("UiLocale.Display(", source)
+            self.assertNotIn("UiLocale.Translate(", source)
+        self.assertIn('"Disable", "Enable", "Unlink", "Relink", "Reuse", "Delete"', manager)
+        self.assertIn('"Push", "Repair", "Cleanup", "Report"', manager)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
