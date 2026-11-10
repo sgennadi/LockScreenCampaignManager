@@ -77,13 +77,15 @@ internal sealed class ClientFeedbackPanel : UserControl
             _snapshot = null;
             _alertEngine.Reset();
             _grid.Rows.Clear();
-            _message.Text = "Campaign changed. Load its reports and refresh the AD computer list.";
+            _message.Text = UiLocale.Display("Campaign changed. Load its reports and refresh the AD computer list.");
         }
     }
 
     private static Button Action(string text, Action action, int width)
     {
-        var b = new Button { Text = text, Width = width, Height = 39,
+        var b = new Button { Text = UiLocale.Display(text), Width = width, Height = 39,
+            MinimumSize = new Size(width, 39), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(0, 5, 8, 6), BackColor = UiStyle.Surface,
             ForeColor = UiStyle.Foreground, FlatStyle = FlatStyle.Flat };
         b.Click += (_, _) => action();
@@ -101,6 +103,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         Controls.Add(layout);
         var config = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true };
         _root.Name = "ClientHealthSmbPath";
+        _root.RightToLeft = _campaignId.RightToLeft = RightToLeft.No;
         _root.Width = 430;
         _root.Height = 42;
         _root.Multiline = true;
@@ -140,6 +143,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         buttons.Controls.Add(Action("Final report", ExportFinalReport, 166));
         buttons.Controls.Add(Action("History", OpenHistory, 115));
         layout.Controls.Add(buttons, 0, 1);
+        _grid.Name = "ClientHealthGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
@@ -209,7 +213,7 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         if (_busy) return;
         _busy = true;
-        _message.Text = "Reading computer objects in OU and Security Group...";
+        _message.Text = UiLocale.Display("Reading computer objects in OU and Security Group...");
         try
         {
             var result = await Task.Run(() => DomainPowerShellRunner.Execute(
@@ -221,7 +225,8 @@ internal sealed class ClientFeedbackPanel : UserControl
             var hosts = data.EnumerateArray().Select(x => (x.GetProperty("name").GetString() ?? "").Split('.')[0])
                 .Where(FeedbackPath.IsValidHost).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             _expected = hosts;
-            _message.Text = $"Found {hosts.Count} computers in the OU + Security Group intersection.";
+            _message.Text = UiLocale.Display("Found ") + hosts.Count +
+                UiLocale.Display(" computers in the OU + Security Group intersection.");
         }
         catch (Exception ex) { if (!IsDisposed) UiErrorDialog.Show(FindForm(), "Load eligible computers", ex); }
         finally { _busy = false; }
@@ -261,10 +266,14 @@ internal sealed class ClientFeedbackPanel : UserControl
                 _grid.CurrentCell = null;
             }
             finally { _grid.ResumeLayout(); }
-            _totals.Text = $"Expected (AD): {(snapshot.Expected == 0 ? "not loaded" : snapshot.Expected)} | " +
-                           $"Healthy: {snapshot.Healthy} | Ready: {snapshot.Ready} | " +
-                           $"Error: {snapshot.Errors} | Stale: {snapshot.Stale} | " +
-                           $"No report: {snapshot.NoReport} | Completed: {snapshot.Completed}";
+            _totals.Text = UiLocale.Display("Expected (AD): ") +
+                (snapshot.Expected == 0 ? UiLocale.Display("not loaded") : snapshot.Expected.ToString()) + " | " +
+                UiLocale.Display("Healthy: ") + snapshot.Healthy + " | " +
+                UiLocale.Display("Ready: ") + snapshot.Ready + " | " +
+                UiLocale.Display("Error: ") + snapshot.Errors + " | " +
+                UiLocale.Display("Stale: ") + snapshot.Stale + " | " +
+                UiLocale.Display("No report: ") + snapshot.NoReport + " | " +
+                UiLocale.Display("Completed: ") + snapshot.Completed;
             _message.Text = $"Updated {DateTime.Now:HH:mm:ss}; invalid/foreign JSON: {snapshot.InvalidReports}. " +
                             "Reports older than three intervals are marked stale.";
             string? alert = _alertEngine.Observe(snapshot, _alertPreferences, DateTimeOffset.UtcNow);
@@ -272,7 +281,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         }
         catch (Exception ex)
         {
-            if (!IsDisposed) _message.Text = "Could not read client feedback: " +
+            if (!IsDisposed) _message.Text = UiLocale.Display("Could not read client feedback: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 240);
         }
         finally { _busy = false; }
@@ -282,11 +291,11 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         if (IsDisposed) return;
         _notify.Visible = true;
-        _notify.BalloonTipTitle = "LockScreen — increasing errors";
+        _notify.BalloonTipTitle = UiLocale.Display("LockScreen — increasing errors");
         _notify.BalloonTipText = message.Length > 230 ? message[..230] : message;
         _notify.BalloonTipIcon = ToolTipIcon.Warning;
         _notify.ShowBalloonTip(6000);
-        _message.Text = "WARNING: " + message;
+        _message.Text = UiLocale.Display("WARNING: ") + message;
     }
 
     private void ShowAlertSettings()
@@ -295,9 +304,9 @@ internal sealed class ClientFeedbackPanel : UserControl
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         _alertPreferences = dialog.Result;
         _alertEngine.Reset();
-        _message.Text = _alertPreferences.Enabled
+        _message.Text = UiLocale.Display(_alertPreferences.Enabled
             ? "Alerts enabled. The next snapshot establishes a baseline."
-            : "Alerts disabled. No automatic endpoint changes.";
+            : "Alerts disabled. No automatic endpoint changes.");
     }
 
     private async Task RepairSelectedAsync()
@@ -342,18 +351,18 @@ internal sealed class ClientFeedbackPanel : UserControl
 
     private void SaveSnapshot()
     {
-        if (_snapshot is null) { _message.Text = "Refresh SMB feedback first."; return; }
+        if (_snapshot is null) { _message.Text = UiLocale.Display("Refresh SMB feedback first."); return; }
         try
         {
             var record = CampaignHistoryStore.SaveHealth(_snapshot, _domain, _ouDn, _groupDn, final: false);
-            _message.Text = "Local snapshot saved: " + record.OccurredUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss");
+            _message.Text = UiLocale.Display("Local snapshot saved: ") + record.OccurredUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss");
         }
         catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Save Client Health snapshot", ex); }
     }
 
     private void ExportFinalReport()
     {
-        if (_snapshot is null) { _message.Text = "Refresh SMB feedback first."; return; }
+        if (_snapshot is null) { _message.Text = UiLocale.Display("Refresh SMB feedback first."); return; }
         if (_snapshot.Expected == 0)
         {
             MessageBox.Show(FindForm(), "Load the AD scope before exporting the final report, " +
@@ -375,7 +384,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         {
             var record = CampaignHistoryStore.SaveHealth(_snapshot, _domain, _ouDn, _groupDn, final: true);
             File.WriteAllText(dialog.FileName, CampaignHistoryStore.HtmlReport(record), new UTF8Encoding(true));
-            _message.Text = "Final snapshot saved to history and exported as HTML.";
+            _message.Text = UiLocale.Display("Final snapshot saved to history and exported as HTML.");
         }
         catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Final campaign report", ex); }
     }
@@ -396,7 +405,7 @@ internal sealed class ClientFeedbackPanel : UserControl
                 "SMB Feedback", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             Directory.CreateDirectory(path);
-            _message.Text = "Folder ready. Verify Domain Computers ACLs and administrator access.";
+            _message.Text = UiLocale.Display("Folder ready. Verify Domain Computers ACLs and administrator access.");
         }
         catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Create feedback folder", ex); }
     }
@@ -415,7 +424,7 @@ internal sealed class ClientFeedbackPanel : UserControl
                     row.Image, row.LastSeen, row.Files, row.Registry, row.Task, row.Version, row.ClientType }
                     .Select(CsvValue)));
             File.WriteAllText(dialog.FileName, builder.ToString(), new UTF8Encoding(true));
-            _message.Text = "Exported: " + _snapshot.Rows.Count + " rows.";
+            _message.Text = UiLocale.Display("Exported: ") + _snapshot.Rows.Count + UiLocale.Display(" rows.");
         }
         catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Export Client Health", ex); }
     }
