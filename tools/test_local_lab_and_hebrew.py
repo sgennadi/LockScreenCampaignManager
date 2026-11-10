@@ -101,5 +101,44 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         self.assertNotIn("UiLocale.Translate", read("CampaignPayloadLocation.cs"))
 
 
+    def test_ad_and_health_hebrew_does_not_modify_protocol_data(self):
+        locale = read("UiLocale.cs")
+        words = read("UiLocale.AdHealth.cs")
+        ad = read("AdConnectionStartDialog.cs")
+        account = read("AdAlternateAccountWizard.cs")
+        deployment = read("DomainDeploymentForm.cs")
+        health = read("ClientFeedbackPanel.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', words, re.M)
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertGreaterEqual(len(keys), 145)
+        for expected in (
+            "AD Connection Wizard", "1  Sign in",
+            "Select Active Directory user", "Active Directory / GPO Deployment",
+            "PowerShell (.ps1) - PowerShell Startup Scripts",
+            "Native (.exe) - classic Startup Scripts",
+            "SMB Share", "Load PCs from AD",
+            "Computer", "Condition", "Client Health / Live"
+        ):
+            self.assertIn('["' + expected + '"]', words)
+        for required in (
+            "AdHealthHebrew.TryGetValue", "AdHealthEnglish.TryGetValue",
+            '"DeploymentContentSource"', '"DeploymentClientType"',
+            '"ClientHealthGrid"', "ColumnHeaderSource", "Headers.GetValue"):
+            self.assertIn(required, locale)
+        self.assertIn('UiLocale.Display("Selected AD account: ")', ad)
+        self.assertIn("RightToLeft.No", account)
+        self.assertIn("RightToLeft.No", deployment)
+        self.assertIn('Name = "ClientHealthGrid"', health)
+        self.assertIn("UiLocale.Display(\"Expected (AD): \")", health)
+        self.assertIn("CheckHebrewAdAndClientHealth();", smoke)
+        for protected in ("CampaignModels.cs", "CampaignPayloadLocation.cs",
+                          "ClientFeedback.cs"):
+            self.assertNotIn("UiLocale.Display(", read(protected))
+        # CSV headers and diagnostic schema remain stable English protocol values.
+        self.assertIn(
+            "Computer,Condition,Stage,Image,LastSeen,Files,Registry,Task,AgentVersion,ClientType",
+            health)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

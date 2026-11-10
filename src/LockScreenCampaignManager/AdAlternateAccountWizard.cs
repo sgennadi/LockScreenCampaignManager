@@ -312,7 +312,8 @@ internal sealed class AdAlternateAccountWizard : Form
             Font = new Font("Segoe UI Semibold", 10f)
         }, 0, 0);
         _search.Dock = DockStyle.Fill;
-        _search.PlaceholderText = "Start typing a name or username...";
+        _search.PlaceholderText = UiLocale.Display("Start typing a name or username...");
+        _search.RightToLeft = RightToLeft.No; // AD search text is literal
         _search.Margin = new Padding(0, 0, 4, 6);
         searchField.Controls.Add(_search, 0, 1);
         layout.Controls.Add(searchField, 0, 0);
@@ -375,6 +376,7 @@ internal sealed class AdAlternateAccountWizard : Form
             ForeColor = UiStyle.Foreground, AutoEllipsis = true,
             Font = new Font("Segoe UI Semibold", 10f)
         }, 0, 0);
+        _password.RightToLeft = RightToLeft.No;
         _password.UseSystemPasswordChar = true;
         _password.Dock = DockStyle.Fill;
         passwordField.Controls.Add(_password, 0, 1);
@@ -489,7 +491,7 @@ internal sealed class AdAlternateAccountWizard : Form
             if (IsDisposed || Disposing || revision != _revision || _page != 0) return;
             _results.Items.Clear();
             UiStyle.ApplyStatus(_searchStatus,
-                "AD search unavailable. Check domain/network or use a typed login. Sign-in still verifies credentials.",
+                UiLocale.Display("AD search unavailable. Check domain/network or use a typed login. Sign-in still verifies credentials."),
                 UiStatusKind.Warning);
             UpdateButtons();
         }
@@ -499,7 +501,7 @@ internal sealed class AdAlternateAccountWizard : Form
     {
         if (string.IsNullOrWhiteSpace(login)) return;
         _chosenUser = login.Trim();
-        _selectedAccount.Text = description + Environment.NewLine + "Login: " + _chosenUser;
+        _selectedAccount.Text = description + Environment.NewLine + UiLocale.Display("Login: ") + _chosenUser;
         // Never carry a password from an earlier selection to a different
         // principal, including after Back -> selecting the initial account.
         if (!string.Equals(login.Trim(), _lastPasswordAccount, StringComparison.OrdinalIgnoreCase))
@@ -516,15 +518,15 @@ internal sealed class AdAlternateAccountWizard : Form
         if (_page != 0) _revision++;
         _searchPage.Visible = _page == 0;
         _passwordPage.Visible = _page == 1;
-        _pageTitle.Text = _page == 0 ? "Select Active Directory user" : "Enter account password";
+        _pageTitle.Text = UiLocale.Display(_page == 0 ? "Select Active Directory user" : "Enter account password");
         _pageSubtitle.Text = _page == 0
-            ? "Domain: " + _domain + "  |  Matching results appear as you type"
-            : "Review the selected account and enter its password.";
+            ? UiLocale.Display("Domain: ") + _domain + UiLocale.Display("  |  Matching results appear as you type")
+            : UiLocale.Display("Review the selected account and enter its password.");
         _stepOne.BackColor = _page == 0 ? UiStyle.Accent : UiStyle.Navy;
         _stepTwo.BackColor = _page == 1 ? UiStyle.Accent : UiStyle.Navy;
         _stepOne.ForeColor = _page == 0 ? Color.White : Color.FromArgb(185, 207, 240);
         _stepTwo.ForeColor = _page == 1 ? Color.White : Color.FromArgb(185, 207, 240);
-        _next.Text = _page == 0 ? "Next >" : "Use this account";
+        _next.Text = UiLocale.Display(_page == 0 ? "Next >" : "Use this account");
         _back.Visible = _page == 1;
         UpdateButtons();
         if (_page == 0 && _search.Text.Trim().Length > 0) ScheduleSearch();

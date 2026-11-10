@@ -223,7 +223,7 @@ internal sealed class AdConnectionStartDialog : Form
         };
         SetCredentialMode();
         UiStyle.Apply(this);
-        UiStyle.ApplyStatus(_state, "NOT CONNECTED — no directory read has been performed.", UiStatusKind.Neutral);
+        UiStyle.ApplyStatus(_state, UiLocale.Display("NOT CONNECTED — no directory read has been performed."), UiStatusKind.Neutral);
         AcceptButton = _connect;
         CancelButton = _offline;
         _dnsDebounce.Tick += async (_, _) => {
@@ -251,7 +251,7 @@ internal sealed class AdConnectionStartDialog : Form
         holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         holder.Controls.Add(new Label
         {
-            Text = caption, Dock = DockStyle.Fill,
+            Text = UiLocale.Display(caption), Dock = DockStyle.Fill,
             ForeColor = UiStyle.Muted,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -269,7 +269,7 @@ internal sealed class AdConnectionStartDialog : Form
         field.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
         field.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var captionLabel = new Label {
-            Text = caption, Dock = DockStyle.Fill,
+            Text = UiLocale.Display(caption), Dock = DockStyle.Fill,
             ForeColor = UiStyle.Muted, TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = false, Margin = Padding.Empty
         };
@@ -294,7 +294,7 @@ internal sealed class AdConnectionStartDialog : Form
     {
         return new Button
         {
-            Text = text, MinimumSize = new Size(width, 36),
+            Text = UiLocale.Display(text), MinimumSize = new Size(width, 36),
             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
             BackColor = primary ? UiStyle.Accent : UiStyle.Surface,
             ForeColor = primary ? Color.White : UiStyle.Foreground,
@@ -456,6 +456,8 @@ internal sealed class AdConnectionStartDialog : Form
         authentication.Controls.Add(_editOtherAccount, 1, 1);
 
         _user.PlaceholderText = @"DOMAIN\user or user@domain";
+        _domain.RightToLeft = _dc.RightToLeft = _user.RightToLeft =
+            _password.RightToLeft = RightToLeft.No;
         _password.UseSystemPasswordChar = true;
         _domain.PlaceholderText = "example.com";
         var domainField = ConnectionField("Active Directory DNS domain", _domain);
@@ -515,7 +517,7 @@ internal sealed class AdConnectionStartDialog : Form
                     ScheduleDcDiscovery();
                 else
                     _dcDiscoveryStatus.Text = _dc.Items.Count +
-                        " controller(s) available. Select one or use Find DCs to refresh.";
+                        UiLocale.Display(" controller(s) available. Select one or use Find DCs to refresh.");
             }
             // When Advanced is off the connection already ignores _dc.Text.
             // Clearing it here caused a lost selection and an empty-looking
@@ -620,6 +622,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
+        _inventory.RightToLeft = RightToLeft.No; // AD evidence remains LTR
         _inventory.Multiline = true;
         _inventory.ReadOnly = true;
         _inventory.ScrollBars = ScrollBars.Both;
@@ -646,6 +649,7 @@ internal sealed class AdConnectionStartDialog : Form
             Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
             Font = new Font("Segoe UI Semibold", 12f)
         }, 0, 0);
+        _review.RightToLeft = RightToLeft.No; // Permission evidence remains LTR
         _review.Multiline = true;
         _review.ReadOnly = true;
         _review.WordWrap = true;
@@ -749,7 +753,7 @@ internal sealed class AdConnectionStartDialog : Form
         try
         {
             _refreshDc.Enabled = false;
-            _dcDiscoveryStatus.Text = "Searching DNS and Windows DC Locator...";
+            _dcDiscoveryStatus.Text = UiLocale.Display("Searching DNS and Windows DC Locator...");
             var candidates = await Task.Run(() => DcDnsDiscovery.FindControllers(expected));
             if (IsDisposed || Disposing || _busy || revision != _discoveryRevision ||
                 !string.Equals(_domain.Text.Trim(), expected, StringComparison.OrdinalIgnoreCase))
@@ -783,7 +787,7 @@ internal sealed class AdConnectionStartDialog : Form
         }
         catch (Exception ex)
         {
-            _dcDiscoveryStatus.Text = "Discovery failed. Check DNS/network or enter DC manually.";
+            _dcDiscoveryStatus.Text = UiLocale.Display("Discovery failed. Check DNS/network or enter DC manually.");
             AppLog.Write(ex, "DNS domain controller discovery");
         }
         finally
@@ -830,9 +834,9 @@ internal sealed class AdConnectionStartDialog : Form
         _rememberUsername.Enabled = _saveEncryptedPassword.Enabled = _alternate.Checked;
         _editOtherAccount.Enabled = _alternate.Checked;
         _activeIdentity.Text = _alternate.Checked
-            ? "Selected AD account: " + (string.IsNullOrWhiteSpace(_user.Text)
-                ? "Not configured" : _user.Text.Trim())
-            : "Signed-in Windows identity: " + CurrentWindowsIdentity();
+            ? UiLocale.Display("Selected AD account: ") + (string.IsNullOrWhiteSpace(_user.Text)
+                ? UiLocale.Display("Not configured") : _user.Text.Trim())
+            : UiLocale.Display("Signed-in Windows identity: ") + CurrentWindowsIdentity();
         _tips.SetToolTip(_activeIdentity, _activeIdentity.Text);
         if (!_alternate.Checked) _password.Clear();
     }
@@ -1071,8 +1075,8 @@ internal sealed class AdConnectionStartDialog : Form
             finally { _mutating = false; }
             ShowPage(1);
             UiStyle.ApplyStatus(_state,
-                $"CONNECTED / READ ONLY — {snapshot.Domain} | {snapshot.Dc} | " +
-                (snapshot.Writable ? "Writable DC" : "Read-only DC") + " | " +
+                UiLocale.Display("CONNECTED / READ ONLY — ") + snapshot.Domain + " | " + snapshot.Dc + " | " +
+                UiLocale.Display(snapshot.Writable ? "Writable DC" : "Read-only DC") + " | " +
                 snapshot.ObservedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
                 snapshot.Capped ? UiStatusKind.Warning : UiStatusKind.Success);
         }
@@ -1086,8 +1090,8 @@ internal sealed class AdConnectionStartDialog : Form
                 details.Contains("logon failure", StringComparison.OrdinalIgnoreCase);
             UiStyle.ApplyStatus(_state,
                 invalidCredentials
-                    ? "Sign-in failed. Check the AD username, password and selected domain."
-                    : "AD connection failed. Check the domain, DC and network. Details in Diagnostics.",
+                    ? UiLocale.Display("Sign-in failed. Check the AD username, password and selected domain.")
+                    : UiLocale.Display("AD connection failed. Check the domain, DC and network. Details in Diagnostics."),
                 UiStatusKind.Error);
             _inventory.Text = "No AD data accepted. Check domain, DNS, DC availability, " +
                 "permissions and your Windows/alternate account.\r\n" +

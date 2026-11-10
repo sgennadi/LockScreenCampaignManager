@@ -45,6 +45,7 @@ internal sealed class FeedbackSettingsDialog : Form
         source.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 78));
         source.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
         _share.Name = "FeedbackShareScrollable";
+        _share.RightToLeft = RightToLeft.No; // Preserve UNC path direction
         _share.Dock = DockStyle.Fill;
         _share.Multiline = true;
         _share.ScrollBars = ScrollBars.Horizontal;
@@ -57,6 +58,7 @@ internal sealed class FeedbackSettingsDialog : Form
         _share.PlaceholderText = @"\\fileserver\LockScreenReports$";
         _share.Text = project.FeedbackShare;
         source.Controls.Add(Field("Dedicated SMB share (NOT SYSVOL/NETLOGON)", _share), 0, 0);
+        _interval.RightToLeft = RightToLeft.No;
         _interval.Minimum = 5;
         _interval.Maximum = 60;
         _interval.Value = Math.Clamp(project.FeedbackIntervalMinutes, 5, 60);
@@ -121,7 +123,9 @@ internal sealed class FeedbackSettingsDialog : Form
     {
         var b = new Button
         {
-            Text = text, Width = width, Height = 40,
+            Text = UiLocale.Display(text), Width = width, Height = 40,
+            MinimumSize = new Size(width, 40), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(0, 6, 8, 0),
             BackColor = primary ? UiStyle.Accent : UiStyle.Surface,
             ForeColor = primary ? Color.White : UiStyle.Foreground
