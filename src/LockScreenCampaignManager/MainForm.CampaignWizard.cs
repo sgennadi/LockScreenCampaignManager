@@ -362,8 +362,41 @@ public sealed partial class MainForm
             if (_host.IsDisposed) return;
             if (_host.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } page
                 && !page.IsDisposed)
+            {
                 page.Height = Math.Max(_step is 2 or 3 ? 720 : 555,
                     _host.ClientSize.Height - _host.Padding.Vertical);
+                FitWizardPageText(page, _step is 2 or 3);
+            }
+        }
+
+        // Localized paragraphs can wrap to several lines at 150-200% DPI.
+        // Grow the two text rows and the scrollable page rather than clipping
+        // Hebrew glyphs or stealing all of the image preview's height.
+        private static void FitWizardPageText(TableLayoutPanel page, bool imagePage)
+        {
+            if (page.IsDisposed || page.Width < 280 ||
+                page.RowStyles.Count < 5) return;
+            for (int row = 0; row < 2; row++)
+            {
+                if (page.GetControlFromPosition(0, row) is not Label label ||
+                    label.IsDisposed) continue;
+                int width = Math.Max(190, page.ClientSize.Width -
+                    page.Padding.Horizontal - label.Margin.Horizontal -
+                    label.Padding.Horizontal - 20);
+                int measured = TextRenderer.MeasureText(label.Text, label.Font,
+                    new Size(width, 4096),
+                    TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height;
+                int baseHeight = row == 0 ? (imagePage ? 60 : 85) :
+                    (imagePage ? 67 : 118);
+                page.RowStyles[row].Height = Math.Max(baseHeight,
+                    measured + label.Margin.Vertical + label.Padding.Vertical + 14);
+            }
+            int fixedHeight = page.RowStyles.Cast<RowStyle>()
+                .Where(x => x.SizeType == SizeType.Absolute)
+                .Sum(x => (int)Math.Ceiling(x.Height));
+            int bodyMinimum = imagePage ? 350 : 210;
+            page.Height = Math.Max(page.Height,
+                fixedHeight + bodyMinimum + page.Padding.Vertical);
         }
 
         private void FitFooter()
@@ -520,6 +553,15 @@ public sealed partial class MainForm
                     Name = "CampaignWizardBottomStatus"
                 };
                 page.Controls.Add(status, 0, 4);
+                // Re-fit after UI language/font changes and when the viewport
+                // becomes narrower. Only the page scrolls; footer stays visible.
+                foreach (Label headerText in page.Controls.OfType<Label>()
+                    .Where(x => page.GetRow(x) is 0 or 1))
+                {
+                    headerText.TextChanged += (_, _) => FitWizardPageText(page, imagePage);
+                    headerText.FontChanged += (_, _) => FitWizardPageText(page, imagePage);
+                }
+                page.WidthChanged += (_, _) => FitWizardPageText(page, imagePage);
 
                 switch (_step)
                 {
@@ -565,6 +607,7 @@ public sealed partial class MainForm
                         : _owner._project.ImagePaths.Count + " image(s) selected");
                 _host.ResumeLayout(true);
                 UiStyle.Apply(this);
+                FitWizardPageText(page, imagePage);
                 UpdateAvailableNotice();
                 FitHeader();
                 FitFooter();
