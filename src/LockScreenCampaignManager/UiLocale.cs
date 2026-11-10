@@ -244,6 +244,9 @@ internal static partial class UiLocale
                 text.Name.Contains("UNC", StringComparison.OrdinalIgnoreCase) ||
                 text.Name.Contains("Report", StringComparison.OrdinalIgnoreCase)))
                 text.RightToLeft = RightToLeft.No;
+            if (child is TextBox placeholder &&
+                !string.IsNullOrEmpty(placeholder.PlaceholderText))
+                placeholder.PlaceholderText = Translate(placeholder.PlaceholderText, language);
             if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
             if (child is DataGridView healthGrid &&
