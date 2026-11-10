@@ -96,6 +96,10 @@ internal static class UiLayoutSmokeTests
             "< Back", "Work offline (no AD)" }),
         ("Updater", () => new UniversalUpdaterWindow(),
             new[] { "1  Check", "2  Install", "Backup status" }),
+        ("Local lab JSON evidence viewer", () => new LocalLabEvidenceDialog(),
+            new[] { "Import SMB canary JSON...", "Import cleanup JSON..." }),
+        ("Interface settings", () => new UiSettingsDialog(),
+            new[] { "Apply" }),
         ("SMB feedback settings", () => new FeedbackSettingsDialog(
             new CampaignProject { Name = "layout-only", TimeZoneId = "UTC",
                 FeedbackShare = @"\\example.com\LockScreenReports$",
@@ -1105,9 +1109,53 @@ internal static class UiLayoutSmokeTests
                 buttons += actual.Length;
             }
         }
+        CheckHebrewRtlAndLanguageSelection();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
+    }
+
+    private static void CheckHebrewRtlAndLanguageSelection()
+    {
+        // Settings are previewed without writing ui-settings.json or changing
+        // global preferences; Windows does not need an AD session for this.
+        foreach (var profile in Profiles)
+        {
+            var hebrew = new UiPreferences {
+                Language = "Hebrew", Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            using var settings = new UiSettingsDialog();
+            using var viewer = new LocalLabEvidenceDialog();
+            using var editor = new MainForm();
+            foreach (Form form in new Form[] { settings, viewer, editor })
+            {
+                UiStyle.Apply(form, hebrew);
+                form.PerformLayout();
+                if (form.RightToLeft != RightToLeft.Yes || !form.RightToLeftLayout)
+                    throw new InvalidOperationException(
+                        $"Hebrew RTL form layout was not enabled: {form.Name} / {profile.Name}");
+            }
+            if (!Descendants(settings).OfType<ComboBox>().Any(x =>
+                    x.Name == "UiSettingsLanguage" && x.SelectedIndex >= 0) ||
+                !Descendants(settings).OfType<Label>().Any(x => x.Text == "שפת ממשק") ||
+                !Descendants(settings).OfType<Button>().Any(x => x.Text == "החל") ||
+                !Descendants(viewer).OfType<Button>().Any(x =>
+                    x.Name == "LocalLabCanaryImport" && x.Text.Contains("ייבא", StringComparison.Ordinal)) ||
+                !Descendants(editor).OfType<Button>().Any(x => x.Text == "אשף"))
+                throw new InvalidOperationException(
+                    $"Hebrew language or main/window translations missing: {profile.Name}");
+            if (Descendants(viewer).OfType<TextBox>().Where(x => x.ReadOnly)
+                .Any(x => x.RightToLeft != RightToLeft.No))
+                throw new InvalidOperationException(
+                    $"Hebrew RTL would reverse technical JSON report text: {profile.Name}");
+            UiStyle.Apply(settings, new UiPreferences { Language = "English" });
+            if (settings.RightToLeft != RightToLeft.No || settings.RightToLeftLayout ||
+                !Descendants(settings).OfType<Label>().Any(x => x.Text == "Language"))
+                throw new InvalidOperationException(
+                    $"Switching Hebrew back to English did not restore LTR: {profile.Name}");
+        }
     }
 
     private static IEnumerable<Control> Descendants(Control parent)
