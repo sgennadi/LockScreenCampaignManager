@@ -464,35 +464,35 @@ internal sealed class UniversalUpdaterWindow : Form
                     staged.ExtractedExecutablePath))
                 : new WindowsAuthenticodeAudit.Result(false, "NOT_AVAILABLE",
                     "No extracted EXE for native Authenticode verification.");
-            _output.Text = "SHA-256 and archive safety verified; package staged." +
-                Environment.NewLine + "Windows Authenticode: " +
-                (signature.Trusted ? "TRUSTED" : "NOT VERIFIED") +
+            _output.Text = T("SHA-256 and archive safety verified; package staged.") +
+                Environment.NewLine + T("Windows Authenticode: ") +
+                T(signature.Trusted ? "TRUSTED" : "NOT VERIFIED") +
                 " (" + signature.Code + ")" +
                 Environment.NewLine + signature.Explanation +
-                Environment.NewLine + "Archive: " + staged.ArchivePath +
-                Environment.NewLine + "Archive SHA-256: " + staged.ArchiveSha256 +
-                Environment.NewLine + "EXE SHA-256: " + staged.ExtractedExecutableSha256 +
+                Environment.NewLine + T("Archive: ") + staged.ArchivePath +
+                Environment.NewLine + T("Archive SHA-256: ") + staged.ArchiveSha256 +
+                Environment.NewLine + T("EXE SHA-256: ") + staged.ExtractedExecutableSha256 +
                 Environment.NewLine + Environment.NewLine +
-                "Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
+                T("Nothing has been installed yet. Release SHA-256 verifies integrity, not publisher identity. " +
                 "For a user-profile portable EXE, approve the unsigned publisher warning before installation. " +
-                "Administrator-owned and gMSA copies require a separate maintenance window.";
-            _state.Text = signature.Trusted
+                "Administrator-owned and gMSA copies require a separate maintenance window.");
+            _state.Text = T(signature.Trusted
                 ? "Verified package ready for final installation approval."
-                : "Unsigned/untrusted publisher: installation requires explicit operator approval.";
+                : "Unsigned/untrusted publisher: installation requires explicit operator approval.");
             // InstallSelectedAsync now continues to the explicit final approval.
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Download canceled.";
+            _state.Text = T("Download canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater verified staging");
-            _state.Text = "Download/verification failed. No installation occurred.";
-            _output.Text = "Release download or verification failed: " +
+            _state.Text = T("Download/verification failed. No installation occurred.");
+            _output.Text = T("Release download or verification failed: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 500) +
                 Environment.NewLine +
-                "For public releases no token is needed; private assets require a scoped read-only token.";
+                T("For public releases no token is needed; private assets require a scoped read-only token.");
         }
         finally { FinishWorking(); }
     }
@@ -502,24 +502,24 @@ internal sealed class UniversalUpdaterWindow : Form
         if (_operation is not null || _staged is null || _options is null) return;
         string exe = Application.ExecutablePath;
         var answer = MessageBox.Show(this,
-            "Install this verified update and restart LockScreen Campaign Manager?" +
+            T("Install this verified update and restart LockScreen Campaign Manager?") +
             Environment.NewLine + Environment.NewLine +
-            "The current portable EXE will be saved as .bak. The updater waits " +
+            T("The current portable EXE will be saved as .bak. The updater waits " +
             "until the manager exits, checks SHA-256, replaces the EXE, runs the " +
-            "offline self-test and restores the backup on failure." +
+            "offline self-test and restores the backup on failure.") +
             Environment.NewLine + Environment.NewLine +
-            "GitHub release hashes do NOT prove publisher identity. These preview builds " +
-            "are unsigned. Continue only if you trust the official project release." +
+            T("GitHub release hashes do NOT prove publisher identity. These preview builds " +
+            "are unsigned. Continue only if you trust the official project release.") +
             Environment.NewLine + Environment.NewLine +
-            "Existing gMSA tasks and administrator-owned installations are NOT updated. " +
-            "Save your campaign first; any unsaved changes will be confirmed on closing.",
-            "Install verified portable update?", MessageBoxButtons.YesNo,
+            T("Existing gMSA tasks and administrator-owned installations are NOT updated. " +
+            "Save your campaign first; any unsaved changes will be confirmed on closing."),
+            T("Install verified portable update?"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes) return;
         try
         {
             PortableUpdateCoordinator.Launch(_staged, _options);
-            _state.Text = "Update helper launched. Closing manager for replacement...";
+            _state.Text = T("Update helper launched. Closing manager for replacement...");
             BeginInvoke(new Action(() => {
                 Close();
                 Application.Exit();
@@ -528,13 +528,13 @@ internal sealed class UniversalUpdaterWindow : Form
         catch (Exception ex)
         {
             AppLog.Write(ex, "Portable updater launch");
-            _state.Text = "Installation not started: " +
+            _state.Text = T("Installation not started: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 230);
             MessageBox.Show(this,
-                "In-app updates require a writable portable EXE in your user profile. " +
-                "Administrator-owned/gMSA installations must be updated separately." +
+                T("In-app updates require a writable portable EXE in your user profile. " +
+                "Administrator-owned/gMSA installations must be updated separately.") +
                 Environment.NewLine + UniversalDiagnosticsEmbedded.Clean(ex.Message, 220),
-                "Update was not installed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                T("Update was not installed"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -549,10 +549,10 @@ internal sealed class UniversalUpdaterWindow : Form
             string architecture = UpdateOptions.CurrentWindowsArchitecture();
             if (!File.Exists(backup))
             {
-                _output.Text = "No local .bak checkpoint exists beside this executable." +
-                    Environment.NewLine + "Backup status is read-only and never runs a downgrade." +
-                    Environment.NewLine + "The protected gMSA worker EXE has a separate installation path.";
-                _state.Text = "No local rollback checkpoint found.";
+                _output.Text = T("No local .bak checkpoint exists beside this executable.") +
+                    Environment.NewLine + T("Backup status is read-only and never runs a downgrade.") +
+                    Environment.NewLine + T("The protected gMSA worker EXE has a separate installation path.");
+                _state.Text = T("No local rollback checkpoint found.");
                 return;
             }
             string digest = await Task.Run(async () => {
@@ -561,24 +561,24 @@ internal sealed class UniversalUpdaterWindow : Form
                 PeSafety.ValidateArchitecture(backup, architecture);
                 return await UpdateDownloader.HashFileAsync(backup, _operation!.Token);
             });
-            _output.Text = "A local .bak checkpoint exists for the current EXE." +
-                Environment.NewLine + "Architecture: " + architecture +
+            _output.Text = T("A local .bak checkpoint exists for the current EXE.") +
+                Environment.NewLine + T("Architecture: ") + architecture +
                 Environment.NewLine + "SHA-256: " + digest +
-                Environment.NewLine + "Checkpoint: " + backup +
+                Environment.NewLine + T("Checkpoint: ") + backup +
                 Environment.NewLine + Environment.NewLine +
-                "This is NOT proof of a trusted publisher or a valid rollback. " +
+                T("This is NOT proof of a trusted publisher or a valid rollback. " +
                 "Do not replace an EXE used by gMSA while Task Scheduler is running. " +
-                "A separate trusted, offline administrator action and application self-test are required.";
-            _state.Text = "Rollback candidate inspected (no changes made).";
+                "A separate trusted, offline administrator action and application self-test are required.");
+            _state.Text = T("Rollback candidate inspected (no changes made).");
         }
         catch (OperationCanceledException)
         {
-            _state.Text = "Rollback inspection canceled.";
+            _state.Text = T("Rollback inspection canceled.");
         }
         catch (Exception ex)
         {
             AppLog.Write(ex, "UniversalUpdater rollback checkpoint inspection");
-            _state.Text = "Rollback checkpoint is not usable.";
+            _state.Text = T("Rollback checkpoint is not usable.");
             _output.Text = UniversalDiagnosticsEmbedded.Clean(ex.Message, 260);
         }
         finally { FinishWorking(); }
@@ -587,14 +587,14 @@ internal sealed class UniversalUpdaterWindow : Form
     private void SetWorking(string state)
     {
         _operation = new CancellationTokenSource();
-        _state.Text = state;
+        _state.Text = T(state);
         _check.Enabled = false;
         _download.Enabled = false;
         _install.Enabled = false;
         _channel.Enabled = false;
         _sessionToken.Enabled = false;
         _backupStatus.Enabled = false;
-        _close.Text = "Cancel";
+        _close.Text = T("Cancel");
     }
 
     private void FinishWorking()
@@ -608,7 +608,7 @@ internal sealed class UniversalUpdaterWindow : Form
         _channel.Enabled = true;
         _sessionToken.Enabled = true;
         _backupStatus.Enabled = true;
-        _close.Text = "Close";
+        _close.Text = T("Close");
     }
 
     private static void OpenReleases() =>
