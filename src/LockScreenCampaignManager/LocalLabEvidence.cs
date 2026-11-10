@@ -163,8 +163,8 @@ internal sealed record LocalLabEvidence(
                 throw new InvalidDataException("Baseline success contradicts the reported checks.");
             _ = Bool(data, "lockScreenDisplayVisuallyVerified");
         }
-        JsonElement list = data.GetProperty("findings");
-        if (list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 64)
+        if (!data.TryGetProperty("findings", out JsonElement list) ||
+            list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 64)
             throw new InvalidDataException("Invalid evidence finding list.");
         var findings = new List<string>();
         foreach (var f in list.EnumerateArray())
@@ -201,6 +201,7 @@ internal sealed record LocalLabEvidence(
     private static int Int(JsonElement root, string name, int min, int max)
     {
         if (!root.TryGetProperty(name, out var value) ||
+            value.ValueKind != JsonValueKind.Number ||
             !value.TryGetInt32(out int n) || n < min || n > max)
             throw new InvalidDataException("Invalid evidence number: " + name);
         return n;
