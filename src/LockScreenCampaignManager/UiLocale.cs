@@ -342,7 +342,8 @@ internal static partial class UiLocale
                  "DeploymentContentSource" or "DeploymentClientType" or
                  "GpoLifecycleAction" or "GpoPushPurpose" or
                  "GpoGmsaFilter" or "AgentActivityFilter" or "GroupConflictRisk" or
-                 "CampaignScheduleMode" or "EffectiveGpoFilter" or
+                 "AssignmentTargetMode" or "CampaignScheduleMode" or
+                 "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
                  "CampaignClosureFilter"))
                 ApplyComboLocalization(combo, language);
