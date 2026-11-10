@@ -1,3 +1,11 @@
+## 0.4.0-preview.88 — Source selection before project save, no silent stale JSON (2026-11-10)
+
+- Share a single SYSVOL/SMB storage selector between Campaign Wizard Step 6 (Save / Skip) and Step 7 (Deploy), including the existing editable UNC and Browse controls. This prevents saving the campaign before the storage choice is presented.
+- Mark in-memory campaigns dirty when the source or network folder changes. Changing storage after a previously saved project flags its JSON as **outdated**; add explicit **Save project changes...** action on Deploy, and require a warning/confirmation before finishing or opening AD deployment without saving again.
+- Keep **Skip saving & continue** an intentional supported option; don't turn it into an implicit save or a forced GPO action. Changes made in the nested AD/GPO Wizard are also reconciled with the editor's save-state indicator.
+- Extend Windows x64/x86 WinForms 100–200% scale smoke checks to require source selector and UNC editor on **both Save and Deploy pages**. No AD/GPO/SYSVOL/SMB writes during UI editing.
+- Real-domain Lock Screen/SMB boot acceptance and automatic JPG Photo Screen Saver User GPO remain gated separately.
+
 ## 0.4.0-preview.87 — Wizard storage selector and Updater HiDPI field fix (2026-11-10)
 
 - Expose **Campaign files: SYSVOL / SMB network folder (UNC)** on the main seven-step Campaign Wizard **Step 7 Deploy**, not only in the separate AD deployment wizard. Type or Browse for the existing share; a rejected UNC stays local with an actionable warning. No GPO write or server connection occurs merely from changing the field.
