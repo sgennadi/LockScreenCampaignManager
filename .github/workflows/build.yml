@@ -59,6 +59,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_smb_system_canary.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_endpoint_closure.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_dual_client.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_live_ad_lab_contracts.py
@@ -89,6 +91,8 @@ jobs:
             'tools/smb_system_canary_probe.ps1',
             'tools/smb_canary_rsop.ps1',
             'tools/test_smb_rsop_xml.ps1',
+            'tools/endpoint_closure_probe.ps1',
+            'tools/run_endpoint_closure_local.ps1',
             'tools/test_hosted_agent_lifecycle.ps1',
             'tools/test_windows_client_compat.ps1'
           )
@@ -145,6 +149,30 @@ jobs:
           Remove-Item -LiteralPath $report -Force
           Write-Host 'PASS: SYSTEM-only canary refuses hosted Windows non-SYSTEM user.'
           exit 0  # The intentional child exit code 2 must not fail this negative test.
+
+      - name: Check independent closure probe refuses non-SYSTEM hosted Windows runner
+        shell: powershell
+        run: |
+          $root = Join-Path $env:ProgramData 'LSCM-Endpoint-Evidence'
+          $folder = Join-Path $root 'ci-denial'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          try {
+            $report = Join-Path $folder 'report.json'
+            & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/endpoint_closure_probe.ps1 -ConfigPath (Join-Path $folder 'missing.json') -BaselinePath (Join-Path $folder 'baseline.json') -ReportPath $report
+            if ($LASTEXITCODE -eq 0) { throw 'Closure SYSTEM probe accepted a hosted non-SYSTEM user.' }
+            if (-not (Test-Path -LiteralPath $report -PathType Leaf)) {
+              throw 'Closure probe must persist private local denial status.'
+            }
+            $evidence = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+            if ($evidence.result -ne 'FAIL_CLOSED' -or $evidence.localSystem -or
+                @($evidence.findings) -notcontains 'NOT_LOCAL_SYSTEM') {
+              throw 'Closure probe did not fail closed before reading any config.'
+            }
+            Write-Host 'PASS: no non-SYSTEM endpoint closure evidence accepted.'
+          } finally {
+            Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          exit 0
 
       - name: Verify exact Computer GPO identity and filtering from GPRESULT XML fixtures
         shell: powershell
@@ -366,7 +394,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.85':
+          if version != '0.4.0-preview.86':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -398,22 +426,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.85 (no overwrite)
+      - name: Publish 0.4.0-preview.86 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.85'
+          tag='v0.4.0-preview.86'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.85' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW85.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.86' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW86.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -422,7 +450,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.85'
+          tag='v0.4.0-preview.86'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json
