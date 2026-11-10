@@ -97,12 +97,14 @@ internal sealed class DeviceRepairDashboard : UserControl
         _snapshot = null;
         _detailRequest++;
         _grid.Rows.Clear();
-        _details.Text = "Load verified computers before reviewing per-device reports.";
+        _details.Text = UiLocale.Display("Load verified computers before reviewing per-device reports.");
         _headline.Text = string.IsNullOrWhiteSpace(campaignId)
-            ? "Choose a managed GPO in the GPO tab."
-            : "Selected campaign: " + campaignId + " | Read-only until AD scope is verified.";
-        _summary.Text = "No current device data. Health reports are not proof of on-screen display.";
-        _status.Text = "Click Load verified AD devices, then Refresh reports.";
+            ? UiLocale.Display("Choose a managed GPO in the GPO tab.")
+            : UiLocale.Display("Selected campaign: ") + campaignId +
+                UiLocale.Display(" | Read-only until AD scope is verified.");
+        _summary.Text = UiLocale.Display(
+            "No current device data. Health reports are not proof of on-screen display.");
+        _status.Text = UiLocale.Display("Click Load verified AD devices, then Refresh reports.");
         SetButtons();
     }
 
@@ -133,7 +135,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         _headline.Dock = DockStyle.Fill;
         _headline.ForeColor = UiStyle.Muted;
         _headline.AutoEllipsis = true;
-        _headline.Text = "Choose a managed GPO and load the authorized AD devices.";
+        _headline.Text = UiLocale.Display(
+            "Choose a managed GPO and load the authorized AD devices.");
         title.Controls.Add(_headline, 0, 1);
         layout.Controls.Add(title, 0, 0);
 
@@ -154,6 +157,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         commands.Controls.Add(new Label {
             Text = "Filter:", AutoSize = true, Margin = new Padding(8, 15, 7, 0)
         });
+        _filter.Name = "DeviceRepairFilter";
         _filter.DropDownStyle = ComboBoxStyle.DropDownList;
         _filter.Width = 150;
         _filter.Items.AddRange(new object[] {
@@ -163,6 +167,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         _filter.SelectedIndex = 0;
         _filter.SelectedIndexChanged += (_, _) => DrawRows();
         commands.Controls.Add(_filter);
+        _search.RightToLeft = RightToLeft.No;
         _search.PlaceholderText = "Search computer...";
         _search.Width = 175;
         _search.Margin = new Padding(4, 7, 8, 0);
@@ -180,9 +185,11 @@ internal sealed class DeviceRepairDashboard : UserControl
         _summary.AutoEllipsis = false;
         _summary.Padding = new Padding(5, 8, 5, 10);
         _summary.ForeColor = UiStyle.Foreground;
-        _summary.Text = "Load verified AD devices. This view never sends RPC automatically.";
+        _summary.Text = UiLocale.Display(
+            "Load verified AD devices. This view never sends RPC automatically.");
         layout.Controls.Add(_summary, 0, 2);
 
+        _grid.Name = "DeviceRepairGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -226,21 +233,24 @@ internal sealed class DeviceRepairDashboard : UserControl
         };
         layout.Controls.Add(_grid, 0, 3);
 
+        _details.RightToLeft = RightToLeft.No; // raw per-device diagnostic evidence
         _details.Dock = DockStyle.Fill;
         _details.Multiline = true;
         _details.ReadOnly = true;
         _details.WordWrap = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.BackColor = UiStyle.Surface;
-        _details.Text = "Select a verified computer to view fresh agent evidence, " +
-            "pending Repair status and locally archived Client Health snapshots.";
+        _details.Text = UiLocale.Display(
+            "Select a verified computer to view fresh agent evidence, " +
+            "pending Repair status and locally archived Client Health snapshots.");
         layout.Controls.Add(_details, 0, 4);
 
         _status.Dock = DockStyle.Fill;
         _status.AutoEllipsis = false;
         _status.Padding = new Padding(5, 9, 5, 12);
         _status.ForeColor = UiStyle.Muted;
-        _status.Text = "No automatic Repair. A manual Repair always uses Preview and full GPO GUID confirmation.";
+        _status.Text = UiLocale.Display(
+            "No automatic Repair. A manual Repair always uses Preview and full GPO GUID confirmation.");
         layout.Controls.Add(_status, 0, 5);
         SetButtons();
     }
@@ -248,7 +258,9 @@ internal sealed class DeviceRepairDashboard : UserControl
     private static Button Button(string text, int width, Action action)
     {
         var button = new Button {
-            Text = text, Width = width, Height = 38,
+            Text = UiLocale.Display(text), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             Margin = new Padding(0, 4, 8, 5),
             BackColor = UiStyle.Surface, ForeColor = UiStyle.Foreground,
             FlatStyle = FlatStyle.Flat
@@ -314,7 +326,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         var policy = CurrentSelection();
         if (policy is null)
         {
-            _status.Text = "Choose a managed GPO first.";
+            _status.Text = UiLocale.Display("Choose a managed GPO first.");
             return;
         }
         try
@@ -323,7 +335,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         }
         catch (Exception ex)
         {
-            _status.Text = "Configure an SMB Client Health share first: " +
+            _status.Text = UiLocale.Display("Configure an SMB Client Health share first: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 140);
             return;
         }
@@ -331,11 +343,12 @@ internal sealed class DeviceRepairDashboard : UserControl
         // stale rows must never look like a verified current scope.
         _snapshot = null;
         _grid.Rows.Clear();
-        _summary.Text = "Verifying the selected AD scope...";
-        _details.Text = "No current verified device snapshot.";
+        _summary.Text = UiLocale.Display("Verifying the selected AD scope...");
+        _details.Text = UiLocale.Display("No current verified device snapshot.");
         _busy = true;
         SetButtons();
-        _status.Text = "Discovering the selected OU and Security Group through the selected DC...";
+        _status.Text = UiLocale.Display(
+            "Discovering the selected OU and Security Group through the selected DC...");
         try
         {
             var names = await Task.Run(() => {
@@ -358,14 +371,18 @@ internal sealed class DeviceRepairDashboard : UserControl
             _snapshot = null; // Do not combine new AD scope with old SMB data.
             if (names.Count == 0)
             {
-                _headline.Text = "Campaign: " + policy.Value.CampaignId +
-                    " | Verified AD scope: 0 eligible computers.";
-                _summary.Text = "No target computers are present in this OU and Security Group.";
-                _details.Text = "No eligible AD computer. No Client Health claim or Repair is inferred.";
-                _status.Text = "The verified AD scope is empty; there is nothing to repair.";
+                _headline.Text = UiLocale.Display("Campaign: ") + policy.Value.CampaignId +
+                    UiLocale.Display(" | Verified AD scope: 0 eligible computers.");
+                _summary.Text = UiLocale.Display(
+                    "No target computers are present in this OU and Security Group.");
+                _details.Text = UiLocale.Display(
+                    "No eligible AD computer. No Client Health claim or Repair is inferred.");
+                _status.Text = UiLocale.Display(
+                    "The verified AD scope is empty; there is nothing to repair.");
                 return;
             }
-            _status.Text = $"Verified {names.Count} scoped AD computers. Loading Client Health...";
+            _status.Text = UiLocale.Display("Verified ") + names.Count +
+                UiLocale.Display(" scoped AD computers. Loading Client Health...");
         }
         catch (Exception ex)
         {
@@ -373,7 +390,7 @@ internal sealed class DeviceRepairDashboard : UserControl
             {
                 _verified = Array.Empty<string>();
                 _snapshot = null;
-                _status.Text = "AD verification failed: " +
+                _status.Text = UiLocale.Display("AD verification failed: ") +
                     UniversalDiagnosticsEmbedded.Clean(ex.Message, 180);
                 AppLog.Write(ex, "Device Dashboard AD verification");
             }
@@ -425,7 +442,7 @@ internal sealed class DeviceRepairDashboard : UserControl
         catch (Exception ex)
         {
             _snapshot = null;
-            _status.Text = "SMB configuration is invalid: " +
+            _status.Text = UiLocale.Display("SMB configuration is invalid: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 150);
             SetButtons();
             return;
@@ -434,7 +451,8 @@ internal sealed class DeviceRepairDashboard : UserControl
         int staleMinutes = Math.Clamp(_project.FeedbackIntervalMinutes * 3, 45, 180);
         _busy = true;
         SetButtons();
-        _status.Text = "Reading SMB Client Health, both Repair queues and local history...";
+        _status.Text = UiLocale.Display(
+            "Reading SMB Client Health, both Repair queues and local history...");
         try
         {
             var snapshot = await Task.Run(() => {
@@ -459,18 +477,20 @@ internal sealed class DeviceRepairDashboard : UserControl
                 throw new InvalidOperationException("Campaign or feedback share changed during refresh.");
             _snapshot = snapshot;
             _summary.Text =
-                $"Scoped AD computers: {snapshot.Rows.Count}  |  " +
-                $"Client Health claims: {snapshot.HealthClaims}  |  " +
-                $"Attention: {snapshot.Problems}  |  No report: {snapshot.NoReport}  |  " +
-                $"Pending Repair: {snapshot.ActiveRepair}  |  " +
-                $"Repair events: {snapshot.RepairTimeline.Count}  |  " +
-                $"Invalid reports: {snapshot.ClientSnapshot.InvalidReports}";
-            _headline.Text = "Campaign: " + snapshot.CampaignId +
-                " | Verified OU + Security Group | Refreshed " +
+                UiLocale.Display("Scoped AD computers: ") + snapshot.Rows.Count + "  |  " +
+                UiLocale.Display("Client Health claims: ") + snapshot.HealthClaims + "  |  " +
+                UiLocale.Display("Attention: ") + snapshot.Problems + "  |  " +
+                UiLocale.Display("No report: ") + snapshot.NoReport + "  |  " +
+                UiLocale.Display("Pending Repair: ") + snapshot.ActiveRepair + "  |  " +
+                UiLocale.Display("Repair events: ") + snapshot.RepairTimeline.Count + "  |  " +
+                UiLocale.Display("Invalid reports: ") + snapshot.ClientSnapshot.InvalidReports;
+            _headline.Text = UiLocale.Display("Campaign: ") + snapshot.CampaignId +
+                UiLocale.Display(" | Verified OU + Security Group | Refreshed ") +
                 snapshot.ObservedUtc.LocalDateTime.ToString("HH:mm:ss");
             DrawRows();
-            _status.Text = "Read-only snapshot. Expected image is an agent claim, " +
-                "not proof of the image displayed on screen.";
+            _status.Text = UiLocale.Display(
+                "Read-only snapshot. Expected image is an agent claim, " +
+                "not proof of the image displayed on screen.");
         }
         catch (Exception ex)
         {
@@ -478,9 +498,10 @@ internal sealed class DeviceRepairDashboard : UserControl
             {
                 _snapshot = null;
                 _grid.Rows.Clear();
-                _details.Text = "Data sources could not be safely combined.";
-                _summary.Text = "Snapshot unavailable. Missing telemetry is not a failed endpoint.";
-                _status.Text = "Dashboard refresh failed: " +
+                _details.Text = UiLocale.Display("Data sources could not be safely combined.");
+                _summary.Text = UiLocale.Display(
+                    "Snapshot unavailable. Missing telemetry is not a failed endpoint.");
+                _status.Text = UiLocale.Display("Dashboard refresh failed: ") +
                     UniversalDiagnosticsEmbedded.Clean(ex.Message, 170);
                 AppLog.Write(ex, "Device & Repair Dashboard refresh");
             }
@@ -660,34 +681,38 @@ internal sealed class DeviceRepairDashboard : UserControl
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selected.Length is < 1 or > 25)
         {
-            MessageBox.Show(FindForm(), "Select 1–25 verified computers.", "Repair Selected",
+            MessageBox.Show(FindForm(),
+                UiLocale.Display("Select 1–25 verified computers."),
+                UiLocale.Display("Repair Selected"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var verified = new HashSet<string>(_verified, StringComparer.OrdinalIgnoreCase);
         if (selected.Any(x => !verified.Contains(x)))
         {
-            MessageBox.Show(FindForm(), "Selected host is outside the last verified AD scope.",
-                "Repair Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(FindForm(),
+                UiLocale.Display("Selected host is outside the last verified AD scope."),
+                UiLocale.Display("Repair Selected"), MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
         if (_snapshot!.Rows.Where(x => selected.Contains(x.ComputerFqdn,
                 StringComparer.OrdinalIgnoreCase)).Any(x => x.HasPendingRepair))
         {
             MessageBox.Show(FindForm(),
-                "One or more selected PCs already have a pending Repair. " +
-                "Inspect the protected queues and Client Health before new RPC.",
-                "Repair already tracked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                UiLocale.Display("One or more selected PCs already have a pending Repair. " +
+                "Inspect the protected queues and Client Health before new RPC."),
+                UiLocale.Display("Repair already tracked"), MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
         if (MessageBox.Show(FindForm(),
-            "Open the EXISTING Repair workflow for these AD-verified computers?" +
-            Environment.NewLine + Environment.NewLine +
-            "This dashboard does not start an RPC. The existing workflow will " +
-            "revalidate AD, GPO and both Repair queues and require Preview plus " +
-            "typing the complete GPO GUID before any remote task." +
-            Environment.NewLine + "Continue?",
-            "Repair Selected", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            UiLocale.Display(
+                "Open the EXISTING Repair workflow for these AD-verified computers?\n\n" +
+                "This dashboard does not start an RPC. The existing workflow will " +
+                "revalidate AD, GPO and both Repair queues and require Preview plus " +
+                "typing the complete GPO GUID before any remote task.\nContinue?"),
+            UiLocale.Display("Repair Selected"), MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         _busy = true;

@@ -214,11 +214,16 @@ internal static partial class UiLocale
             AdHealthEnglish.TryGetValue(key, out english) ||
             OpsDiagnosticsEnglish.TryGetValue(key, out english) ||
             ScheduleAdvancedEnglish.TryGetValue(key, out english) ||
+            Advanced95EnglishByHebrew.TryGetValue(key, out english) ||
+            Advanced95EnglishByRussian.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
         if (IsRussian(language))
-            return Russian.TryGetValue(key, out string? ru) ? ru : key;
+        {
+            if (Russian.TryGetValue(key, out string? ru)) return ru;
+            if (Advanced95Russian.TryGetValue(key, out ru)) return ru;
+        }
         if (IsHebrew(language))
         {
             if (Hebrew.TryGetValue(key, out string? he)) return he;
@@ -226,6 +231,7 @@ internal static partial class UiLocale
             if (AdHealthHebrew.TryGetValue(key, out he)) return he;
             if (OpsDiagnosticsHebrew.TryGetValue(key, out he)) return he;
             if (ScheduleAdvancedHebrew.TryGetValue(key, out he)) return he;
+            if (Advanced95Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -266,7 +272,8 @@ internal static partial class UiLocale
             "Campaign Schedule - Images and Dates",
             "Company Profiles — LockScreen Campaign Manager",
             "New company profile", "Edit company profile",
-            "Client Health — Alert settings" })
+            "Client Health — Alert settings",
+            "gMSA 24/7 — Setup", "gMSA Production Readiness — read-only" })
         {
             if (new[] { "English", "Hebrew", "Russian" }
                 .Any(source => form.Text == Translate(englishTitle, source)))
@@ -310,6 +317,14 @@ internal static partial class UiLocale
             if (child is TextBox placeholder &&
                 !string.IsNullOrEmpty(placeholder.PlaceholderText))
                 placeholder.PlaceholderText = Translate(placeholder.PlaceholderText, language);
+            // This is a fixed instructional paragraph, not a saved report or
+            // user-entered UNC string. Unlike raw diagnostics, it may use RTL.
+            if (child is TextBox instructions &&
+                instructions.Name == "FeedbackSmbInstructions")
+            {
+                instructions.Text = Translate(instructions.Text, language);
+                instructions.RightToLeft = hebrew ? RightToLeft.Yes : RightToLeft.No;
+            }
             if (child is DataGridView or ListBox or ListView)
                 child.RightToLeft = RightToLeft.No;
             if (child is ListView view)
@@ -330,7 +345,8 @@ internal static partial class UiLocale
                     "CampaignScheduleGrid" or "EffectiveGpoGrid" or
                     "WinningPolicyGrid" or "CampaignHistoryGrid" or
                     "RepairHistoryGrid" or "CampaignClosureGrid" or
-                    "ImageFolderMappingGrid"))
+                    "ImageFolderMappingGrid" or "GmsaReadinessGrid" or
+                    "DeviceRepairGrid"))
             {
                 foreach (DataGridViewColumn column in healthGrid.Columns)
                 {
@@ -358,7 +374,7 @@ internal static partial class UiLocale
                  "CampaignScheduleMode" or
                  "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
-                 "CampaignClosureFilter"))
+                 "CampaignClosureFilter" or "DeviceRepairFilter"))
                 ApplyComboLocalization(combo, language);
         }
     }

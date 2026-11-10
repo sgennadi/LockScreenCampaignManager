@@ -147,6 +147,13 @@ internal static class UiLayoutSmokeTests
                 "OU=Devices,DC=example,DC=com",
                 "CN=PCs,OU=Groups,DC=example,DC=com"
             ), new[] { "Add group...", "Remove", "Save assignments", "Cancel" }),
+        ("gMSA setup", () => new GmsaRepairSetupDialog(
+            "example.com", "OU=Clients,DC=example,DC=com",
+            "CN=Clients,OU=Groups,DC=example,DC=com", @"\\files.example.com\ClientHealth$"),
+            new[] { "Check", "Run gMSA test", "Install / Repair",
+                "Disable", "Remove task", "Readiness", "Close" }),
+        ("Client Health alert settings", () => new ClientAlertSettingsDialog(
+            new ClientAlertPreferences()), new[] { "Save", "Cancel" }),
         ("gMSA readiness", () => new GmsaReadinessDialog(
             "example.com", "OU=Clients,DC=example,DC=com",
             "CN=Clients,OU=Groups,DC=example,DC=com"),
@@ -1114,6 +1121,7 @@ internal static class UiLayoutSmokeTests
         CheckHebrewAdAndClientHealth();
         CheckHebrewGpoOperationsAndDiagnostics();
         CheckRussianThreeLanguageScheduleAndAdvanced();
+        CheckRussianHebrewAdvanced95();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1558,6 +1566,110 @@ internal static class UiLayoutSmokeTests
                 difference.RightToLeft != RightToLeft.No)
                 throw new InvalidOperationException(
                     "Language switch reversed a technical Windows timezone ID.");
+        }
+    }
+
+    private static void CheckRussianHebrewAdvanced95()
+    {
+        // CI-only synthetic data: never Show() a dialog; Shown would start a
+        // readiness probe. No AD, RPC, SMB write, gMSA installation or JSON export.
+        foreach (var profile in Profiles)
+        {
+            UiPreferences Style(string lang) => new() {
+                Language = lang, Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            const string domain = "example.com";
+            const string ou = "OU=Clients,DC=example,DC=com";
+            const string group = "CN=Clients,OU=Groups,DC=example,DC=com";
+            const string share = @"\\files.example.com\ClientHealth$";
+
+            using var setup = new GmsaRepairSetupDialog(domain, ou, group, share);
+            using var readiness = new GmsaReadinessDialog(domain, ou, group);
+            using var feedback = new FeedbackSettingsDialog(new CampaignProject {
+                Name = "advanced-rtl-ci", TimeZoneId = "UTC",
+                EnableFeedback = true, FeedbackShare = share
+            });
+            using var alerts = new ClientAlertSettingsDialog(new ClientAlertPreferences());
+            using var operations = new GpoOperationsForm(
+                domain, "dc01.example.com", ou, group,
+                new DomainCredentials(domain, "", ""),
+                new CampaignProject { Name = "advanced-ci", TimeZoneId = "UTC" });
+
+            Form[] forms = [setup, readiness, feedback, alerts, operations];
+            var checkGrid = Descendants(readiness).OfType<DataGridView>()
+                .Single(x => x.Name == "GmsaReadinessGrid");
+            var deviceGrid = Descendants(operations).OfType<DataGridView>()
+                .Single(x => x.Name == "DeviceRepairGrid");
+            var deviceFilter = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "DeviceRepairFilter");
+            var inputShare = Descendants(feedback).OfType<TextBox>()
+                .Single(x => x.Name == "FeedbackShareScrollable");
+            var help = Descendants(feedback).OfType<TextBox>()
+                .Single(x => x.Name == "FeedbackSmbInstructions");
+            string[] checkColumns = checkGrid.Columns.Cast<DataGridViewColumn>()
+                .Select(x => x.HeaderText).ToArray();
+            string[] deviceColumns = deviceGrid.Columns.Cast<DataGridViewColumn>()
+                .Select(x => x.HeaderText).ToArray();
+            string[] filterKeys = deviceFilter.Items.Cast<object>()
+                .Select(x => x.ToString() ?? "").ToArray();
+            int filterIndex = deviceFilter.SelectedIndex;
+
+            foreach (var form in forms)
+            {
+                UiStyle.Apply(form, Style("Russian"));
+                form.PerformLayout();
+                if (form.RightToLeft != RightToLeft.No || form.RightToLeftLayout)
+                    throw new InvalidOperationException(
+                        "Advanced95 Russian must remain LTR: " + form.Text +
+                        " / " + profile.Name);
+            }
+            if (setup.Text != "Настройка gMSA 24/7" ||
+                readiness.Text != "Готовность gMSA — только чтение" ||
+                checkGrid.Columns[1].HeaderText != "Результат" ||
+                deviceGrid.Columns[3].HeaderText != "Ожидаемое изображение" ||
+                !deviceFilter.FormattingEnabled ||
+                !Descendants(setup).OfType<Button>()
+                    .Any(x => x.Text == "Установить / исправить") ||
+                !Descendants(alerts).OfType<Label>()
+                    .Any(x => x.Text == "Рост числа проблем на") ||
+                !help.Text.StartsWith("Принцип работы:", StringComparison.Ordinal) ||
+                inputShare.Text != share || deviceFilter.SelectedIndex != filterIndex)
+                throw new InvalidOperationException(
+                    "Advanced95 Russian setup/readiness/dashboard captions missing: " +
+                    profile.Name);
+
+            foreach (var form in forms)
+                UiStyle.Apply(form, Style("Hebrew"));
+            if (setup.Text != "הגדרת gMSA מסביב לשעון" ||
+                readiness.Text != "מוכנות gMSA לייצור — קריאה בלבד" ||
+                !setup.RightToLeftLayout || !readiness.RightToLeftLayout ||
+                checkGrid.Columns[1].HeaderText != "תוצאה" ||
+                deviceGrid.Columns[3].HeaderText != "תמונה צפויה" ||
+                !help.Text.StartsWith("כיצד זה עובד:", StringComparison.Ordinal) ||
+                help.RightToLeft != RightToLeft.Yes)
+                throw new InvalidOperationException(
+                    "Advanced95 Hebrew RTL/labels missing: " + profile.Name);
+
+            foreach (var form in forms)
+                UiStyle.Apply(form, Style("English"));
+            if (setup.Text != "gMSA 24/7 — Setup" ||
+                readiness.Text != "gMSA Production Readiness — read-only" ||
+                setup.RightToLeftLayout || readiness.RightToLeftLayout ||
+                checkGrid.Columns.Cast<DataGridViewColumn>()
+                    .Select(x => x.HeaderText).SequenceEqual(checkColumns) == false ||
+                deviceGrid.Columns.Cast<DataGridViewColumn>()
+                    .Select(x => x.HeaderText).SequenceEqual(deviceColumns) == false ||
+                !help.Text.StartsWith("How it works:", StringComparison.Ordinal) ||
+                help.RightToLeft != RightToLeft.No ||
+                inputShare.Text != share ||
+                deviceFilter.SelectedIndex != filterIndex ||
+                !deviceFilter.Items.Cast<object>()
+                    .Select(x => x.ToString() ?? "").SequenceEqual(filterKeys))
+                throw new InvalidOperationException(
+                    "Advanced95 reverse switch damaged UI or technical values: " +
+                    profile.Name);
         }
     }
 

@@ -248,5 +248,58 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         self.assertIn('"Disable", "Enable", "Unlink", "Relink", "Reuse", "Delete"', manager)
         self.assertIn('"Push", "Repair", "Cleanup", "Report"', manager)
 
+    def test_advanced95_bilingual_safety_and_display(self):
+        locale = read("UiLocale.cs")
+        words = read("UiLocale.Advanced95.cs")
+        gmsa = read("GmsaRepairSetupDialog.cs")
+        readiness = read("GmsaReadinessDialog.cs")
+        feedback = read("FeedbackSettingsDialog.cs")
+        alerts = read("ClientAlertSettingsDialog.cs")
+        dashboard = read("DeviceRepairDashboard.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        for marker in ("Advanced95EnglishByRussian.TryGetValue",
+                       "Advanced95EnglishByHebrew.TryGetValue",
+                       "Advanced95Russian.TryGetValue",
+                       "Advanced95Hebrew.TryGetValue",
+                       '"GmsaReadinessGrid"', '"DeviceRepairGrid"',
+                       '"DeviceRepairFilter"', '"FeedbackSmbInstructions"'):
+            self.assertIn(marker, locale)
+        for marker in ('"GmsaReadinessGrid"', 'UiLocale.Display("Queue: ")',
+                       'report.Checks'):
+            self.assertIn(marker, readiness)
+        for source, markers in (
+            (gmsa, ('UiLocale.Display("gMSA — Confirm installation")',
+                    'UiLocale.Display("Disable gMSA")',
+                    'MessageBoxDefaultButton.Button2',
+                    'GmsaNativeSetup.Install(request)',
+                    'GmsaNativeSetup.RemoveTask()',
+                    'RightToLeft = RightToLeft.No')),
+            (feedback, ('UiLocale.Display("Create feedback folder?', 
+                        'FeedbackPath.ValidateRoot', 'Directory.CreateDirectory(folder)',
+                        'Name = "FeedbackSmbInstructions"')),
+            (dashboard, ('Name = "DeviceRepairGrid"',
+                         'Name = "DeviceRepairFilter"',
+                         'UiLocale.Display("Scoped AD computers: ")',
+                         'UiLocale.Display("Repair Selected")',
+                         '_requestRepair(selected.Select(')),
+            (smoke, ('CheckRussianHebrewAdvanced95();',
+                     '"Настройка gMSA 24/7"', '"הגדרת gMSA מסביב לשעון"'))
+        ):
+            for marker in markers:
+                self.assertIn(marker, source)
+        self.assertIn('UiLocale.Display(', alerts)
+        for prefix in ("Advanced95Russian", "Advanced95Hebrew"):
+            start = words.index('private static readonly Dictionary<string,string> ' + prefix)
+            end = words.index('    };', start)
+            keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', words[start:end], re.M)
+            self.assertGreaterEqual(len(keys), 105)
+            self.assertEqual(len(keys), len(set(keys)))
+        for protected in ("GmsaRepairConfig.cs", "GmsaRepairQueue.cs",
+                          "NativeImmediateApply.cs", "NativeGpoDeploymentApply.cs",
+                          "CampaignModels.cs"):
+            self.assertNotIn("UiLocale.Display(", read(protected))
+            self.assertNotIn("UiLocale.Translate(", read(protected))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
