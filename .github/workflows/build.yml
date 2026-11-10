@@ -394,7 +394,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.87':
+          if version != '0.4.0-preview.88':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -426,22 +426,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.87 (no overwrite)
+      - name: Publish 0.4.0-preview.88 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.87'
+          tag='v0.4.0-preview.88'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.87' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW87.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.88' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW88.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -450,7 +450,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.87'
+          tag='v0.4.0-preview.88'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json
