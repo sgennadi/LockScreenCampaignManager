@@ -137,10 +137,14 @@ internal sealed class UniversalUpdaterWindow : Form
         config.Controls.Add(Field("Release channel", _channel), 0, 0);
         config.Controls.Add(Field("Installed version / architecture",
             new TextBox {
+                Name = "UpdaterInstalledVersion",
+                RightToLeft = RightToLeft.No,
                 Text = AppVersion.Current + "    |    " +
                     UpdateOptions.CurrentWindowsArchitecture(),
                 ReadOnly = true, TabStop = false
             }), 1, 0);
+
+        _sessionToken.RightToLeft = RightToLeft.No; // token bytes are not localized
 
         _sessionToken.MaxLength = 512;
         _sessionToken.AccessibleName = "Optional GitHub read-only session token";
@@ -156,6 +160,8 @@ internal sealed class UniversalUpdaterWindow : Form
         };
         config.Controls.Add(Field("GitHub token (optional; never saved)", _sessionToken), 0, 1);
         config.Controls.Add(Field("Repository", new TextBox {
+            Name = "UpdaterRepositoryValue",
+            RightToLeft = RightToLeft.No,
             Text = Repository + "  |  Public releases do not need a token",
             ReadOnly = true, TabStop = false
         }), 1, 1);
@@ -220,6 +226,8 @@ internal sealed class UniversalUpdaterWindow : Form
             Font = new Font("Segoe UI Semibold", 11f),
             ForeColor = UiStyle.Navy, TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
+        _output.Name = "UpdaterResultOutput";
+        _output.RightToLeft = RightToLeft.No; // raw hashes/paths/release notes
         _output.Dock = DockStyle.Fill;
         _output.BackColor = Color.White;
         _output.ForeColor = UiStyle.Foreground;
