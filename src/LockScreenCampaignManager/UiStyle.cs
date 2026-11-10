@@ -11,10 +11,12 @@ internal sealed class UiPreferences
     public string Density { get; set; } = "Auto";
     public int UiScalePercent { get; set; } = 100;
     public int FontScalePercent { get; set; } = 100;
+    public string Language { get; set; } = "English";
     private static readonly string SettingsFile = Path.Combine(AppLog.DirectoryPath, "ui-settings.json");
     public UiPreferences Validate()
     {
         if (Density is not ("Auto" or "Compact" or "Comfortable")) Density = "Auto";
+        if (Language is not ("English" or "Hebrew")) Language = "English";
         UiScalePercent = Math.Clamp(UiScalePercent, 100, 200);
         FontScalePercent = Math.Clamp(FontScalePercent, 90, 125);
         return this;
@@ -108,6 +110,9 @@ internal static class UiStyle
         form.Icon = UiGlyphs.AppIcon;
         var effectivePreferences = previewPreferences is null
             ? Preferences : previewPreferences.Validate();
+        // Translate only explicit static operator controls. Keep user data,
+        // UTF-8 JSON, technical paths and ComboBox value keys unchanged.
+        UiLocale.Apply(form, effectivePreferences.Language);
         var all = Descendants(form).ToArray();
         foreach (var c in all) _ = Fonts.GetValue(c, x =>
             new FontBaseline(x.Font.FontFamily.Name, x.Font.SizeInPoints, x.Font.Style));
