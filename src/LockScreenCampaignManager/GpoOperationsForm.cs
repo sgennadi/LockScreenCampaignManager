@@ -108,7 +108,9 @@ internal sealed partial class GpoOperationsForm : Form
 
     private static Button ActionButton(string title, Action action, int width, bool primary = false)
     {
-        var b = new Button { Text = title, Width = width, Height = 41,
+        var b = new Button { Text = UiLocale.Display(title), Width = width, Height = 41,
+            MinimumSize = new Size(width, 41), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             BackColor = primary ? UiStyle.Accent : UiStyle.Surface,
             ForeColor = primary ? Color.White : UiStyle.Foreground,
             FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 4, 8, 5) };
@@ -128,7 +130,7 @@ internal sealed partial class GpoOperationsForm : Form
     };
     private static Label Note(string text) => new()
     {
-        Dock = DockStyle.Fill, Text = text, ForeColor = UiStyle.Muted,
+        Dock = DockStyle.Fill, Text = UiLocale.Display(text), ForeColor = UiStyle.Muted,
         TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true
     };
 
@@ -155,6 +157,7 @@ internal sealed partial class GpoOperationsForm : Form
         }, 1, 0);
         var scopePath = new TextBox
         {
+            RightToLeft = RightToLeft.No,
             Name = "GpoScopePathViewer",
             Text = "Domain: " + _domain + "  |  DC: " + _dc +
                 Environment.NewLine + "OU: " + _ouDn,
@@ -251,6 +254,7 @@ internal sealed partial class GpoOperationsForm : Form
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = false };
+        _lifecycleAction.Name = "GpoLifecycleAction";
         _lifecycleAction.DropDownStyle = ComboBoxStyle.DropDownList;
         _lifecycleAction.Width = 230;
         _lifecycleAction.Items.AddRange(new object[] {
@@ -285,6 +289,7 @@ internal sealed partial class GpoOperationsForm : Form
         toolbar.Controls.Add(new Label { Text = "Computer for optional HKLM inspection:",
             AutoSize = true, Margin = new Padding(0, 13, 7, 0) });
         _computerName.Width = 255;
+        _computerName.RightToLeft = RightToLeft.No; // FQDN is technical data
         _computerName.PlaceholderText = "PC01.example.com";
         _computerName.Margin = new Padding(0, 9, 9, 0);
         toolbar.Controls.Add(_computerName);
@@ -355,6 +360,7 @@ internal sealed partial class GpoOperationsForm : Form
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, AutoScroll = true };
+        _pushPurpose.Name = "GpoPushPurpose";
         _pushPurpose.DropDownStyle = ComboBoxStyle.DropDownList;
         _pushPurpose.Width = 210;
         _pushPurpose.Items.AddRange(new object[] { "Push", "Repair", "Cleanup", "Report" });
@@ -387,7 +393,7 @@ internal sealed partial class GpoOperationsForm : Form
     {
         if (_busy) throw new InvalidOperationException("Operation already running.");
         _busy = true;
-        _status.Text = "Running: " + mode;
+        _status.Text = UiLocale.Display("Running: ") + mode;
         UseWaitCursor = true;
         try
         {
@@ -407,7 +413,8 @@ internal sealed partial class GpoOperationsForm : Form
     }
     private void Fail(Exception ex, string operation)
     {
-        _status.Text = "Failed: " + UniversalDiagnosticsEmbedded.Clean(ex.Message, 250);
+        _status.Text = UiLocale.Display("Failed: ") +
+            UniversalDiagnosticsEmbedded.Clean(ex.Message, 250);
         UiErrorDialog.Show(this, operation, ex);
     }
     private async Task ReloadAsync()
@@ -433,8 +440,9 @@ internal sealed partial class GpoOperationsForm : Form
             finally { _policies.EndUpdate(); }
             _lifecyclePreview.Enabled = _policies.SelectedItem is GpoRow;
             _status.Text = _policies.Items.Count == 0
-                ? "No managed GPOs found. Create/deploy a campaign before using lifecycle Preview."
-                : "Managed GPOs: " + _policies.Items.Count + ". Select a GPO to preview.";
+                ? UiLocale.Display("No managed GPOs found. Create/deploy a campaign before using lifecycle Preview.")
+                : UiLocale.Display("Managed GPOs: ") + _policies.Items.Count +
+                    UiLocale.Display(". Select a GPO to preview.");
         }
         catch (Exception ex) { Fail(ex, "List managed GPOs"); }
     }
@@ -468,7 +476,7 @@ internal sealed partial class GpoOperationsForm : Form
             // Keep the report dialog for actual failures only.
             _lifecycleInfo.Text = "Choose a managed GPO in the list first. " +
                 "Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.";
-            _status.Text = "Select a managed GPO first (no action performed).";
+            _status.Text = UiLocale.Display("Select a managed GPO first (no action performed).");
             return;
         }
         try
@@ -483,7 +491,7 @@ internal sealed partial class GpoOperationsForm : Form
             _gpoPlanAction = action;
             _gpoPlanId = SelectedId;
             _applyGpo.Enabled = true;
-            _status.Text = "Plan ready. No domain changes made.";
+            _status.Text = UiLocale.Display("Plan ready. No domain changes made.");
         }
         catch (Exception ex) { Fail(ex, "Preview GPO lifecycle"); }
     }
@@ -496,8 +504,10 @@ internal sealed partial class GpoOperationsForm : Form
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         panel.Controls.Add(new Label { Dock = DockStyle.Fill, Text =
-            "Operation: " + operation + "\n\nEnter the full GPO GUID to confirm:\n" + guid }, 0, 0);
-        var edit = new TextBox { Dock = DockStyle.Fill };
+            UiLocale.Display("Operation: ") + UiLocale.Display(operation) +
+            "\n\n" + UiLocale.Display("Enter the full GPO GUID to confirm:") +
+            "\n" + guid }, 0, 0);
+        var edit = new TextBox { Dock = DockStyle.Fill, RightToLeft = RightToLeft.No };
         panel.Controls.Add(edit, 0, 1);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var confirm = ActionButton("Confirm", () => { if (edit.Text.Trim().Equals(guid, StringComparison.OrdinalIgnoreCase)) dialog.DialogResult = DialogResult.OK; }, 170, true);
@@ -527,7 +537,7 @@ internal sealed partial class GpoOperationsForm : Form
                 planHash, approveGuid = id
             });
             _lifecycleInfo.Text = Pretty(data);
-            _status.Text = "GPO action confirmed. Wait for AD/SYSVOL replication.";
+            _status.Text = UiLocale.Display("GPO action confirmed. Wait for AD/SYSVOL replication.");
             string campaignForEvent = _policies.SelectedItem is GpoRow selected
                 ? (action == "Reuse" ? CampaignSchedule.BuildId(_project) : selected.CampaignId)
                 : CampaignSchedule.BuildId(_project);
@@ -544,7 +554,7 @@ internal sealed partial class GpoOperationsForm : Form
         if (_busy) return;
         if (_policies.SelectedItem is not GpoRow selected)
         {
-            _status.Text = "Select a managed GPO on the GPO tab first.";
+            _status.Text = UiLocale.Display("Select a managed GPO on the GPO tab first.");
             return;
         }
         string fqdn = _computerName.Text.Trim();
