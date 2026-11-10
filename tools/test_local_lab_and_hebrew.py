@@ -62,5 +62,44 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
         self.assertGreaterEqual(len(keys), 110)
 
+    def test_wizard_hebrew_is_ui_only_and_reversible(self):
+        locale = read("UiLocale.cs")
+        dictionary = read("UiLocale.Wizard.cs")
+        wizard = read("MainForm.CampaignWizard.cs")
+        mode = read("MainForm.CampaignWizard.Mode.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        for label in (
+            '"1  AD connection"', '"2  Campaign type"', '"3  Images"',
+            '"4  Arrange"', '"5  Schedule"', '"6  Save / Skip"',
+            '"7  Deploy"', '"SYSVOL (default)"', '"SMB network folder (UNC)"',
+            '"Campaign Wizard"', '"Campaign name"', '"Screen Saver (.scr)"',
+            '"JPG photo slideshow', '"Require Windows sign-in on resume"'
+        ):
+            self.assertIn(label, dictionary)
+        keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', dictionary, re.M)
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertGreaterEqual(len(keys), 100)
+        self.assertIn("TranslateWizardDynamic", dictionary)
+        self.assertIn("WizardEnglish", dictionary)
+        for marker in (
+            "internal static partial class UiLocale", "ApplyComboLocalization",
+            "combo.FormattingEnabled = true", "combo.Format +=",
+            "combo.Invalidate()", "TextBox text", "RightToLeft.No"
+        ):
+            self.assertIn(marker, locale)
+        for marker in (
+            "private static string T(", "FitWizardPageText",
+            "Name = \"CampaignWizardContentSource\"",
+            "CampaignContentSource.SmbShare", "_storageModifiedAfterSave",
+            "UiStyle.Apply(this)"
+        ):
+            self.assertIn(marker, wizard)
+        self.assertIn('T("Selected type: ")', mode)
+        self.assertIn("CheckHebrewCampaignWizardPages();", smoke)
+        # Display language must never be used in persistent protocol keys.
+        self.assertNotIn("UiLocale.Translate", read("CampaignModels.cs"))
+        self.assertNotIn("UiLocale.Translate", read("CampaignPayloadLocation.cs"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
