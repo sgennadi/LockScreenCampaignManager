@@ -50,15 +50,17 @@ internal sealed class GmsaReadinessDialog : Form
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 14.5f),
             ForeColor = UiStyle.Foreground,
-            Text = "Production Readiness" + Environment.NewLine +
-                "Verify local installation, task, heartbeat, gMSA identity, SMB and queue."
+            Text = UiLocale.Display("Production Readiness\n" +
+                "Verify local installation, task, heartbeat, gMSA identity, SMB and queue.")
         }, 0, 0);
 
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
-        _summary.Text = "No assessment yet. Only a real domain pilot can prove endpoint operation.";
+        _summary.Text = UiLocale.Display(
+            "No assessment yet. Only a real domain pilot can prove endpoint operation.");
         layout.Controls.Add(_summary, 0, 1);
 
+        _checks.Name = "GmsaReadinessGrid";
         _checks.Dock = DockStyle.Fill;
         _checks.ReadOnly = true;
         _checks.AllowUserToAddRows = false;
@@ -80,9 +82,9 @@ internal sealed class GmsaReadinessDialog : Form
 
         _notice.Dock = DockStyle.Fill;
         _notice.ForeColor = UiStyle.Muted;
-        _notice.Text = "Read-only checks never execute client RPC. " +
+        _notice.Text = UiLocale.Display("Read-only checks never execute client RPC. " +
             "A successful assessment does NOT prove that a lock-screen image " +
-            "is visible or that restart recovery works in the real AD.";
+            "is visible or that restart recovery works in the real AD.");
         layout.Controls.Add(_notice, 0, 3);
 
         var buttons = new FlowLayoutPanel {
@@ -106,10 +108,13 @@ internal sealed class GmsaReadinessDialog : Form
 
     private static void Configure(Button button, string label, int width)
     {
-        button.Text = label;
+        button.Text = UiLocale.Display(label);
         button.Width = width;
-        button.Height = 36;
-        button.AutoEllipsis = true;
+        button.Height = 39;
+        button.MinimumSize = new Size(width, 39);
+        button.AutoSize = true;
+        button.AutoSizeMode = AutoSizeMode.GrowOnly;
+        button.AutoEllipsis = false;
         button.Margin = new Padding(2, 4, 8, 6);
     }
 
@@ -119,7 +124,8 @@ internal sealed class GmsaReadinessDialog : Form
         _running = true;
         _run.Enabled = _export.Enabled = _close.Enabled = false;
         UseWaitCursor = true;
-        _summary.Text = "Checking the local worker host (no Repair, no task launch)...";
+        _summary.Text = UiLocale.Display(
+            "Checking the local worker host (no Repair, no task launch)...");
         _report = null;
         try
         {
@@ -146,18 +152,21 @@ internal sealed class GmsaReadinessDialog : Form
             }
             finally { _checks.ResumeLayout(); }
             _summary.Text = report.Conclusion + Environment.NewLine +
-                $"Queue: {report.QueueEntries} | Unconfirmed RPC: " +
-                $"{report.UnconfirmedRpc} | Operator review: {report.NeedsAttention}";
-            _notice.Text = "Assessment " + report.CheckedUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") +
-                ". Export omits account, computer, domain, OU, SID, IP and UNC." +
+                UiLocale.Display("Queue: ") + report.QueueEntries +
+                " | " + UiLocale.Display("Unconfirmed RPC: ") + report.UnconfirmedRpc +
+                " | " + UiLocale.Display("Operator review: ") + report.NeedsAttention;
+            _notice.Text = UiLocale.Display("Assessment ") +
+                report.CheckedUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") +
+                UiLocale.Display(". Export omits account, computer, domain, OU, SID, IP and UNC.") +
                 Environment.NewLine + report.EndpointAcceptance;
         }
         catch (Exception ex)
         {
             if (IsDisposed) return;
             _checks.Rows.Clear();
-            _summary.Text = "Readiness assessment unavailable. This is NOT a successful check.";
-            _notice.Text = "Local administrator rights are required. " +
+            _summary.Text = UiLocale.Display(
+                "Readiness assessment unavailable. This is NOT a successful check.");
+            _notice.Text = UiLocale.Display("Local administrator rights are required. ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 180);
             AppLog.Write(ex, "gMSA Production Readiness");
         }
@@ -180,15 +189,15 @@ internal sealed class GmsaReadinessDialog : Form
         // counts. Do not serialize raw gMSA configuration or queue entries.
         using var dialog = new SaveFileDialog {
             Filter = "JSON (*.json)|*.json",
-            Title = "Export privacy-safe gMSA readiness report",
+            Title = UiLocale.Display("Export privacy-safe gMSA readiness report"),
             FileName = "LSCM-gMSA-Readiness-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json"
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
             File.WriteAllText(dialog.FileName, _report.ToJson(), new UTF8Encoding(false));
-            _notice.Text = "Export saved locally after your approval. " +
-                "No report was sent to GitHub or elsewhere.";
+            _notice.Text = UiLocale.Display(
+                "Export saved locally after your approval. No report was sent to GitHub or elsewhere.");
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Export readiness JSON", ex); }
     }
