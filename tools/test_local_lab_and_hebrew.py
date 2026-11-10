@@ -79,7 +79,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', dictionary, re.M)
         self.assertEqual(len(keys), len(set(keys)))
         self.assertGreaterEqual(len(keys), 100)
-        self.assertIn("TranslateWizardDynamic", dictionary)
+        self.assertIn("TryTranslateWizardStep", dictionary)
         self.assertIn("WizardEnglish", dictionary)
         for marker in (
             "internal static partial class UiLocale", "ApplyComboLocalization",
