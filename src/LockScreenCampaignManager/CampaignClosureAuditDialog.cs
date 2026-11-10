@@ -73,10 +73,13 @@ internal sealed class CampaignClosureAuditDialog : Form
         _summary.Dock = DockStyle.Fill;
         _summary.ForeColor = UiStyle.Foreground;
         _summary.AutoEllipsis = true;
-        _summary.Text = $"AD devices: {_audit.Total}  |  Agent-reported Completed: " +
-            $"{_audit.ReportedComplete}  |  Repair tracked: {_audit.RepairTracked}\r\n" +
-            $"Active/pending: {_audit.Outstanding}  |  No report: {_audit.NoReport}  |  " +
-            $"Review: {_audit.NeedsReview}  |  Other: {_audit.Unexpected}";
+        _summary.Text = UiLocale.Display("AD devices: ") + _audit.Total +
+            UiLocale.Display("  |  Agent-reported Completed: ") + _audit.ReportedComplete +
+            UiLocale.Display("  |  Repair tracked: ") + _audit.RepairTracked + "\r\n" +
+            UiLocale.Display("Active/pending: ") + _audit.Outstanding + " | " +
+            UiLocale.Display("No report: ") + _audit.NoReport +
+            UiLocale.Display("  |  Review: ") + _audit.NeedsReview +
+            UiLocale.Display("  |  Other: ") + _audit.Unexpected;
         root.Controls.Add(_summary, 0, 1);
         _policy.Dock = DockStyle.Fill;
         _policy.AutoEllipsis = true;
@@ -84,9 +87,10 @@ internal sealed class CampaignClosureAuditDialog : Form
         _policy.Text = _gpo.Available
             ? $"DC: {_gpo.DomainController}  |  {_gpo.DirectOuLink}  |  " +
               $"{_gpo.MachineConfiguration}  |  Other domain/site links: {_gpo.OtherLinks}\r\n" +
-              "GPO link state is not endpoint RSoP. Local agent/tasks can remain active."
-            : $"GPO state: UNKNOWN on {_gpo.DomainController}. " +
-              "Selected DC read failed; do not infer link removal.\r\n" + _gpo.Caution;
+              UiLocale.Display("GPO link state is not endpoint RSoP. Local agent/tasks can remain active.")
+            : UiLocale.Display("GPO state: UNKNOWN on ") + _gpo.DomainController + ". " +
+              UiLocale.Display("Selected DC read failed; do not infer link removal.") +
+              "\r\n" + _gpo.Caution;
         root.Controls.Add(_policy, 0, 2);
 
         var filters = new FlowLayoutPanel
@@ -230,9 +234,12 @@ internal sealed class CampaignClosureAuditDialog : Form
         int verified = _remote.Values.Count(x => x.IsObservedVerified);
         int unknown = _remote.Values.Count(x => x.Status == "Unknown");
         int pending = _remote.Values.Count(x => x.Status == "Pending");
-        _footer.Text = $"Showing {_visible.Count}/{_audit.Total}; last observed clean: {verified}, " +
-            $"pending: {pending}, unknown: {unknown}, not checked: {_audit.Total - _remote.Count}. " +
-            "Results are historical observations; no automatic rechecks or remote changes.";
+        _footer.Text = UiLocale.Display("Showing ") + _visible.Count + "/" + _audit.Total +
+            "; " + UiLocale.Display("last observed clean: ") + verified +
+            ", " + UiLocale.Display("pending: ") + pending +
+            ", " + UiLocale.Display("unknown: ") + unknown +
+            ", " + UiLocale.Display("not checked: ") + (_audit.Total - _remote.Count) +
+            ". " + UiLocale.Display("Results are historical observations; no automatic rechecks or remote changes.");
     }
 
     private void DrawDetails()
@@ -274,21 +281,21 @@ internal sealed class CampaignClosureAuditDialog : Form
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (hosts.Length is < 1 or > 25)
         {
-            MessageBox.Show(this, "Select between 1 and 25 verified AD computers (Ctrl+click for multiple).",
-                "Post-cleanup verification", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, UiLocale.Display("Select between 1 and 25 verified AD computers (Ctrl+click for multiple)."),
+                UiLocale.Display("Post-cleanup verification"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         if (MessageBox.Show(this,
-            "Perform READ-ONLY SMB, Task Scheduler RPC and Remote Registry reads " +
-            $"on {hosts.Length} selected verified computer(s)?\r\n\r\n" +
-            "No remote task, registry or GPO will be modified. Offline/unreachable " +
-            "computers remain Unknown until another explicit verification.",
-            "Verify post-cleanup", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            UiLocale.Display("Perform READ-ONLY SMB, Task Scheduler RPC and Remote Registry reads on ") +
+            hosts.Length + UiLocale.Display(" selected verified computer(s)?") + "\r\n\r\n" +
+            UiLocale.Display("No remote task, registry or GPO will be modified. Offline/unreachable " +
+            "computers remain Unknown until another explicit verification."),
+            UiLocale.Display("Verify post-cleanup"), MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
 
         _verifying = true;
         _verify.Enabled = false;
-        _footer.Text = "Reading remote cleanup evidence; no changes will be made...";
+        _footer.Text = UiLocale.Display("Reading remote cleanup evidence; no changes will be made...");
         try
         {
             var results = await _scan(hosts);
@@ -296,8 +303,8 @@ internal sealed class CampaignClosureAuditDialog : Form
             PostCleanupVerificationStore.Save(_scope, _eligible, results);
             foreach (var result in results) _remote[result.Computer] = result;
             Draw();
-            _footer.Text = $"Completed read-only verification for {results.Count} device(s). " +
-                "Observations saved locally; offline states remain for a manual retry.";
+            _footer.Text = UiLocale.Display("Completed read-only verification for ") +
+                results.Count + UiLocale.Display(" device(s). Observations saved locally; offline states remain for a manual retry.");
         }
         catch (Exception ex)
         {
@@ -324,16 +331,16 @@ internal sealed class CampaignClosureAuditDialog : Form
     {
         if (_visible.Count == 0) return;
         if (MessageBox.Show(this,
-            "Export the visible closure assessment to a local CSV? It includes " +
+            UiLocale.Display("Export the visible closure assessment to a local CSV? It includes " +
             "computer FQDNs, the selected campaign and GPO IDs, and operational " +
             "information. Review it before sharing. A report is not proof of " +
-            "endpoint cleanup.",
-            "Export private closure audit", MessageBoxButtons.YesNo,
+            "endpoint cleanup."),
+            UiLocale.Display("Export private closure audit"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         using var dialog = new SaveFileDialog
         {
-            Title = "Export campaign closure audit",
+            Title = UiLocale.Display("Export campaign closure audit"),
             Filter = "CSV UTF-8 (*.csv)|*.csv",
             FileName = "LSCM-Closure-Audit-" +
                 DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".csv"
@@ -358,7 +365,7 @@ internal sealed class CampaignClosureAuditDialog : Form
                 }.Select(Csv)).Append("\r\n");
             }
             File.WriteAllText(dialog.FileName, csv.ToString(), new UTF8Encoding(true));
-            _footer.Text = "Local CSV saved: " + dialog.FileName;
+            _footer.Text = UiLocale.Display("Local CSV saved: ") + dialog.FileName;
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Export closure audit", ex); }
     }
