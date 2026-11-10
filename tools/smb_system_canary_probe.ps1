@@ -174,7 +174,13 @@ try {
     }
     Finding 'MANUAL_GPO_WINNER_REVIEW_REQUIRED'
     Finding 'MANUAL_DISPLAY_AND_ROLLBACK_REQUIRED'
-    $checks.result='SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY'
+    # A corrupted installed package is never a successful endpoint canary,
+    # even when the remote source itself is still readable and pinned.
+    if ($checks.localCachePresent -and -not $checks.localCacheHashVerified) {
+        $checks.result='FAIL_CLOSED'
+    } else {
+        $checks.result='SOURCE_VERIFIED_AS_LOCAL_SYSTEM_ONLY'
+    }
 }
 catch {
     $message=[string]$_.Exception.Message
