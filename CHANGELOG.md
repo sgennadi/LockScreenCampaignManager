@@ -1,3 +1,10 @@
+## 0.4.0-preview.85 — RSoP GPO GUID / post-deployment reboot evidence (2026-11-10)
+
+- Add completed deployment UTC and exact GPO ID to the read-only LocalSystem canary input so a *disposable* Windows 10/11 client can report whether it has rebooted after GPO creation.
+- Generate temporary protected `gpresult /scope computer /x` XML, match only the expected **ComputerResults GPO Path GUID**, and fail closed for filtered, disabled, missing or duplicated policies. Raw XML is removed and never uploaded. An applied GPO entry is *not* proof of a winning setting.
+- Keep source manifest, agent and image SHA-256 validation, cache integrity and no-AD-mutation guarantees from Preview.84. Add Windows PowerShell 5.1 RSoP parser fixtures and revised offline lab kit.
+- Real GPO Startup execution, visible Lock Screen and rollback still require dedicated domain endpoint acceptance. JPG Photo Screen Saver User GPO remains gated.
+
 ## 0.4.0-preview.84 — LocalSystem SMB canary and pinned deployment receipt (2026-11-10)
 
 - Confirm exact campaign.json and PS1/EXE agent SHA-256 in native read-only preflight and reverify the complete SMB package before GPO creation and startup registration; save evidence in successful deployment receipts.

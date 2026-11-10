@@ -87,6 +87,8 @@ jobs:
             'tools/lab_win11_probe.ps1',
             'tools/run_smb_canary_local.ps1',
             'tools/smb_system_canary_probe.ps1',
+            'tools/smb_canary_rsop.ps1',
+            'tools/test_smb_rsop_xml.ps1',
             'tools/test_hosted_agent_lifecycle.ps1',
             'tools/test_windows_client_compat.ps1'
           )
@@ -143,6 +145,12 @@ jobs:
           Remove-Item -LiteralPath $report -Force
           Write-Host 'PASS: SYSTEM-only canary refuses hosted Windows non-SYSTEM user.'
           exit 0  # The intentional child exit code 2 must not fail this negative test.
+
+      - name: Verify exact Computer GPO identity and filtering from GPRESULT XML fixtures
+        shell: powershell
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_smb_rsop_xml.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify client integrity and recovery functions
         shell: pwsh
@@ -358,7 +366,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.84':
+          if version != '0.4.0-preview.85':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -390,22 +398,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.84 (no overwrite)
+      - name: Publish 0.4.0-preview.85 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.84'
+          tag='v0.4.0-preview.85'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.84' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW84.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.85' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW85.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -414,7 +422,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.84'
+          tag='v0.4.0-preview.85'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json

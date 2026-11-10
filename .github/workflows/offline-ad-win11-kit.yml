@@ -40,6 +40,8 @@ jobs:
             'tools/lab_win11_probe.ps1',
             'tools/run_smb_canary_local.ps1',
             'tools/smb_system_canary_probe.ps1',
+            'tools/smb_canary_rsop.ps1',
+            'tools/test_smb_rsop_xml.ps1',
             'src/LockScreenCampaignManager/Assets/LockScreen-Agent.ps1',
             'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
             'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
@@ -64,6 +66,8 @@ jobs:
               $config.ouDn -notlike 'OU=LSCM-CI,*') {
             throw 'Lab configuration template must use non-production placeholders'
           }
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_smb_rsop_xml.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host 'PASS: offline kit safety checks; zero domain connections attempted.'
 
       - name: Assemble and verify downloadable offline ZIP
@@ -78,7 +82,8 @@ jobs:
           Copy-Item 'docs/OFFLINE-AD-WIN11-LAB.md' (Join-Path $root 'README.md')
           Copy-Item 'docs/SMB-SYSTEM-CANARY.md' (Join-Path $root 'SMB-SYSTEM-CANARY.md')
           foreach ($name in @('run_lab_local.ps1','lab_ad_integration.ps1','lab_win11_probe.ps1',
-              'run_smb_canary_local.ps1','smb_system_canary_probe.ps1')) {
+              'run_smb_canary_local.ps1','smb_system_canary_probe.ps1',
+              'smb_canary_rsop.ps1')) {
             Copy-Item ("tools/"+$name) $tools
           }
           foreach ($name in @('LockScreen-Agent.ps1','GPO-Deploy.ps1',
@@ -99,6 +104,7 @@ jobs:
               'lab.config.sample.json','tools/run_lab_local.ps1',
               'tools/lab_ad_integration.ps1','tools/lab_win11_probe.ps1',
               'tools/run_smb_canary_local.ps1','tools/smb_system_canary_probe.ps1',
+              'tools/smb_canary_rsop.ps1',
               'src/LockScreenCampaignManager/Assets/GPO-Deploy.ps1',
               'src/LockScreenCampaignManager/Assets/Gpo-Lifecycle.ps1',
               'src/LockScreenCampaignManager/Assets/Gpo-ConflictScan.ps1',

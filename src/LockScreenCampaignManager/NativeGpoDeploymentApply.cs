@@ -213,6 +213,7 @@ internal static class NativeGpoDeploymentApply
                         contentShareRoot = smbRoot,
                         manifestSha256 = expectedManifestHash,
                         agentSha256 = expectedAgentHash,
+                        deployedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                         clientScriptPath = clientScript,
                         clientType = clientType.ToString(),
                         gpoMethod = clientType == CampaignClientType.Executable
