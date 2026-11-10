@@ -27,7 +27,7 @@ function Get-LscmComputerGpoEvidence {
     $gpos=@($computer.SelectNodes("./*[local-name()='GPO']"))
     $id=[regex]::Escape($ExpectedGpoId.ToString('D'))
     $pattern='(?i)(?:CN=\{?' + $id + '\}?)(?:,|$)'
-    $matches=New-Object 'System.Collections.Generic.List[object]'
+    $candidates=New-Object 'System.Collections.Generic.List[object]'
     foreach($gpo in $gpos) {
         $pathNode=$gpo.SelectSingleNode("./*[local-name()='Path']")
         if ($null -eq $pathNode) { continue }
@@ -37,15 +37,15 @@ function Get-LscmComputerGpoEvidence {
         if ($path -notmatch '(?i)(?:^|[/,])CN=\{?[0-9a-f-]{36}\}?,CN=Policies,') {
             continue
         }
-        if ($path -match $pattern) { [void]$matches.Add($gpo) }
+        if ($path -match $pattern) { [void]$candidates.Add($gpo) }
     }
-    if ($matches.Count -eq 0) { return [pscustomobject]$result }
+    if ($candidates.Count -eq 0) { return [pscustomobject]$result }
     $result.matched=$true
-    if ($matches.Count -ne 1) {
+    if ($candidates.Count -ne 1) {
         $result.status='AmbiguousGpoIdentity'
         return [pscustomobject]$result
     }
-    $item=$matches[0]
+    $item=$candidates[0]
     $flags=@{}
     foreach ($name in @('Enabled','IsValid','FilterAllowed','AccessDenied')) {
         $node=$item.SelectSingleNode("./*[local-name()='"+$name+"']")
