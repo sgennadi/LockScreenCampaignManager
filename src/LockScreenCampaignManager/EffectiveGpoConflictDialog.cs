@@ -291,18 +291,18 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         using var choose = new OpenFileDialog
         {
-            Title = "Import an existing local gpresult /scope computer /x XML",
+            Title = UiLocale.Display("Import an existing local gpresult /scope computer /x XML"),
             Filter = "gpresult XML (*.xml)|*.xml",
             CheckFileExists = true, CheckPathExists = true,
             Multiselect = false, RestoreDirectory = true
         };
         if (choose.ShowDialog(this) != DialogResult.OK) return;
         if (MessageBox.Show(this,
-            "Read the selected local gpresult XML? It can contain private computer, " +
+            UiLocale.Display("Read the selected local gpresult XML? It can contain private computer, " +
             "domain, account, GPO and security settings. Only the current window will " +
             "receive parsed GPO IDs and flags, and the original file will NOT be copied " +
-            "or uploaded. A user-supplied XML is NOT cryptographically authenticated.",
-            "Import private RSoP report", MessageBoxButtons.YesNo,
+            "or uploaded. A user-supplied XML is NOT cryptographically authenticated."),
+            UiLocale.Display("Import private RSoP report"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         try
@@ -312,10 +312,10 @@ internal sealed class EffectiveGpoConflictDialog : Form
             RsopEvidence incoming = RsopEvidence.LoadLocalXml(choose.FileName,
                 _report.Computer, _report.Domain);
             if (incoming.IsHistorical && MessageBox.Show(this,
-                $"The selected client RSoP snapshot is from " +
-                $"{incoming.ReadUtc.LocalDateTime:yyyy-MM-dd HH:mm:ss}. " +
-                "It is more than 24 hours old. Use it as historical context only?",
-                "Historical RSoP", MessageBoxButtons.YesNo,
+                UiLocale.Display("The selected client RSoP snapshot is from ") +
+                incoming.ReadUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") +
+                UiLocale.Display(". It is more than 24 hours old. Use it as historical context only?"),
+                UiLocale.Display("Historical RSoP"), MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
             _rsop = incoming;
@@ -352,14 +352,14 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         if (_verifyEndpoint is null || !_verifyButton.Enabled) return;
         if (MessageBox.Show(this,
-            "Read only the native 64-bit HKLM Lock Screen and Spotlight registry " +
-            "values on the AD-verified computer " + _report.Computer +
-            " using Remote Registry? The manager first rechecks domain/DC/OU, " +
+            UiLocale.Display("Read only the native 64-bit HKLM Lock Screen and Spotlight registry " +
+            "values on the AD-verified computer ") + _report.Computer +
+            UiLocale.Display(" using Remote Registry? The manager first rechecks domain/DC/OU, " +
             "security group and managed GPO identity. This does NOT run " +
             "gpupdate, enable services, execute remote scripts, install tasks, " +
             "change GPOs, or prove the physical lock screen. " +
-            "Unavailable and access-denied PCs remain Unknown. Proceed?",
-            "Verify endpoint (read-only)", MessageBoxButtons.YesNo,
+            "Unavailable and access-denied PCs remain Unknown. Proceed?"),
+            UiLocale.Display("Verify endpoint (read-only)"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         _verifyButton.Enabled = false;
@@ -391,14 +391,14 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         if (_verifyEvidence is null || !_evidenceButton.Enabled) return;
         if (MessageBox.Show(this,
-            "Perform one explicit READ-ONLY check of " + _report.Computer +
-            ": revalidate computer/OU/group/managed GPO on the selected DC, " +
+            UiLocale.Display("Perform one explicit READ-ONLY check of ") + _report.Computer +
+            UiLocale.Display(": revalidate computer/OU/group/managed GPO on the selected DC, " +
             "read native 64-bit HKLM, query cached computer Registry Policy RSoP " +
             "via WMI/DCOM, and SHA-256 the managed campaign JPEG via read-only " +
             "C$ SMB. Requires existing Remote Registry/WMI/SMB admin access. " +
             "Never starts services, runs commands on the client, alters settings " +
-            "or proves what is physically displayed. Proceed?",
-            "Verify RSoP source + managed image", MessageBoxButtons.YesNo,
+            "or proves what is physically displayed. Proceed?"),
+            UiLocale.Display("Verify RSoP source + managed image"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         _evidenceButton.Enabled = false;
@@ -423,8 +423,8 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         if (_rsop is null)
         {
-            MessageBox.Show(this, "Import a local gpresult XML first.",
-                "No RSoP evidence", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, UiLocale.Display("Import a local gpresult XML first."),
+                UiLocale.Display("No RSoP evidence"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var expected = new HashSet<string>(_report.Policies.Select(
@@ -432,15 +432,15 @@ internal sealed class EffectiveGpoConflictDialog : Form
         var outside = _rsop.Policies.Where(x => !expected.Contains(x.Id)).ToArray();
         if (outside.Length == 0)
         {
-            MessageBox.Show(this, "Every identified GPO in the imported report " +
+            MessageBox.Show(this, UiLocale.Display("Every identified GPO in the imported report " +
                 "is present in the candidate inventory. This does NOT prove that " +
-                "the candidate scan is complete, or that all policy settings applied.",
-                "RSoP-only GPOs", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "the candidate scan is complete, or that all policy settings applied."),
+                UiLocale.Display("RSoP-only GPOs"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         using var detail = new Form
         {
-            Text = "Client XML GPOs absent from selected DC candidate list",
+            Text = UiLocale.Display("Client XML GPOs absent from selected DC candidate list"),
             StartPosition = FormStartPosition.CenterParent,
             Size = new Size(1000, 650), MinimumSize = new Size(700, 450),
             AutoScaleMode = AutoScaleMode.Dpi, BackColor = UiStyle.Surface
@@ -476,15 +476,15 @@ internal sealed class EffectiveGpoConflictDialog : Form
     {
         if (_visible.Count == 0) return;
         if (MessageBox.Show(this,
-            "Export the visible GPO candidate assessment? It includes private " +
+            UiLocale.Display("Export the visible GPO candidate assessment? It includes private " +
             "DC, computer, GPO names/IDs and registry settings. This is NOT an " +
-            "actual endpoint Resultant Set of Policy (RSoP). Review before sharing.",
-            "Export private effective GPO analysis", MessageBoxButtons.YesNo,
+            "actual endpoint Resultant Set of Policy (RSoP). Review before sharing."),
+            UiLocale.Display("Export private effective GPO analysis"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         using var save = new SaveFileDialog
         {
-            Title = "Export GPO candidates (local CSV)",
+            Title = UiLocale.Display("Export GPO candidates (local CSV)"),
             Filter = "CSV UTF-8 (*.csv)|*.csv",
             FileName = "LSCM-Effective-GPO-" + DateTime.Now.ToString(
                 "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".csv"
@@ -516,7 +516,7 @@ internal sealed class EffectiveGpoConflictDialog : Form
                 sb.AppendJoin(',', values.Select(Csv)).Append("\r\n");
             }
             File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true));
-            _footer.Text = "Private read-only report exported locally. No automatic upload.";
+            _footer.Text = UiLocale.Display("Private read-only report exported locally. No automatic upload.");
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Export effective GPO analysis", ex); }
     }
