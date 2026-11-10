@@ -17,6 +17,10 @@ internal static partial class UiLocale
     }
 
     private static readonly ConditionalWeakTable<ComboBox, ComboLanguage> ComboLanguages = new();
+    // Header text is UI only. Preserve original column names and row values.
+    private sealed class ColumnHeaderSource { internal readonly string Caption;
+        internal ColumnHeaderSource(string caption) => Caption = caption; }
+    private static readonly ConditionalWeakTable<DataGridViewColumn, ColumnHeaderSource> Headers = new();
 
     private static readonly Dictionary<string, string> Hebrew = new(StringComparer.Ordinal)
     {
@@ -177,11 +181,13 @@ internal static partial class UiLocale
         {
             if (Hebrew.TryGetValue(value, out string? he)) return he;
             if (WizardHebrew.TryGetValue(value, out he)) return he;
+            if (AdHealthHebrew.TryGetValue(value, out he)) return he;
         }
         else
         {
             if (EnglishByHebrew.TryGetValue(value, out string? en)) return en;
             if (WizardEnglish.TryGetValue(value, out en)) return en;
+            if (AdHealthEnglish.TryGetValue(value, out en)) return en;
         }
         return TranslateWizardDynamic(value, language);
     }
@@ -207,6 +213,16 @@ internal static partial class UiLocale
                 text.RightToLeft = RightToLeft.No;
             if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
+            if (child is DataGridView healthGrid &&
+                healthGrid.Name == "ClientHealthGrid")
+            {
+                foreach (DataGridViewColumn column in healthGrid.Columns)
+                {
+                    var header = Headers.GetValue(column,
+                        key => new ColumnHeaderSource(key.HeaderText));
+                    column.HeaderText = Translate(header.Caption, language);
+                }
+            }
             if (child is Label technicalLabel && technicalLabel.Name is
                 ("CampaignWizardVersion" or "WizardTimeZoneDifference" or
                  "CampaignWizardImagePath"))
@@ -214,7 +230,8 @@ internal static partial class UiLocale
             // UI-only formatted choices: SelectedItem stays the original enum or
             // English storage key. Never translate values saved to campaign JSON.
             if (child is ComboBox combo && combo.Name is
-                ("WizardCampaignType" or "CampaignWizardContentSource"))
+                ("WizardCampaignType" or "CampaignWizardContentSource" or
+                 "DeploymentContentSource" or "DeploymentClientType"))
                 ApplyComboLocalization(combo, language);
         }
     }
@@ -237,6 +254,9 @@ internal static partial class UiLocale
         // firing a deployment configuration handler or persisting new data.
         combo.Invalidate();
     }
+
+    internal static string Display(string message) =>
+        Translate(message, UiStyle.Preferences.Language);
 
     private static IEnumerable<Control> All(Control root)
     {
