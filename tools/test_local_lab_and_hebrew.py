@@ -291,7 +291,7 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
         for prefix in ("Advanced95Russian", "Advanced95Hebrew"):
             start = words.index('private static readonly Dictionary<string,string> ' + prefix)
             end = words.index('    };', start)
-            keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', words[start:end], re.M)
+            keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', words[start:end], re.M)
             self.assertGreaterEqual(len(keys), 105)
             self.assertEqual(len(keys), len(set(keys)))
         for protected in ("GmsaRepairConfig.cs", "GmsaRepairQueue.cs",
