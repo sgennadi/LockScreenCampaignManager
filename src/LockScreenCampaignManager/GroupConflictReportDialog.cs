@@ -235,13 +235,13 @@ internal sealed class GroupConflictReportDialog : Form
     private void ExportCsv()
     {
         if (MessageBox.Show(this,
-            "This report may contain private domain, OU, group and GPO values. " +
-            "Export only to a protected LOCAL folder. Never post raw CSV to a public issue.\r\n\r\nContinue?",
-            "Review private GPO report export", MessageBoxButtons.YesNo,
+            UiLocale.Display("This report may contain private domain, OU, group and GPO values. " +
+            "Export only to a protected LOCAL folder. Never post raw CSV to a public issue.\r\n\r\nContinue?"),
+            UiLocale.Display("Review private GPO report export"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         using var choose = new SaveFileDialog {
-            Title = "Export filtered read-only GPO candidates",
+            Title = UiLocale.Display("Export filtered read-only GPO candidates"),
             Filter = "CSV (*.csv)|*.csv",
             DefaultExt = "csv",
             AddExtension = true,
