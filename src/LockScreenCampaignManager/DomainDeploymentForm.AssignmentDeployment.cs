@@ -190,6 +190,9 @@ internal sealed partial class DomainDeploymentForm
             info.AppendLine("Computer Lock Screen = computer GPO, user Screen Saver = user GPO.");
             info.AppendLine("A Both row creates TWO separately filtered GPOs.");
             info.AppendLine("The Screen Saver uses Windows built-in .scr, not campaign JPG files.");
+            if (_project.ContentSource == CampaignContentSource.SmbShare)
+                info.AppendLine("SMB share permissions, computer-account READ and " +
+                    "early startup access: NOT TESTED; check a real LocalSystem pilot.");
             info.AppendLine();
             _running = true;
             UseWaitCursor = true;
@@ -249,6 +252,9 @@ internal sealed partial class DomainDeploymentForm
                         info.AppendLine("  Computer group: " + row.ComputerGroupDn);
                         info.AppendLine("  Direct members: " + members +
                             " | campaign folder: " + id);
+                        // Each Lock Screen group has a separately preflighted
+                        // UNC package; never reuse another group's ACL evidence.
+                        info.Append(CampaignSmbPreflightEvidence.Describe(result));
                         info.Append(audit.Preview);
                     }
                     if (row.UsesScreenSaver)
@@ -387,6 +393,8 @@ internal sealed partial class DomainDeploymentForm
             "Campaign files: " + _project.ContentSource +
             (_project.ContentSource == CampaignContentSource.SmbShare
                 ? " (existing dedicated SMB UNC share)" : " (SYSVOL)") + "\n" +
+            CampaignSmbPreflightEvidence.ConfirmationWarning(
+                _project.ContentSource, _project.ContentShareRoot) +
             "User GPOs do NOT use loopback. Each GPO is filtered to its exact " +
             "computer/user security group and linked only to the chosen OU.\n\n" +
             (summary.Length > 1700 ? summary[..1700] +
