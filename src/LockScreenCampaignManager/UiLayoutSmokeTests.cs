@@ -1112,6 +1112,7 @@ internal static class UiLayoutSmokeTests
         CheckHebrewRtlAndLanguageSelection();
         CheckHebrewCampaignWizardPages();
         CheckHebrewAdAndClientHealth();
+        CheckHebrewGpoOperationsAndDiagnostics();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1314,6 +1315,129 @@ internal static class UiLayoutSmokeTests
                 campaign.FeedbackShare != share)
                 throw new InvalidOperationException(
                     "Language switch changed client report columns or campaign settings: " + profile.Name);
+        }
+    }
+
+    private static void CheckHebrewGpoOperationsAndDiagnostics()
+    {
+        // Do not Show/ShowDialog any form. These are display-only checks
+        // against synthetic AD values, not endpoint or Group Policy tests.
+        foreach (var profile in Profiles)
+        {
+            var hebrew = new UiPreferences {
+                Language = "Hebrew", Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            var english = new UiPreferences {
+                Language = "English", Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            var campaign = new CampaignProject {
+                Name = "rtl-ci", TimeZoneId = "UTC",
+                StartLocal = new DateTime(2026, 11, 10, 12, 0, 0),
+                ClientType = CampaignClientType.PowerShell
+            };
+            using var operations = new GpoOperationsForm(
+                "example.com", "dc01.example.com",
+                "OU=Computers,DC=example,DC=com",
+                "CN=TestPCs,DC=example,DC=com",
+                new DomainCredentials("example.com", "", ""), campaign);
+            using var report = new GroupConflictReportDialog([
+                new GroupConflictTarget("RTL pilot", "Computer",
+                    "OU=Computers,DC=example,DC=com",
+                    "CN=TestPCs,DC=example,DC=com", 1, 0, [
+                        new GroupConflictFinding("RTL pilot", "Computer", "Test GPO",
+                            Guid.Empty.ToString("D"), "High", "NoLockScreen",
+                            "1", "Registry.pol", "Software\\Policies",
+                            "OU=Computers,DC=example,DC=com",
+                            "Unknown until gpresult")
+                    ], ["Read-only UI fixture"])
+            ]);
+            using var trends = new DiagnosticsTrendsWindow();
+            var lifecycle = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "GpoLifecycleAction");
+            var push = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "GpoPushPurpose");
+            var activity = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "AgentActivityFilter");
+            var gmsaFilter = Descendants(operations).OfType<ComboBox>()
+                .Single(x => x.Name == "GpoGmsaFilter");
+            var risk = Descendants(report).OfType<ComboBox>()
+                .Single(x => x.Name == "GroupConflictRisk");
+            var boxes = new[] { lifecycle, push, activity, gmsaFilter, risk };
+            string[][] values = boxes.Select(box => box.Items.Cast<object>()
+                .Select(x => x.ToString() ?? "").ToArray()).ToArray();
+            int[] indices = boxes.Select(box => box.SelectedIndex).ToArray();
+            var grids = new[] {
+                Descendants(operations).OfType<DataGridView>()
+                    .Single(x => x.Name == "GpoDeferredRepairGrid"),
+                Descendants(operations).OfType<DataGridView>()
+                    .Single(x => x.Name == "GpoGmsaQueueGrid"),
+                Descendants(report).OfType<DataGridView>()
+                    .Single(x => x.Name == "GroupConflictGrid"),
+                Descendants(trends).OfType<DataGridView>()
+                    .Single(x => x.Name == "DiagnosticsTrendsGrid")
+            };
+            string[][] originalHeaders = grids.Select(grid =>
+                grid.Columns.Cast<DataGridViewColumn>()
+                    .Select(column => column.HeaderText).ToArray()).ToArray();
+
+            foreach (var form in new Form[] { operations, report, trends })
+            {
+                UiStyle.Apply(form, hebrew);
+                form.PerformLayout();
+                if (form.RightToLeft != RightToLeft.Yes || !form.RightToLeftLayout)
+                    throw new InvalidOperationException(
+                        "Preview.93 Hebrew RTL failed: " + profile.Name);
+            }
+            var tabs = Descendants(operations).OfType<TabPage>()
+                .Select(x => x.Text).ToArray();
+            if (!operations.Text.Contains("פעולות GPO", StringComparison.Ordinal) ||
+                !tabs.Contains("תיקון מושהה") ||
+                !tabs.Contains("gMSA 24/7") ||
+                !Descendants(operations).OfType<CheckBox>()
+                    .Any(x => x.Text.StartsWith("gMSA מסביב לשעון", StringComparison.Ordinal)) ||
+                !report.Text.Contains("דוח התנגשויות GPO מלא", StringComparison.Ordinal) ||
+                !trends.Text.StartsWith("מגמות שגיאות", StringComparison.Ordinal) ||
+                grids[0].Columns[0].HeaderText != "מחשב" ||
+                grids[0].Columns[1].HeaderText != "קמפיין" ||
+                grids[1].Columns[2].HeaderText != "סטטוס" ||
+                grids[2].Columns[0].HeaderText != "יעד" ||
+                grids[3].Columns[0].HeaderText != "כמות")
+                throw new InvalidOperationException(
+                    "Preview.93 Hebrew GPO/diagnostics window text missing: " + profile.Name);
+
+            foreach (var box in boxes)
+                if (!box.FormattingEnabled)
+                    throw new InvalidOperationException(
+                        "Operator enum/filter needs display-only ComboBox formatting.");
+            for (int i = 0; i < boxes.Length; i++)
+                if (boxes[i].SelectedIndex != indices[i] ||
+                    !boxes[i].Items.Cast<object>().Select(x => x.ToString() ?? "")
+                        .SequenceEqual(values[i]))
+                    throw new InvalidOperationException(
+                        "Hebrew localization modified GPO operation or risk key.");
+
+            foreach (var form in new Form[] { operations, report, trends })
+            {
+                UiStyle.Apply(form, english);
+                if (form.RightToLeft != RightToLeft.No || form.RightToLeftLayout)
+                    throw new InvalidOperationException(
+                        "Preview.93 English reversal failed: " + profile.Name);
+            }
+            for (int i = 0; i < grids.Length; i++)
+                if (!grids[i].Columns.Cast<DataGridViewColumn>()
+                    .Select(column => column.HeaderText).SequenceEqual(originalHeaders[i]))
+                    throw new InvalidOperationException(
+                        "English reversal damaged report header: " + profile.Name);
+            if (risk.SelectedItem?.ToString() != "All" ||
+                lifecycle.SelectedItem?.ToString() != "Disable" ||
+                push.SelectedItem?.ToString() != "Push" ||
+                campaign.ClientType != CampaignClientType.PowerShell)
+                throw new InvalidOperationException(
+                    "Display-only localization changed GPO action or client type.");
         }
     }
 
