@@ -141,10 +141,12 @@ try {
     $who=[Security.Principal.WindowsIdentity]::GetCurrent()
     $evidence.localSystem=($null -ne $who -and $who.User.Value -eq 'S-1-5-18')
     if (-not $evidence.localSystem) { Fail 'NOT_LOCAL_SYSTEM' }
+    $null=Assert-LocalEvidencePath $ConfigPath
     $config=Read-PrivateJson $ConfigPath
     $mode=[string]$config.mode
     $id=[string]$config.campaignId
-    if ($mode -cnotin @('Baseline','VerifyCleanup') -or
+    if ([string]$config.schema -cne 'lscm-closure-config/v1' -or
+        $mode -cnotin @('Baseline','VerifyCleanup') -or
         $id -cnotmatch '^[a-z0-9][a-z0-9_-]{0,70}$' -or
         [string]$config.expectedComputer -cnotmatch '^[A-Za-z0-9-]{3,15}$') {
         Fail 'INVALID_EVIDENCE_CONFIGURATION'
@@ -188,6 +190,11 @@ try {
         }
         if (Test-Path -LiteralPath $baselineFile) {
             Fail 'BASELINE_ALREADY_EXISTS_NEVER_OVERWRITE'
+        }
+        $completedRoot=Join-Path $env:ProgramData 'LockScreenCampaigns\Completed'
+        if (Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.json')) -or
+            Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.postcleanup.json'))) {
+            Fail 'PRIOR_CAMPAIGN_COMPLETION_ID_NOT_REUSABLE'
         }
         $data=[ordered]@{
             schema='lscm-endpoint-baseline/v1'
@@ -287,7 +294,8 @@ try {
         'INVALID_BASELINE_OR_DEPLOYMENT_RECEIPT',
         'BASELINE_WAS_NOT_BEFORE_DEPLOYMENT',
         'INVALID_LOCAL_EVIDENCE_PATH','LINKED_LOCAL_EVIDENCE_PATH',
-        'INVALID_PRIVATE_JSON_FILE','INVALID_ACTIVE_OWNER')
+        'INVALID_PRIVATE_JSON_FILE','INVALID_ACTIVE_OWNER',
+        'PRIOR_CAMPAIGN_COMPLETION_ID_NOT_REUSABLE')
     if ($message -in $known) { Finding $message }
     else { Finding 'EVIDENCE_COLLECTION_INCOMPLETE' }
     $evidence.result='FAIL_CLOSED'
