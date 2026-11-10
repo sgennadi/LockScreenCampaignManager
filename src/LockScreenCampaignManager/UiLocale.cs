@@ -182,12 +182,14 @@ internal static partial class UiLocale
             if (Hebrew.TryGetValue(value, out string? he)) return he;
             if (WizardHebrew.TryGetValue(value, out he)) return he;
             if (AdHealthHebrew.TryGetValue(value, out he)) return he;
+            if (OpsDiagnosticsHebrew.TryGetValue(value, out he)) return he;
         }
         else
         {
             if (EnglishByHebrew.TryGetValue(value, out string? en)) return en;
             if (WizardEnglish.TryGetValue(value, out en)) return en;
             if (AdHealthEnglish.TryGetValue(value, out en)) return en;
+            if (OpsDiagnosticsEnglish.TryGetValue(value, out en)) return en;
         }
         return TranslateWizardDynamic(value, language);
     }
@@ -201,7 +203,8 @@ internal static partial class UiLocale
         // Only the fixed caption segment after the app version is localized.
         foreach (string englishCaption in new[] {
             "AD Connection Wizard", "Select AD account",
-            "Active Directory Deployment", "Campaign Wizard" })
+            "Active Directory Deployment", "Campaign Wizard",
+            "Full GPO conflict report (read-only)" })
         {
             string hebrewCaption = Translate(englishCaption, "Hebrew");
             string original = " - " + (hebrew ? englishCaption : hebrewCaption);
@@ -212,8 +215,21 @@ internal static partial class UiLocale
                     form.Text[(position + original.Length)..];
         }
         if (form.Text == "Client feedback — SMB" ||
-            form.Text == Translate("Client feedback — SMB", "Hebrew"))
+            form.Text == Translate("Client feedback — SMB", "Hebrew") ||
+            form.Text == "Diagnostics — saved error reports" ||
+            form.Text == Translate("Diagnostics — saved error reports", "Hebrew") ||
+            form.Text == "Report an error — LockScreen Campaign Manager" ||
+            form.Text == Translate("Report an error — LockScreen Campaign Manager", "Hebrew") ||
+            form.Text == "Error trends — LockScreen Campaign Manager" ||
+            form.Text == Translate("Error trends — LockScreen Campaign Manager", "Hebrew"))
             form.Text = Translate(form.Text, language);
+        const string gpoTitleMarker = " - GPO Operations ";
+        const string hebrewGpoTitleMarker = " - פעולות GPO ";
+        if (form.Text.Contains(hebrew ? gpoTitleMarker : hebrewGpoTitleMarker,
+            StringComparison.Ordinal))
+            form.Text = form.Text.Replace(hebrew ? gpoTitleMarker : hebrewGpoTitleMarker,
+                hebrew ? hebrewGpoTitleMarker : gpoTitleMarker,
+                StringComparison.Ordinal);
         foreach (Control child in All(form))
         {
             if (child is Button or Label or CheckBox or RadioButton or
@@ -231,7 +247,9 @@ internal static partial class UiLocale
             if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
             if (child is DataGridView healthGrid &&
-                healthGrid.Name == "ClientHealthGrid")
+                healthGrid.Name is ("ClientHealthGrid" or
+                    "GpoDeferredRepairGrid" or "GpoGmsaQueueGrid" or
+                    "DiagnosticsTrendsGrid" or "GroupConflictGrid"))
             {
                 foreach (DataGridViewColumn column in healthGrid.Columns)
                 {
@@ -248,7 +266,9 @@ internal static partial class UiLocale
             // English storage key. Never translate values saved to campaign JSON.
             if (child is ComboBox combo && combo.Name is
                 ("WizardCampaignType" or "CampaignWizardContentSource" or
-                 "DeploymentContentSource" or "DeploymentClientType"))
+                 "DeploymentContentSource" or "DeploymentClientType" or
+                 "GpoLifecycleAction" or "GpoPushPurpose" or
+                 "GpoGmsaFilter" or "AgentActivityFilter" or "GroupConflictRisk"))
                 ApplyComboLocalization(combo, language);
         }
     }
