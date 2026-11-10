@@ -171,11 +171,13 @@ internal sealed class ClientFeedbackPanel : UserControl
         var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         foot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _totals.Name = "ClientHealthTotals";
         _totals.Dock = DockStyle.Fill;
         _totals.AutoEllipsis = false;
         _totals.Padding = new Padding(4, 7, 4, 7);
         _totals.Font = new Font("Segoe UI Semibold", 10f);
         _totals.Text = "Load computers from OU + Security Group to calculate fleet totals.";
+        _message.Name = "ClientHealthStatus";
         _message.Dock = DockStyle.Fill;
         _message.AutoEllipsis = false;
         _message.Padding = new Padding(4, 6, 4, 6);
