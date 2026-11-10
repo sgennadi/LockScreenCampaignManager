@@ -1110,6 +1110,7 @@ internal static class UiLayoutSmokeTests
             }
         }
         CheckHebrewRtlAndLanguageSelection();
+        CheckHebrewCampaignWizardPages();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1156,6 +1157,69 @@ internal static class UiLayoutSmokeTests
                 throw new InvalidOperationException(
                     $"Switching Hebrew back to English did not restore LTR: {profile.Name}");
         }
+    }
+
+    private static void CheckHebrewCampaignWizardPages()
+    {
+        // Exercise all seven wizard pages without ShowDialog, LDAP, GPO, SMB,
+        // local file export or saved UI preference changes.
+        var hebrew = new UiPreferences { Language = "Hebrew" };
+        var english = new UiPreferences { Language = "English" };
+        using var editor = new MainForm();
+        CampaignContentSource originalSource = editor.CampaignSourceForSmokeTest;
+        string originalShare = editor.CampaignShareRootForSmokeTest;
+
+        for (int page = 0; page < 7; page++)
+        {
+            using Form wizard = editor.CreateCampaignWizardForSmokeTest(page);
+            UiStyle.Apply(wizard, hebrew);
+            var children = Descendants(wizard).ToArray();
+            var title = children.OfType<Label>()
+                .Single(x => x.Name == "CampaignWizardHeaderTitle");
+            var subtitle = children.OfType<Label>()
+                .Single(x => x.Name == "CampaignWizardHeaderSubtitle");
+            if (title.Text != "אשף הקמפיינים" ||
+                !subtitle.Text.StartsWith($"שלב {page + 1} מתוך 7 — ", StringComparison.Ordinal) ||
+                !children.OfType<Label>().Any(x => x.Text == "1  חיבור ל-AD") ||
+                !wizard.RightToLeftLayout)
+                throw new InvalidOperationException(
+                    $"Hebrew wizard page/step text missing: page {page + 1}.");
+
+            if (page == 1)
+            {
+                ComboBox type = children.OfType<ComboBox>()
+                    .Single(x => x.Name == "WizardCampaignType");
+                if (!type.FormattingEnabled || type.SelectedIndex != -1 ||
+                    !type.Items.Contains(CampaignTargetMode.Both) ||
+                    UiLocale.Translate(type.Items[0]!.ToString()!, "Hebrew") == type.Items[0]!.ToString())
+                    throw new InvalidOperationException(
+                        "Hebrew campaign-type display must preserve underlying enum and initial empty selection.");
+            }
+            if (page is 5 or 6)
+            {
+                ComboBox source = children.OfType<ComboBox>()
+                    .Single(x => x.Name == "CampaignWizardContentSource");
+                TextBox unc = children.OfType<TextBox>()
+                    .Single(x => x.Name == "CampaignWizardContentShareRoot");
+                if (!source.FormattingEnabled || source.SelectedIndex != 0 ||
+                    source.Items[0]?.ToString() != "SYSVOL (default)" ||
+                    !UiLocale.Translate("SMB network folder (UNC)", "Hebrew").Contains("SMB", StringComparison.Ordinal) ||
+                    unc.RightToLeft != RightToLeft.No)
+                    throw new InvalidOperationException(
+                        "Hebrew display must preserve SYSVOL/SMB keys and left-to-right UNC entry.");
+            }
+
+            UiStyle.Apply(wizard, english);
+            if (title.Text != "Campaign Wizard" ||
+                !subtitle.Text.StartsWith($"Step {page + 1} of 7  -  ", StringComparison.Ordinal) ||
+                wizard.RightToLeftLayout)
+                throw new InvalidOperationException(
+                    $"Reversing Hebrew wizard layout or captions failed: page {page + 1}.");
+        }
+        if (editor.CampaignSourceForSmokeTest != originalSource ||
+            editor.CampaignShareRootForSmokeTest != originalShare)
+            throw new InvalidOperationException(
+                "Language-only wizard checks unexpectedly changed campaign storage settings.");
     }
 
     private static IEnumerable<Control> Descendants(Control parent)
