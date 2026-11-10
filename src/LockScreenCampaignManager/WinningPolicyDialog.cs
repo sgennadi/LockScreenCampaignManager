@@ -78,6 +78,7 @@ internal sealed class WinningPolicyDialog : Form
             Margin = new Padding(1, 13, 8, 0)
         });
         _filter.Width = 240;
+        _filter.Name = "WinningPolicyFilter";
         _filter.DropDownStyle = ComboBoxStyle.DropDownList;
         _filter.Items.AddRange([
             "All", "Conflicting values", "Ranked leaders", "Unranked",
@@ -89,10 +90,12 @@ internal sealed class WinningPolicyDialog : Form
         _search.Width = 380;
         _search.Margin = new Padding(16, 6, 8, 0);
         _search.PlaceholderText = "Search setting, registry key, GPO or value...";
+        _search.RightToLeft = RightToLeft.No;
         _search.TextChanged += (_, _) => Draw();
         filters.Controls.Add(_search);
         root.Controls.Add(filters, 0, 2);
 
+        _grid.Name = "WinningPolicyGrid";
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
         _grid.AllowUserToAddRows = false;
@@ -149,7 +152,9 @@ internal sealed class WinningPolicyDialog : Form
     {
         var button = new Button
         {
-            Text = label, Width = width, Height = 38,
+            Text = UiLocale.Display(label), Width = width, Height = 38,
+            MinimumSize = new Size(width, 38), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly,
             FlatStyle = FlatStyle.Flat, BackColor = UiStyle.Surface,
             Margin = new Padding(0, 4, 10, 4)
         };
