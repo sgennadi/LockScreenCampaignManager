@@ -149,6 +149,9 @@ internal sealed class ImageFolderImportDialog : Form
         }));
         _accept.Text = "Apply image mapping";
         _accept.Width = 190;
+        _accept.MinimumSize = new Size(190, 38);
+        _accept.AutoSize = true;
+        _accept.AutoSizeMode = AutoSizeMode.GrowOnly;
         _accept.Height = 38;
         _accept.BackColor = UiStyle.Accent;
         _accept.ForeColor = Color.White;
