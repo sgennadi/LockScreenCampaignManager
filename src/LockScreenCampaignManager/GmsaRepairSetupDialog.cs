@@ -92,13 +92,17 @@ internal sealed class GmsaRepairSetupDialog : Form
         AddInput(layout, 4, "Computer group", new TextBox { Text = _groupDn }, true);
         AddInput(layout, 5, "SMB Client Health", _share, false);
 
+        _account.RightToLeft = RightToLeft.No; // gMSA DOMAIN\account$ identifier
+        _share.RightToLeft = RightToLeft.No;   // UNC source remains LTR
+        _output.RightToLeft = RightToLeft.No; // raw diagnostic text remains LTR
         _output.Multiline = true;
         _output.ReadOnly = true;
         _output.ScrollBars = ScrollBars.Vertical;
         _output.Dock = DockStyle.Fill;
         _output.WordWrap = true;
-        _output.Text = "Click Check to verify the domain, administrator privileges, SID, " +
-            "and local Netlogon gMSA status. This check does not run Repair.";
+        _output.Text = UiLocale.Display(
+            "Click Check to verify the domain, administrator privileges, SID, " +
+            "and local Netlogon gMSA status. This check does not run Repair.");
         layout.Controls.Add(_output, 0, 6);
         layout.SetColumnSpan(_output, 2);
 
@@ -138,42 +142,45 @@ internal sealed class GmsaRepairSetupDialog : Form
         _install.Click += async (_, _) =>
         {
             if (MessageBox.Show(this,
-                "Install or repair the gMSA worker on THIS server?\n\n" +
-                "The EXE will be copied to protected ProgramData with restricted NTFS access. " +
-                "Task Scheduler will register this gMSA to run every two minutes.\n\n" +
-                "The manager does not create the AD gMSA, store a password, or run " +
-                "Repair before explicit Preview and GUID confirmation.\n\nContinue?",
-                "gMSA — Confirm installation", MessageBoxButtons.YesNo,
+                UiLocale.Display(
+                    "Install or repair the gMSA worker on THIS server?\n\n" +
+                    "The EXE will be copied to protected ProgramData with restricted NTFS access. " +
+                    "Task Scheduler will register this gMSA to run every two minutes.\n\n" +
+                    "The manager does not create the AD gMSA, store a password, or run " +
+                    "Repair before explicit Preview and GUID confirmation.\n\nContinue?"),
+                UiLocale.Display("gMSA — Confirm installation"), MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                 return;
             var request = Input();
             await RunAsync(() =>
             {
                 var config = GmsaNativeSetup.Install(request);
-                return "Installation completed. Account: " + config.GmsaAccount +
+                return UiLocale.Display("Installation completed. Account: ") + config.GmsaAccount +
                     "\nEXE: " + config.ExecutablePath +
-                    "\nTask Scheduler: " + GmsaNativeSetup.TaskName +
-                    "\nQueue: " + GmsaRepairConfig.QueueDirectory +
-                    "\nVerify the first run and AD/SMB permissions in a test OU.";
+                    "\n" + UiLocale.Display("Task Scheduler: ") + GmsaNativeSetup.TaskName +
+                    "\n" + UiLocale.Display("Queue: ") + GmsaRepairConfig.QueueDirectory +
+                    "\n" + UiLocale.Display("Verify the first run and AD/SMB permissions in a test OU.");
             }, "Installation");
         };
         _disable.Click += async (_, _) =>
         {
-            if (MessageBox.Show(this, "Disable automatic gMSA processing?\n" +
-                "The queue is retained. Tasks running on endpoints are not canceled.",
-                "Disable gMSA", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            if (MessageBox.Show(this, UiLocale.Display("Disable automatic gMSA processing?\n" +
+                "The queue is retained. Tasks running on endpoints are not canceled."),
+                UiLocale.Display("Disable gMSA"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-            await RunAsync(() => { GmsaNativeSetup.Disable(); return "Background gMSA disabled. Queue retained."; },
+            await RunAsync(() => { GmsaNativeSetup.Disable(); return UiLocale.Display(
+                "Background gMSA disabled. Queue retained."); },
                 "Disabling");
         };
         _remove.Click += async (_, _) =>
         {
             if (MessageBox.Show(this,
-                "Disable gMSA and REMOVE the Task Scheduler task?\n" +
-                "Queue files are retained for audit. Already submitted remote tasks are unaffected.",
-                "Remove gMSA task", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                UiLocale.Display("Disable gMSA and REMOVE the Task Scheduler task?\n" +
+                "Queue files are retained for audit. Already submitted remote tasks are unaffected."),
+                UiLocale.Display("Remove gMSA task"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-            await RunAsync(() => { GmsaNativeSetup.RemoveTask(); return "Task removed; configuration disabled."; },
+            await RunAsync(() => { GmsaNativeSetup.RemoveTask(); return UiLocale.Display(
+                "Task removed; configuration disabled."); },
                 "Removal");
         };
         _readiness.Click += (_, _) =>
@@ -197,6 +204,7 @@ internal sealed class GmsaRepairSetupDialog : Form
             AutoEllipsis = true
         }, 0, row);
         input.Dock = DockStyle.Fill;
+        input.RightToLeft = RightToLeft.No; // technical AD / SID / gMSA / UNC data
         input.Margin = new Padding(4, 6, 4, 6);
         input.ReadOnly = readOnly;
         input.TabStop = !readOnly;
@@ -205,10 +213,13 @@ internal sealed class GmsaRepairSetupDialog : Form
 
     private static void ConfigureButton(Button button, string caption, int width)
     {
-        button.Text = caption;
+        button.Text = UiLocale.Display(caption);
         button.Width = width;
-        button.Height = 32;
-        button.AutoEllipsis = true;
+        button.Height = 40;
+        button.MinimumSize = new Size(width, 40);
+        button.AutoSize = true;
+        button.AutoSizeMode = AutoSizeMode.GrowOnly;
+        button.AutoEllipsis = false;
         button.Margin = new Padding(2, 3, 5, 3);
     }
 
@@ -221,7 +232,7 @@ internal sealed class GmsaRepairSetupDialog : Form
         _working = true;
         foreach (var button in OperationButtons)
             button.Enabled = false;
-        _output.Text = operation + ": checking…";
+        _output.Text = UiLocale.Display(operation) + UiLocale.Display(": checking…");
         UseWaitCursor = true;
         try
         {
@@ -233,9 +244,9 @@ internal sealed class GmsaRepairSetupDialog : Form
         catch (Exception ex)
         {
             AppLog.Write(ex, "Native gMSA GUI: " + operation);
-            _output.Text = operation + " — error:\r\n" +
+            _output.Text = UiLocale.Display(operation) + UiLocale.Display(" — error:\r\n") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 1100) +
-                "\r\nVerify local administrator membership, AD connectivity, and the gMSA permissions on this server.";
+                "\r\n" + UiLocale.Display("Verify local administrator membership, AD connectivity, and the gMSA permissions on this server.");
         }
         finally
         {
