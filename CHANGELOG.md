@@ -1,3 +1,11 @@
+## 0.4.0-preview.91 — Seven-step Hebrew campaign Wizard and RTL layout safety (2026-11-10)
+
+- Extend English/Hebrew presentation strings across the seven-step Campaign Wizard: connection, campaign type, image selection, ordering, schedule, Save/Skip and Deploy. Include JPG Photo Screen Saver choices, separate SYSVOL/SMB source labels, source/ACL warnings and saved-project status. Untranslated technical details remain English.
+- Keep campaign-type enum and SYSVOL/SMB ComboBox source items unchanged; translate only their displayed text via WinForms formatting events. Preserve selected index, UNC path direction, technical JSON, AD/GPO scope and existing campaign settings while switching language.
+- Reversibly localize active wizard rail, step subtitles and Screen Saver skip markers. Use auto-growing action captions and scrollable page text rows at high DPI instead of cutting off translated descriptions.
+- Expand offline Windows UI smoke checks for all seven pages in Hebrew and English, plus Python source contracts. Neither test writes to AD/GPO/SMB or changes saved language preferences. Real interactive 200% DPI/RTL review is still pending.
+- No automatic JPG Screen Saver User GPO rollout; no claims about production AD/Windows 10/11 endpoint success. See issues #25, #26, #30 and #36.
+
 ## 0.4.0-preview.90 — Initial Hebrew/RTL UI and local lab evidence reader (2026-11-10)
 
 - Add **English / עברית (Hebrew)** to Interface settings (saved to existing per-user UI preferences JSON) and apply a central Hebrew dictionary to primary navigation, buttons, wizard actions, updater, GPO operations, and new evidence viewer. Enable right-to-left form layout for Hebrew while preserving LTR technical data, UNC paths, GUIDs, hash/JSON and troubleshooting logs. Dynamic/non-dictionary text intentionally remains English until fully localized.

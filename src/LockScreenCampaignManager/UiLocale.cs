@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 namespace LockScreenCampaignManager;
@@ -7,8 +8,16 @@ namespace LockScreenCampaignManager;
 /// Never translate user data, JSON, LDAP/UNC paths, log contents or mutable
 /// ComboBox selection values. Missing translations deliberately stay English.
 /// </summary>
-internal static class UiLocale
+internal static partial class UiLocale
 {
+    private sealed class ComboLanguage
+    {
+        internal string Language = "English";
+        internal bool Attached;
+    }
+
+    private static readonly ConditionalWeakTable<ComboBox, ComboLanguage> ComboLanguages = new();
+
     private static readonly Dictionary<string, string> Hebrew = new(StringComparer.Ordinal)
     {
         ["Interface settings"] = "הגדרות ממשק",
@@ -158,13 +167,23 @@ internal static class UiLocale
         const string menuSuffix = "  ▾";
         if (value.EndsWith(menuSuffix, StringComparison.Ordinal))
             return Translate(value[..^menuSuffix.Length], language) + menuSuffix;
+        const string skippedEnglish = " (skip)";
+        const string skippedHebrew = " (דילוג)";
+        if (IsHebrew(language) && value.EndsWith(skippedEnglish, StringComparison.Ordinal))
+            return Translate(value[..^skippedEnglish.Length], language) + skippedHebrew;
+        if (!IsHebrew(language) && value.EndsWith(skippedHebrew, StringComparison.Ordinal))
+            return Translate(value[..^skippedHebrew.Length], language) + skippedEnglish;
         if (IsHebrew(language))
         {
             if (Hebrew.TryGetValue(value, out string? he)) return he;
+            if (WizardHebrew.TryGetValue(value, out he)) return he;
         }
-        else if (EnglishByHebrew.TryGetValue(value, out string? en))
-            return en;
-        return value;
+        else
+        {
+            if (EnglishByHebrew.TryGetValue(value, out string? en)) return en;
+            if (WizardEnglish.TryGetValue(value, out en)) return en;
+        }
+        return TranslateWizardDynamic(value, language);
     }
 
     internal static void Apply(Form form, string language)
@@ -188,7 +207,35 @@ internal static class UiLocale
                 text.RightToLeft = RightToLeft.No;
             if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
+            if (child is Label technicalLabel && technicalLabel.Name is
+                ("CampaignWizardVersion" or "WizardTimeZoneDifference" or
+                 "CampaignWizardImagePath"))
+                technicalLabel.RightToLeft = RightToLeft.No;
+            // UI-only formatted choices: SelectedItem stays the original enum or
+            // English storage key. Never translate values saved to campaign JSON.
+            if (child is ComboBox combo && combo.Name is
+                ("WizardCampaignType" or "CampaignWizardContentSource"))
+                ApplyComboLocalization(combo, language);
         }
+    }
+
+    private static void ApplyComboLocalization(ComboBox combo, string language)
+    {
+        ComboLanguage state = ComboLanguages.GetValue(combo, _ => new ComboLanguage());
+        if (!state.Attached)
+        {
+            combo.FormattingEnabled = true;
+            combo.Format += (_, e) =>
+            {
+                if (e.ListItem is not null)
+                    e.Value = Translate(e.ListItem.ToString() ?? string.Empty, state.Language);
+            };
+            state.Attached = true;
+        }
+        state.Language = language;
+        // Redraw labels without replacing SelectedItem, changing SelectedIndex,
+        // firing a deployment configuration handler or persisting new data.
+        combo.Invalidate();
     }
 
     private static IEnumerable<Control> All(Control root)

@@ -218,8 +218,8 @@ public sealed partial class MainForm
                 {
                     saver.Enabled = idle.Enabled = password.Enabled = false;
                     photo.Enabled = slide.Enabled = false;
-                    message.Text = "Choose a campaign type to continue. No images or schedule steps are skipped yet.";
-                    status.Text = "No campaign type selected. Choose Lock Screen, Screen Saver or Both.";
+                    message.Text = T("Choose a campaign type to continue. No images or schedule steps are skipped yet.");
+                    status.Text = T("No campaign type selected. Choose Lock Screen, Screen Saver or Both.");
                     _next.Enabled = false;
                     return;
                 }
@@ -228,7 +228,7 @@ public sealed partial class MainForm
                 photo.Enabled = saverEnabled;
                 slide.Enabled = saverEnabled && photo.Checked;
                 idle.Enabled = password.Enabled = saverEnabled;
-                message.Text = selected switch
+                message.Text = T(selected switch
                 {
                     CampaignTargetMode.LockScreen =>
                         "LOCK SCREEN: next select campaign images, arrange them, " +
@@ -241,10 +241,10 @@ public sealed partial class MainForm
                         "pages are skipped. Applies to selected user group.",
                     _ => "BOTH: configure image schedule and user Screen Saver. " +
                         "Choose independent computer/user groups at Deploy."
-                };
-                status.Text = "Selected type: " + selected +
-                    (saverEnabled ? " | idle " + idle.Value + " s" : "") +
-                    " | no AD changes made.";
+                });
+                status.Text = T("Selected type: ") + T(selected.ToString()) +
+                    (saverEnabled ? T(" | idle ") + idle.Value + T(" s") : "") +
+                    T(" | no AD changes made.");
                 _next.Enabled = true;
                 if (!persist) return;
                 // Repaint the rail as soon as the operator changes the type.
@@ -253,12 +253,12 @@ public sealed partial class MainForm
                 for (int i = 2; i <= 4; i++)
                 {
                     bool skip = selected == CampaignTargetMode.ScreenSaver && !photo.Checked;
-                    _rail[i].Text = skip ? StepNames[i] + " (skip)" : StepNames[i];
+                    _rail[i].Text = T(skip ? StepNames[i] + " (skip)" : StepNames[i]);
                     _rail[i].ForeColor = skip ? UiStyle.Muted : UiStyle.Navy;
                 }
-                _footnote.Text = selected == CampaignTargetMode.ScreenSaver && !photo.Checked
+                _footnote.Text = T(selected == CampaignTargetMode.ScreenSaver && !photo.Checked
                     ? "Built-in Screen Saver: images not needed"
-                    : "JPG/Lock Screen: image stages are available";
+                    : "JPG/Lock Screen: image stages are available");
                 SuggestCampaignName(selected);
                 _owner._project.CampaignMode = selected;
                 _owner._project.CampaignModeExplicit = true;
