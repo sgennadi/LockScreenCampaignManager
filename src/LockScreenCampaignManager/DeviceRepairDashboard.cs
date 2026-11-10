@@ -681,34 +681,38 @@ internal sealed class DeviceRepairDashboard : UserControl
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selected.Length is < 1 or > 25)
         {
-            MessageBox.Show(FindForm(), "Select 1–25 verified computers.", "Repair Selected",
+            MessageBox.Show(FindForm(),
+                UiLocale.Display("Select 1–25 verified computers."),
+                UiLocale.Display("Repair Selected"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var verified = new HashSet<string>(_verified, StringComparer.OrdinalIgnoreCase);
         if (selected.Any(x => !verified.Contains(x)))
         {
-            MessageBox.Show(FindForm(), "Selected host is outside the last verified AD scope.",
-                "Repair Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(FindForm(),
+                UiLocale.Display("Selected host is outside the last verified AD scope."),
+                UiLocale.Display("Repair Selected"), MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
         if (_snapshot!.Rows.Where(x => selected.Contains(x.ComputerFqdn,
                 StringComparer.OrdinalIgnoreCase)).Any(x => x.HasPendingRepair))
         {
             MessageBox.Show(FindForm(),
-                "One or more selected PCs already have a pending Repair. " +
-                "Inspect the protected queues and Client Health before new RPC.",
-                "Repair already tracked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                UiLocale.Display("One or more selected PCs already have a pending Repair. " +
+                "Inspect the protected queues and Client Health before new RPC."),
+                UiLocale.Display("Repair already tracked"), MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
         if (MessageBox.Show(FindForm(),
-            "Open the EXISTING Repair workflow for these AD-verified computers?" +
-            Environment.NewLine + Environment.NewLine +
-            "This dashboard does not start an RPC. The existing workflow will " +
-            "revalidate AD, GPO and both Repair queues and require Preview plus " +
-            "typing the complete GPO GUID before any remote task." +
-            Environment.NewLine + "Continue?",
-            "Repair Selected", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            UiLocale.Display(
+                "Open the EXISTING Repair workflow for these AD-verified computers?\n\n" +
+                "This dashboard does not start an RPC. The existing workflow will " +
+                "revalidate AD, GPO and both Repair queues and require Preview plus " +
+                "typing the complete GPO GUID before any remote task.\nContinue?"),
+            UiLocale.Display("Repair Selected"), MessageBoxButtons.YesNo, MessageBoxIcon.Question,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
         _busy = true;
