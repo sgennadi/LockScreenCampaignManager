@@ -165,7 +165,7 @@ internal static class UiLocale
         foreach (Control child in All(form))
         {
             if (child is Button or Label or CheckBox or RadioButton or
-                TabPage or GroupBox or LinkLabel)
+                TabPage or GroupBox)
                 child.Text = Translate(child.Text, language);
 
             // Log output, GUIDs, paths, LDAP DNs and hash evidence must remain LTR.
@@ -176,7 +176,7 @@ internal static class UiLocale
                 text.Name.Contains("UNC", StringComparison.OrdinalIgnoreCase) ||
                 text.Name.Contains("Report", StringComparison.OrdinalIgnoreCase)))
                 text.RightToLeft = RightToLeft.No;
-            if (child is DataGridView or ListBox or CheckedListBox)
+            if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
         }
     }
