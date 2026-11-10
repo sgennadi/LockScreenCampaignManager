@@ -74,6 +74,8 @@ internal static class NativeGpoDeploymentApply
                 throw new NotSupportedException(
                     "Native EXE GPO deployment requires an explicit isolated-lab opt-in.");
             int imageCount = plan.GetProperty("imageCount").GetInt32();
+            string expectedManifestHash = Required(plan, "manifestSha256");
+            string expectedAgentHash = Required(plan, "agentSha256");
             if (!NativeSysvolStorage.ValidCampaignId(id) ||
                 imageCount is < 1 or > 30)
                 throw new InvalidDataException("The deployment package is not valid.");
@@ -124,7 +126,7 @@ internal static class NativeGpoDeploymentApply
                 .Equals(name, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("GPO name is already in use.");
             if (Directory.Exists(targetPath))
-                throw new InvalidOperationException("Campaign already exists in SYSVOL.");
+                throw new InvalidOperationException("Campaign payload already exists; never overwrite.");
 
             string basePath = Path.GetDirectoryName(targetPath) ??
                 throw new InvalidDataException("Invalid SYSVOL source path.");
@@ -146,11 +148,21 @@ internal static class NativeGpoDeploymentApply
                 Directory.CreateDirectory(Path.Combine(stage, "images"));
                 CopyValidatedPackage(packageFolder, stage);
                 if (Directory.Exists(targetPath))
-                    throw new IOException("Campaign target already appeared on SYSVOL.");
+                    throw new IOException("Campaign payload target appeared during staging.");
                 Directory.Move(stage, targetPath);
                 moved = true;
                 if (contentSource == CampaignContentSource.SmbShare)
+                {
                     CampaignPayloadLocation.CheckShareReadOnly(targetPath);
+                    var verified = NativeGpoDeploymentPlan.VerifyImmutablePackageForTest(targetPath);
+                    if (verified.Id != id ||
+                        !verified.ManifestSha256.Equals(expectedManifestHash,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !verified.AgentSha256.Equals(expectedAgentHash,
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException(
+                            "Published SMB package differs from preflight SHA-256 identity.");
+                }
 
                 // Create the new policy only after all source files are safely
                 // staged and hashes have been checked.
@@ -165,7 +177,16 @@ internal static class NativeGpoDeploymentApply
 
                 RestrictApplyToGroup(ldap, gpoDn, selectedSid);
                 if (contentSource == CampaignContentSource.SmbShare)
+                {
                     CampaignPayloadLocation.CheckShareReadOnly(targetPath);
+                    var lastCheck = NativeGpoDeploymentPlan.VerifyImmutablePackageForTest(targetPath);
+                    if (!lastCheck.ManifestSha256.Equals(expectedManifestHash,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !lastCheck.AgentSha256.Equals(expectedAgentHash,
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException(
+                            "SMB source changed before GPO startup registration.");
+                }
                 RegisterStartup(ldap, gpoDn, actualDc, domain,
                     created.Value, clientScript, clientType);
                 // Membership can drift while files and GPO are being staged.
@@ -190,6 +211,8 @@ internal static class NativeGpoDeploymentApply
                         packageStoragePath = targetPath,
                         contentSource = contentSource.ToString(),
                         contentShareRoot = smbRoot,
+                        manifestSha256 = expectedManifestHash,
+                        agentSha256 = expectedAgentHash,
                         clientScriptPath = clientScript,
                         clientType = clientType.ToString(),
                         gpoMethod = clientType == CampaignClientType.Executable
