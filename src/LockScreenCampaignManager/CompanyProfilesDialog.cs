@@ -76,6 +76,7 @@ internal sealed class CompanyProfilesDialog : Form
         });
         _search.Width = 270;
         _search.PlaceholderText = "Company or AD domain...";
+        _search.RightToLeft = RightToLeft.No;
         _search.Margin = new Padding(0, 7, 10, 0);
         _search.TextChanged += (_, _) => DisplayList();
         toolbar.Controls.Add(_search);
@@ -150,7 +151,9 @@ internal sealed class CompanyProfilesDialog : Form
     private static Button Button(string text, int width, Action action)
     {
         var button = new Button {
-            Text = text, Width = width, Height = 38, AutoEllipsis = true,
+            Text = UiLocale.Display(text), Width = width, Height = 38,
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowOnly,
+            MinimumSize = new Size(width, 38), AutoEllipsis = false,
             Margin = new Padding(0, 4, 8, 4)
         };
         button.Click += (_, _) => action();
