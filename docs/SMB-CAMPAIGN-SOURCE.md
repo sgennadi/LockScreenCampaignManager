@@ -1,5 +1,7 @@
 # LockScreen Campaign Manager — campaign files in SYSVOL or SMB
 
+**Preview.84 validation extension:** a disposable Windows 10/11 endpoint can use the [LocalSystem SMB canary](SMB-SYSTEM-CANARY.md) with a *new deployment receipt* to check computer-account SMB read access and exact SHA-256 data. This is additional evidence; a real reboot, gpresult and restore test are still needed.
+
 ## Choice in the deployment Wizard
 
 On **AD / GPO Deployment → Step 2 / 3**, select **Campaign files**:
