@@ -117,6 +117,8 @@ internal static partial class UiLocale
         ["One or more selected PCs already have a pending Repair. Inspect the protected queues and Client Health before new RPC."] = "У одного или нескольких ПК уже есть ожидающее исправление. Проверьте защищённые очереди и отчёты перед новым RPC.",
         ["Repair already tracked"] = "Исправление уже отслеживается",
         ["Open the EXISTING Repair workflow for these AD-verified computers?\n\nThis dashboard does not start an RPC. The existing workflow will revalidate AD, GPO and both Repair queues and require Preview plus typing the complete GPO GUID before any remote task.\nContinue?"] = "Открыть СУЩЕСТВУЮЩИЙ процесс исправления для проверенных компьютеров AD?\n\nЭта панель сама не запускает RPC. Существующий процесс перепроверит AD, GPO и обе очереди. Перед удалённым заданием потребуются предпросмотр и ввод полного GUID GPO.\nПродолжить?",
+        ["Cancel this gMSA request?\nThis will NOT cancel a task already running on a remote PC."] = "Отменить запрос gMSA?\nУже запущенное удалённое задание НЕ будет отменено.",
+        ["gMSA Repair"] = "Исправление gMSA",
     };
     private static readonly Dictionary<string,string> Advanced95EnglishByRussian =
         Advanced95Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
@@ -232,6 +234,10 @@ internal static partial class UiLocale
         ["One or more selected PCs already have a pending Repair. Inspect the protected queues and Client Health before new RPC."] = "למחשב נבחר אחד או יותר כבר יש תיקון ממתין. בדוק תורים מוגנים ודוחות לפני RPC נוסף.",
         ["Repair already tracked"] = "התיקון כבר במעקב",
         ["Open the EXISTING Repair workflow for these AD-verified computers?\n\nThis dashboard does not start an RPC. The existing workflow will revalidate AD, GPO and both Repair queues and require Preview plus typing the complete GPO GUID before any remote task.\nContinue?"] = "לפתוח את תהליך התיקון הקיים עבור מחשבי AD המאומתים?\n\nהלוח אינו מפעיל RPC. התהליך הקיים יבדוק מחדש AD, GPO ושני התורים ויחייב תצוגה מקדימה והקלדת GUID מלא לפני כל משימה מרוחקת.\nלהמשיך?",
+        ["Run assessment"] = "הרץ בדיקת מוכנות",
+        ["Export safe JSON"] = "ייצא JSON ללא מידע מזהה",
+        ["Cancel this gMSA request?\nThis will NOT cancel a task already running on a remote PC."] = "לבטל את בקשת gMSA?\nמשימה שכבר פועלת במחשב מרוחק לא תבוטל.",
+        ["gMSA Repair"] = "תיקון gMSA",
     };
     private static readonly Dictionary<string,string> Advanced95EnglishByHebrew =
         Advanced95Hebrew.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
