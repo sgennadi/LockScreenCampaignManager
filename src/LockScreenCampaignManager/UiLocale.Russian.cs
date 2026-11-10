@@ -692,6 +692,18 @@ internal static partial class UiLocale
         ["Cannot copy the report or open GitHub. Nothing was delivered."] = "Не удалось скопировать отчёт или открыть GitHub. Ничего не отправлено.",
         ["An AD or remote PC operation is still running. Check its result before closing."] = "Операция AD или удалённого ПК ещё выполняется. Проверьте результат перед закрытием.",
         ["This report may contain private domain, OU, group and GPO values. Export only to a protected LOCAL folder. Never post raw CSV to a public issue.\r\n\r\nContinue?"] = "Отчёт может содержать частные данные домена, OU, групп и GPO. Экспортируйте только в защищённую ЛОКАЛЬНУЮ папку. Никогда не публикуйте исходный CSV в публичной задаче.\r\n\r\nПродолжить?",
+        ["Current Windows account"] = "Текущая Windows-сессия",
+        ["Condition"] = "Состояние клиента",
+        ["Cleanup"] = "Очистка клиента",
+        ["Health"] = "Работоспособность",
+        ["LockScreen"] = "Режим экрана блокировки",
+        ["User"] = "Пользователь",
+        ["Run assessment"] = "Запустить проверку",
+        ["Export safe JSON"] = "Экспорт безопасного JSON",
+        ["Export visible CSV"] = "Экспорт видимых строк CSV",
+        ["Load more"] = "Загрузить ещё",
+        ["Load reports"] = "Загрузить отчёты",
+        ["Select account"] = "Выбрать учётную запись",
     };
     private static readonly Dictionary<string,string> EnglishByRussian =
         Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
