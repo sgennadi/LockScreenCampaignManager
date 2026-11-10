@@ -173,7 +173,9 @@ internal sealed partial class DomainDeploymentForm : Form
 
     private Button Button(string text, int width, Action action, bool primary = false)
     {
-        var b = new Button { Text = text, Width = width, Height = 39, Margin = new Padding(0, 0, 9, 5),
+        var b = new Button { Text = UiLocale.Display(text), Width = width, Height = 39,
+            MinimumSize = new Size(width, 39), AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowOnly, Margin = new Padding(0, 0, 9, 5),
             FlatStyle = FlatStyle.Flat, BackColor = primary ? _accent : Color.White,
             ForeColor = primary ? Color.White : Color.FromArgb(35, 44, 55), Cursor = Cursors.Hand };
         b.FlatAppearance.BorderColor = primary ? _accent : Color.LightGray;
@@ -244,6 +246,8 @@ internal sealed partial class DomainDeploymentForm : Form
         _dcBox.DropDownWidth = 670;
         _dcBox.TextChanged += (_, _) => ConnectionChanged();
         _gpoBox.TextChanged += (_, _) => InvalidatePlan();
+        _domainBox.RightToLeft = _dcBox.RightToLeft =
+            _gpoBox.RightToLeft = _userBox.RightToLeft = RightToLeft.No;
         connFields.Controls.Add(ResponsiveField("AD DNS domain", _domainBox), 0, 0);
         connFields.Controls.Add(ResponsiveField("Writable DC", _dcBox), 1, 0);
         connFields.Controls.Add(ResponsiveField("New GPO name", _gpoBox), 2, 0);
@@ -304,13 +308,13 @@ internal sealed partial class DomainDeploymentForm : Form
         _connectionStatus.Dock = DockStyle.Fill;
         _connectionStatus.AutoEllipsis = true;
         _connectionStatus.TextAlign = ContentAlignment.MiddleLeft;
-        _connectionStatus.Text = "Not connected. Native LDAP + Windows GPO COM; no RSAT or WinRM.";
+        _connectionStatus.Text = UiLocale.Display("Not connected. Native LDAP + Windows GPO COM; no RSAT or WinRM.");
         _connectionStatus.ForeColor = Color.DarkSlateGray;
         notification.Controls.Add(_connectionStatus, 0, 0);
         _rightsBanner.Dock = DockStyle.Fill;
         _rightsBanner.AutoEllipsis = true;
         _rightsBanner.TextAlign = ContentAlignment.MiddleLeft;
-        _rightsBanner.Text = "GPO RIGHTS: Not checked. Preview does not change Active Directory.";
+        _rightsBanner.Text = UiLocale.Display("GPO RIGHTS: Not checked. Preview does not change Active Directory.");
         notification.Controls.Add(_rightsBanner, 0, 1);
         // Choose the endpoint agent and corresponding Windows GPO startup method.
         var engineChoice = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
@@ -368,6 +372,7 @@ internal sealed partial class DomainDeploymentForm : Form
         };
         storage.Controls.Add(_contentSourceBox, 1, 0);
         _contentShareBox.Name = "DeploymentContentShareRoot";
+        _contentShareBox.RightToLeft = RightToLeft.No;
         _contentShareBox.PlaceholderText = @"\\files.example.com\Campaigns";
         _contentShareBox.Dock = DockStyle.Fill;
         _contentShareBox.Text = _project.ContentShareRoot;
@@ -418,7 +423,8 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         split.Panel1.Controls.Add(lists);
         _ouFilter.Dock = DockStyle.Fill;
-        _ouFilter.PlaceholderText = "Search OU...";
+        _ouFilter.PlaceholderText = UiLocale.Display("Search OU...");
+        _ouFilter.RightToLeft = RightToLeft.No;
         _ouFilter.TextChanged += (_, _) => FilterOus();
         _ous.Dock = DockStyle.Fill;
         _ous.IntegralHeight = false;
@@ -426,7 +432,8 @@ internal sealed partial class DomainDeploymentForm : Form
         _ous.SelectedIndexChanged += (_, _) => InvalidatePlan();
         _ous.MouseMove += (_, e) => ShowDirectoryTooltip(_ous, e);
         _groupFilter.Dock = DockStyle.Fill;
-        _groupFilter.PlaceholderText = "Search computer security group...";
+        _groupFilter.PlaceholderText = UiLocale.Display("Search computer security group...");
+        _groupFilter.RightToLeft = RightToLeft.No;
         _groupFilter.TextChanged += (_, _) => FilterGroups();
         _groups.Dock = DockStyle.Fill;
         _groups.IntegralHeight = false;
@@ -438,6 +445,7 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.Controls.Add(_groupFilter, 0, 2);
         lists.Controls.Add(_groups, 0, 3);
         _details.Dock = DockStyle.Fill;
+        _details.RightToLeft = RightToLeft.No; // exact plan/AD evidence
         _details.Multiline = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.ReadOnly = true;
@@ -628,22 +636,22 @@ internal sealed partial class DomainDeploymentForm : Form
         bool smb = _project.ContentSource == CampaignContentSource.SmbShare;
         _contentShareBox.Enabled = smb && !_running;
         _contentShareBrowse.Enabled = smb && !_running;
-        _contentSourceHint.Text = smb
+        _contentSourceHint.Text = UiLocale.Display(smb
             ? "GPO metadata stays in SYSVOL. Computer-account SMB READ must be proven on a test PC; Preview NTFS ACL scan is advisory."
-            : "SYSVOL stores both GPO metadata and the original immutable campaign package.";
+            : "SYSVOL stores both GPO metadata and the original immutable campaign package.");
     }
 
     private void UpdateDeploymentSteps()
     {
         if (_deploymentActionRow is null) return;
-        _wizardHint.Text = _advancedMode
+        _wizardHint.Text = UiLocale.Display(_advancedMode
             ? "Advanced mode  •  Choose targets, Preview, then Deploy."
             : _wizardStep switch
             {
                 0 => "Step 1 / 3  Connect to a writable DC (credentials are session-only).",
                 1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
                 _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
-            };
+            });
         // Connection fields belong on step 1 only. Keep their selected values
         // in memory while giving target and preview pages the full height.
         bool connectionVisible = _advancedMode || _wizardStep == 0;
@@ -751,9 +759,9 @@ internal sealed partial class DomainDeploymentForm : Form
         bool alternate = _alternateRadio.Checked;
         _userBox.Enabled = alternate;
         _usersButton.Enabled = alternate;
-        _otherAccountHint.Text = !alternate ? "Use current Windows credentials" :
+        _otherAccountHint.Text = UiLocale.Display(!alternate ? "Use current Windows credentials" :
             _passwordBox.Text.Length > 0 ? "Set in Wizard (session only)" :
-            "Select user to enter password";
+            "Select user to enter password");
         ConnectionChanged();
     }
 
