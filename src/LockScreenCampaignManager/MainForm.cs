@@ -1251,6 +1251,8 @@ public sealed partial class MainForm : Form
                 LastImageHours = _project.LastImageHours, TimeZoneId = _project.TimeZoneId,
                 EnableFeedback = _project.EnableFeedback, FeedbackShare = _project.FeedbackShare,
                 FeedbackIntervalMinutes = _project.FeedbackIntervalMinutes,
+                ContentSource = _project.ContentSource,
+                ContentShareRoot = _project.ContentShareRoot,
                 ImagePaths = new List<string>(_project.ImagePaths),
                 TargetAssignments = (_project.TargetAssignments ?? [])
                     .Select(x => x.Clone()).ToList(),
@@ -1283,6 +1285,8 @@ public sealed partial class MainForm : Form
                 PasswordOnResume = snapshot.ScreenSaver.PasswordOnResume
             };
             _project.ClientType = snapshot.ClientType;
+            _project.ContentSource = snapshot.ContentSource;
+            _project.ContentShareRoot = snapshot.ContentShareRoot;
             _projectDirty = true;
         }
         catch (CampaignValidationException ex) { ShowCampaignValidation(ex.Message); }
