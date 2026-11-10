@@ -6,6 +6,9 @@
 
 # LockScreen Campaign Manager
 
+> **Preview.84 — SMB under LocalSystem verification:** after deploying a test campaign with protected SMB storage, use the offline kit's read-only LocalSystem canary on a disposable Windows 10/11 computer to verify share access and immutable package hashes. The Manager stores pinned source SHA-256 in deployment receipts and rechecks the full SMB package before GPO startup registration. This does **not** prove boot-time GPO application or physical lock-screen display; those still require real endpoint acceptance. [SMB SYSTEM canary instructions](docs/SMB-SYSTEM-CANARY.md).
+
+
 > **Preview.83 — choose SYSVOL or protected SMB network storage:** On AD / GPO Deployment, select **Campaign files → SYSVOL (default)** or **SMB network folder (UNC)**, then enter an existing dedicated \\server\\share\\folder. GPO policy objects and startup metadata **always** remain in AD/SYSVOL; the immutable agent/images/manifest package may live outside SYSVOL in an administrator-controlled read-only-for-computers SMB share. Read-only preflight verifies the UNC, local NTFS ACLs and package uniqueness. It cannot prove share-level ACL, machine-account access, DFS/network availability at boot, or actual RSoP; test on one dedicated machine first. SMB package cleanup is manual after GPO unlink and endpoint cleanup. [Details](docs/SMB-CAMPAIGN-SOURCE.md).
 
 
@@ -21,7 +24,7 @@
 
 > **Migration/publication:** new identity is not an in-place migration of existing deployed agents or GPOs. Follow [universal migration and clean-history publication guidance](docs/UNIVERSAL-MIGRATION.md); do **not** switch the historical repository to Public.
 
-**Current preview:** `0.4.0-preview.83` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
+**Current preview:** `0.4.0-preview.84` — portable .NET 10 WinForms campaign manager for **Windows 10 and Windows 11** (x64/x86). Windows 10 Enterprise/Education/IoT Enterprise client agents support Windows 10 1607+ (including supported LTSC editions); Windows 11 Enterprise/Education/IoT Enterprise is supported too. The manager can edit projects offline without admin rights. Read-only AD inventory and optional GPO deployment are separate workflows. See [manager OS support](docs/MANAGER-OS-COMPATIBILITY.md) and [Windows 10/11 client support](docs/WINDOWS10-CLIENT-COMPATIBILITY.md). Actual Windows 10/11 domain-connected endpoint testing remains required.
 
 > **Public repository — clean source history.** The former institution-specific repository must remain private until explicitly retired. This new project contains only a reviewed source snapshot and its own new commits. Unsigned portable EXEs require manual approval; do not treat a checksum as a publisher signature.
 

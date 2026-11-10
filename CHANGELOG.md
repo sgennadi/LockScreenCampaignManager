@@ -1,3 +1,10 @@
+## 0.4.0-preview.84 — LocalSystem SMB canary and pinned deployment receipt (2026-11-10)
+
+- Confirm exact campaign.json and PS1/EXE agent SHA-256 in native read-only preflight and reverify the complete SMB package before GPO creation and startup registration; save evidence in successful deployment receipts.
+- Package opt-in local-only SYSTEM Scheduled Task canary for a disposable Windows 10/11 machine. The read-only probe verifies SMB machine-account reachability, pinned manifest, agent and all JPEG images, and any pre-existing local cache. It never executes source scripts or changes AD/GPO/SYSVOL.
+- Protect local diagnostic reports, remove the temporary task and input configuration, and never upload data automatically. Probe cannot prove actual GPO application, boot-time availability, lock-screen display or rollback; those remain manual acceptance gates.
+- Add parser and source-contract regression tests to Windows x64/x86 CI and include the canary in the offline-lab ZIP. See [SMB SYSTEM canary](docs/SMB-SYSTEM-CANARY.md).
+
 ## 0.4.0-preview.83 — Optional SMB network campaign source (2026-11-09)
 
 - Add **Campaign files: SYSVOL (default) / SMB network folder (UNC)** to the AD/GPO deployment Wizard. The selection persists in campaign projects, invalidates stale Preview evidence, and applies to single computer groups and per-group Lock Screen packages.
