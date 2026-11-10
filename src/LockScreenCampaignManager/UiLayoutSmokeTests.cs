@@ -619,7 +619,11 @@ internal static class UiLayoutSmokeTests
             folder.Width < 160 ||
             browse.Height < TextRenderer.MeasureText("Browse...", browse.Font).Height + 6)
             throw new InvalidOperationException(
-                $"Main Wizard network UNC input or Browse button clipped at {profile}.");
+                $"Main Wizard network UNC input or Browse button clipped at {profile}: " +
+                $"row={row.Width}x{row.Height} visible={row.Visible}, " +
+                $"folder={folder.Width}x{folder.Height} enabled={folder.Enabled}, " +
+                $"browse={browse.Width}x{browse.Height} enabled={browse.Enabled}, " +
+                $"browse-text={TextRenderer.MeasureText("Browse...", browse.Font).Height + 6}.");
         source.SelectedIndex = 0;
     }
 
