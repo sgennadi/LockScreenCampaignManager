@@ -207,10 +207,14 @@ internal static partial class UiLocale
                 text.RightToLeft = RightToLeft.No;
             if (child is DataGridView or ListBox)
                 child.RightToLeft = RightToLeft.No;
+            if (child is Label technicalLabel && technicalLabel.Name is
+                ("CampaignWizardVersion" or "WizardTimeZoneDifference" or
+                 "CampaignWizardImagePath"))
+                technicalLabel.RightToLeft = RightToLeft.No;
             // UI-only formatted choices: SelectedItem stays the original enum or
             // English storage key. Never translate values saved to campaign JSON.
             if (child is ComboBox combo && combo.Name is
-                "WizardCampaignType" or "CampaignWizardContentSource")
+                ("WizardCampaignType" or "CampaignWizardContentSource"))
                 ApplyComboLocalization(combo, language);
         }
     }
