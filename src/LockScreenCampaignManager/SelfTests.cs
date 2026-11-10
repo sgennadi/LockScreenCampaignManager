@@ -46,6 +46,7 @@ internal static class SelfTests
         TestNativeRemoteCleanupContracts();
         TestNativeGpoDeploymentPlanContracts();
         TestSmbCampaignContentSource();
+        TestSmbPreflightEvidence();
         TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
@@ -267,6 +268,49 @@ internal static class SelfTests
         Check(saved?.ContentSource == CampaignContentSource.SmbShare &&
             saved.ContentShareRoot == root,
             "SMB content selection persists in existing campaign project JSON.");
+    }
+
+    private static void TestSmbPreflightEvidence()
+    {
+        // Pure offline regression: do not contact a share, DC or test endpoint.
+        const string root = @"\\\\files.example.com\\Campaigns";
+        string target = root + @"\\test-202611091200";
+        System.Text.Json.JsonElement Make(
+            string ntfs = "PASS_ADVISORY_BROAD_WRITE_ACL_SCAN",
+            string share = "NOT_TESTED", string computer = "NOT_TESTED",
+            string startup = "NOT_TESTED", string? path = null) =>
+            System.Text.Json.JsonSerializer.SerializeToElement(new {
+                contentSource = "SmbShare", contentShareRoot = root,
+                packageStoragePath = path ?? target,
+                smbNtfsAclScan = ntfs, smbShareAclAccess = share,
+                smbComputerAccountRead = computer, smbStartupConnectivity = startup
+            });
+        string evidence = CampaignSmbPreflightEvidence.Describe(Make());
+        Check(evidence.Contains("PASS (ADVISORY", StringComparison.Ordinal) &&
+            evidence.Contains("computer-account READ access: NOT TESTED", StringComparison.Ordinal) &&
+            evidence.Contains("SMB share permissions: NOT TESTED", StringComparison.Ordinal) &&
+            evidence.Contains("Access during Windows startup: NOT TESTED", StringComparison.Ordinal) &&
+            evidence.Contains(target, StringComparison.Ordinal),
+            "SMB Plan must distinguish advisory NTFS inspection from untested actual endpoint access.");
+        string warning = CampaignSmbPreflightEvidence.ConfirmationWarning(
+            CampaignContentSource.SmbShare, root);
+        Check(warning.Contains(root, StringComparison.Ordinal) &&
+            warning.Contains("NOT TESTED", StringComparison.Ordinal),
+            "SMB write confirmation must show the exact UNC root and remaining access risk.");
+        Check(CampaignSmbPreflightEvidence.ConfirmationWarning(
+            CampaignContentSource.Sysvol, root).Length == 0,
+            "SYSVOL confirmation must not claim an external SMB access test.");
+        foreach (var invalid in new[] {
+            Make(ntfs: "NOT_TESTED"), Make(share: "PASS"),
+            Make(computer: "PASS"), Make(startup: "PASS"),
+            Make(path: @"\\\\other.example.com\\Campaigns\\test-202611091200")
+        })
+        {
+            bool rejected = false;
+            try { _ = CampaignSmbPreflightEvidence.Describe(invalid); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "SMB Preview must fail closed for inconsistent source/evidence.");
+        }
     }
 
     private static void TestPhotoJpegSaverLocal()
