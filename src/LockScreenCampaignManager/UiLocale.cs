@@ -26,6 +26,7 @@ internal static partial class UiLocale
         { Caption = caption; LastApplied = caption; }
     }
     private static readonly ConditionalWeakTable<DataGridViewColumn, ColumnHeaderSource> Headers = new();
+    private static readonly ConditionalWeakTable<ColumnHeader, ColumnHeaderSource> ListHeaders = new();
     // Save each control's ORIGINAL caption, so in-place switching among three
     // languages does not confuse similar translated labels or command values.
     private sealed class CaptionSource
@@ -309,8 +310,19 @@ internal static partial class UiLocale
             if (child is TextBox placeholder &&
                 !string.IsNullOrEmpty(placeholder.PlaceholderText))
                 placeholder.PlaceholderText = Translate(placeholder.PlaceholderText, language);
-            if (child is DataGridView or ListBox)
+            if (child is DataGridView or ListBox or ListView)
                 child.RightToLeft = RightToLeft.No;
+            if (child is ListView view)
+                foreach (ColumnHeader column in view.Columns)
+                {
+                    var header = ListHeaders.GetValue(column,
+                        key => new ColumnHeaderSource(key.Text));
+                    if (!string.Equals(column.Text, header.LastApplied,
+                        StringComparison.Ordinal))
+                        header.Caption = Translate(column.Text, "English");
+                    column.Text = Translate(header.Caption, language);
+                    header.LastApplied = column.Text;
+                }
             if (child is DataGridView healthGrid &&
                 healthGrid.Name is ("ClientHealthGrid" or
                     "GpoDeferredRepairGrid" or "GpoGmsaQueueGrid" or
@@ -342,7 +354,8 @@ internal static partial class UiLocale
                  "DeploymentContentSource" or "DeploymentClientType" or
                  "GpoLifecycleAction" or "GpoPushPurpose" or
                  "GpoGmsaFilter" or "AgentActivityFilter" or "GroupConflictRisk" or
-                 "AssignmentTargetMode" or "CampaignScheduleMode" or
+                 "UiSettingsDensity" or "AssignmentTargetMode" or
+                 "CampaignScheduleMode" or
                  "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
                  "CampaignClosureFilter"))
