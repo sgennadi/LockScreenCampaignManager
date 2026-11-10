@@ -747,19 +747,21 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertNotIn('cmd.exe', setup.lower())
 
 
-    def test_csharp_user_interface_remains_english(self):
-        # Avoid mixed-language WinForms controls or status messages in future releases.
-        # Only src *.cs are checked: domain scripts and admin documentation have
-        # independent contracts and may be localized separately.
-        # Filename parser data and offline test fixtures intentionally recognize
-        # Cyrillic weekday filenames; those strings are never shown as UI labels.
-        non_ui_localized_data = {'ImageFilenameMatcher.cs', 'SelfTests.cs'}
+    def test_csharp_user_interface_remains_canonically_english(self):
+        # Russian is allowed only in explicitly declared locale/UI preference
+        # sources and UI smoke fixtures. All policy, protocol and GPO source
+        # logic continues to use English identifiers/format contracts.
+        allowed_russian_ui = {
+            'UiLocale.cs', 'UiLocale.Wizard.cs', 'UiLocale.Russian.cs',
+            'UiSettingsDialog.cs', 'UiLayoutSmokeTests.cs',
+            'ImageFilenameMatcher.cs', 'SelfTests.cs'
+        }
         for source in APP.glob('*.cs'):
-            if source.name in non_ui_localized_data:
+            if source.name in allowed_russian_ui:
                 continue
-            text = source.read_text(encoding='utf-8')
-            self.assertFalse(any(0x0400 <= ord(ch) <= 0x052F for ch in text),
-                             f'Cyrillic text found in C# UI: {source.name}')
+            body = source.read_text(encoding='utf-8')
+            self.assertFalse(any(0x0400 <= ord(ch) <= 0x052F for ch in body),
+                f'Unexpected Russian literal outside localization: {source.name}')
 
     def test_smart_sysvol_storage_and_dc_time_guards(self):
         storage = read('Assets/Sysvol-Storage.ps1')
