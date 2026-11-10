@@ -9,6 +9,9 @@ internal static partial class UiLocale
     private static readonly Dictionary<string, string> WizardHebrew = new(StringComparer.Ordinal)
     {
         ["Campaign Wizard"] = "אשף הקמפיינים",
+        ["Check updates"] = "בדוק עדכונים",
+        ["Update "] = "עדכון ",
+        [" image(s) selected"] = " תמונות נבחרו",
         ["Selected type: "] = "סוג נבחר: ",
         [" | idle "] = " | ללא פעילות ",
         [" s"] = " שניות",
