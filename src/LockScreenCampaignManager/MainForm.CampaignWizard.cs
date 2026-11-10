@@ -561,7 +561,15 @@ public sealed partial class MainForm
                     headerText.TextChanged += (_, _) => FitWizardPageText(page, imagePage);
                     headerText.FontChanged += (_, _) => FitWizardPageText(page, imagePage);
                 }
-                page.WidthChanged += (_, _) => FitWizardPageText(page, imagePage);
+                int lastMeasuredPageWidth = -1;
+                page.SizeChanged += (_, _) =>
+                {
+                    // Changing page.Height also fires SizeChanged. Refit only
+                    // after a width change to prevent layout recursion.
+                    if (page.Width == lastMeasuredPageWidth) return;
+                    lastMeasuredPageWidth = page.Width;
+                    FitWizardPageText(page, imagePage);
+                };
 
                 switch (_step)
                 {
