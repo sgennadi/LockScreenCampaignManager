@@ -73,7 +73,7 @@ internal sealed class FeedbackSettingsDialog : Form
             ScrollBars = ScrollBars.Vertical,
             BorderStyle = BorderStyle.None,
             BackColor = UiStyle.Canvas,
-            Text = "How it works: GPO installs the agent; each client periodically " +
+            Text = UiLocale.Display("How it works: GPO installs the agent; each client periodically " +
                    "writes a small JSON report to the <share>\\<CampaignID> folder. " +
                    "When the manager is open, the table refreshes every 15 seconds. " +
                    "Reports continue to arrive when the manager is closed.\n\n" +
@@ -82,7 +82,7 @@ internal sealed class FeedbackSettingsDialog : Form
                    "WinRM or installed .NET. Reports are diagnostic hints, not " +
                    "cryptographic attestation of Windows state.\n\n" +
                    "Important: the SMB path is stored in campaign.json and visible to domain computers. " +
-                   "Do not use SYSVOL or NETLOGON for reports.",
+                   "Do not use SYSVOL or NETLOGON for reports."),
             Dock = DockStyle.Fill, ForeColor = UiStyle.Muted
         }, 0, 3);
 
@@ -150,7 +150,7 @@ internal sealed class FeedbackSettingsDialog : Form
     {
         using var picker = new FolderBrowserDialog
         {
-            Description = "Select the root of a dedicated SMB share (not its campaign folder).",
+            Description = UiLocale.Display("Select the root of a dedicated SMB share (not its campaign folder)."),
             UseDescriptionForTitle = true, ShowNewFolderButton = false
         };
         if (picker.ShowDialog(this) != DialogResult.OK) return;
@@ -158,9 +158,9 @@ internal sealed class FeedbackSettingsDialog : Form
         catch (ArgumentException)
         {
             MessageBox.Show(this,
-                "Choose an SMB share root such as \\\\server\\share$; " +
-                "do not select a local folder or campaign subfolder.",
-                "SMB share root required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                UiLocale.Display("Choose an SMB share root such as \\\\server\\share$; " +
+                "do not select a local folder or campaign subfolder."),
+                UiLocale.Display("SMB share root required"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
     private void Save()
@@ -181,12 +181,13 @@ internal sealed class FeedbackSettingsDialog : Form
         {
             string share = FeedbackPath.ValidateRoot(_share.Text);
             string folder = FeedbackPath.CampaignDirectory(share, CampaignSchedule.BuildId(_project));
-            if (MessageBox.Show(this, "Create feedback folder?\n\n" + folder +
-                "\n\nThe application does not change ACLs. An administrator must configure permissions on the SMB server.",
-                "Prepare folder", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            if (MessageBox.Show(this, UiLocale.Display("Create feedback folder?\n\n") + folder +
+                "\n\n" + UiLocale.Display("The application does not change ACLs. An administrator must configure permissions on the SMB server."),
+                UiLocale.Display("Prepare folder"), MessageBoxButtons.YesNo, MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             Directory.CreateDirectory(folder);
-            MessageBox.Show(this, "Ready: " + folder + "\nVerify Domain Computers write permissions.");
+            MessageBox.Show(this, UiLocale.Display("Ready: ") + folder +
+                "\n" + UiLocale.Display("Verify Domain Computers write permissions."));
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Create feedback folder", ex); }
     }
