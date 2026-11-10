@@ -615,7 +615,9 @@ internal static class UiLayoutSmokeTests
         source.SelectedIndex = 1;
         folder.Text = @"\\files.example.com\Campaigns";
         form.PerformLayout();
-        if (!row.Visible || !folder.Enabled || !browse.Enabled ||
+        // WinForms Visible is inherited from the never-shown test form;
+        // assert the selected editor is enabled and has physical dimensions.
+        if (!folder.Enabled || !browse.Enabled || row.Height < 20 ||
             folder.Width < 160 ||
             browse.Height < TextRenderer.MeasureText("Browse...", browse.Font).Height + 6)
             throw new InvalidOperationException(
