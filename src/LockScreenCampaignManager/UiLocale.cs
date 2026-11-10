@@ -21,6 +21,16 @@ internal static partial class UiLocale
     private sealed class ColumnHeaderSource { internal readonly string Caption;
         internal ColumnHeaderSource(string caption) => Caption = caption; }
     private static readonly ConditionalWeakTable<DataGridViewColumn, ColumnHeaderSource> Headers = new();
+    // Save each control's ORIGINAL caption, so in-place switching among three
+    // languages does not confuse similar translated labels or command values.
+    private sealed class CaptionSource
+    {
+        internal string English;
+        internal string LastApplied;
+        internal CaptionSource(string english, string lastApplied)
+        { English = english; LastApplied = lastApplied; }
+    }
+    private static readonly ConditionalWeakTable<Control, CaptionSource> Captions = new();
 
     private static readonly Dictionary<string, string> Hebrew = new(StringComparer.Ordinal)
     {
@@ -274,7 +284,14 @@ internal static partial class UiLocale
         {
             if (child is Button or Label or CheckBox or RadioButton or
                 TabPage or GroupBox)
-                child.Text = Translate(child.Text, language);
+            {
+                var caption = Captions.GetValue(child, source =>
+                    new CaptionSource(Translate(source.Text, "English"), source.Text));
+                if (!string.Equals(child.Text, caption.LastApplied, StringComparison.Ordinal))
+                    caption.English = Translate(child.Text, "English"); // dynamic status changed
+                child.Text = Translate(caption.English, language);
+                caption.LastApplied = child.Text;
+            }
 
             // Log output, GUIDs, paths, LDAP DNs and hash evidence must remain LTR.
             // User-editable normal text inputs can still inherit Hebrew direction.
@@ -307,7 +324,7 @@ internal static partial class UiLocale
             }
             if (child is Label technicalLabel && technicalLabel.Name is
                 ("CampaignWizardVersion" or "WizardTimeZoneDifference" or
-                 "CampaignWizardImagePath"))
+                 "CampaignWizardImagePath" or "ScheduleTimeZoneDifference"))
                 technicalLabel.RightToLeft = RightToLeft.No;
             // UI-only formatted choices: SelectedItem stays the original enum or
             // English storage key. Never translate values saved to campaign JSON.
