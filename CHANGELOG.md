@@ -1,3 +1,10 @@
+## 0.4.0-preview.89 — Clear SMB permissions evidence in GPO Preview (2026-11-10)
+
+- For SMB content, omit unrelated Smart SYSVOL duplicate-image audit; preserve it for SYSVOL content and label the storage comparison accordingly.
+- Report exact validated SMB UNC root, unique immutable campaign folder and startup script path in deployment Preview. Mark NTFS broad-write Allow-ACE scan **PASS (ADVISORY)**, and separately mark share permissions, computer-account READ and startup SMB connectivity as **NOT TESTED**. No preview can claim live endpoint success from an admin's read access.
+- Fail closed for inconsistent/missing read-only Plan evidence fields; apply the same storage evidence contract to single-target and per-group Lock Screen preflight, and show exact UNC and unresolved access limits in final GPO approval prompts.
+- Add pure offline self-tests and CI contracts to verify the distinction and preserve the automatic JPG Photo Screen Saver User GPO gate. Real Windows 10/11 domain LocalSystem tests are still outstanding.
+
 ## 0.4.0-preview.88 — Source selection before project save, no silent stale JSON (2026-11-10)
 
 - Share a single SYSVOL/SMB storage selector between Campaign Wizard Step 6 (Save / Skip) and Step 7 (Deploy), including the existing editable UNC and Browse controls. This prevents saving the campaign before the storage choice is presented.
