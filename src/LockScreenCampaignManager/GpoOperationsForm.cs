@@ -563,7 +563,7 @@ internal sealed partial class GpoOperationsForm : Form
             !System.Text.RegularExpressions.Regex.IsMatch(fqdn,
                 @"\A[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\z"))
         {
-            _status.Text = "Enter a domain computer FQDN, e.g. PC01." + _domain;
+            _status.Text = UiLocale.Display("Enter a domain computer FQDN, e.g. PC01.") + _domain;
             return;
         }
         try
@@ -582,15 +582,15 @@ internal sealed partial class GpoOperationsForm : Form
                 _ouDn, _groupDn, fqdn, selected.CampaignId, selected.Id,
                 DateTimeOffset.UtcNow);
             _conflicts.Text =
-                $"Effective candidates for {report.Computer}\r\n" +
-                $"Managed campaign: {report.CampaignId}\r\n" +
-                $"GPO links: {report.Policies.Count}, potential high overlaps: " +
-                $"{report.PotentialHigh}, needing verification: " +
-                $"{report.NeedsVerification}\r\n" +
-                $"Site association: UNKNOWN, tokenGroups: {report.TokenStatus}.\r\n" +
-                "No policy application is proven. Run gpresult on the client for RSoP.";
-            _status.Text = "Read-only effective candidate assessment finished; " +
-                "WMI, Site, security and client RSoP uncertainties are shown.";
+                UiLocale.Display("Effective candidates for ") + report.Computer + "\r\n" +
+                UiLocale.Display("Managed campaign: ") + report.CampaignId + "\r\n" +
+                UiLocale.Display("GPO links: ") + report.Policies.Count +
+                UiLocale.Display(" potential high overlaps: ") + report.PotentialHigh +
+                UiLocale.Display(" needing verification: ") + report.NeedsVerification + "\r\n" +
+                UiLocale.Display("Site association: UNKNOWN, tokenGroups: ") + report.TokenStatus + ".\r\n" +
+                UiLocale.Display("No policy application is proven. Run gpresult on the client for RSoP.");
+            _status.Text = UiLocale.Display("Read-only effective candidate assessment finished; " +
+                "WMI, Site, security and client RSoP uncertainties are shown.");
             using var window = new EffectiveGpoConflictDialog(report, async () =>
             {
                 // Every explicitly approved read revalidates the managed GPO
@@ -640,7 +640,8 @@ internal sealed partial class GpoOperationsForm : Form
             });
             _conflicts.Text = Pretty(data);
             int high = data.GetProperty("highRisk").GetInt32();
-            _status.Text = $"Read-only scan: {high} high-risk candidates. Scope/RSoP limitations are listed in the report.";
+            _status.Text = UiLocale.Display("Read-only scan: ") + high +
+                UiLocale.Display(" high-risk candidates. Scope/RSoP limitations are listed in the report.");
         }
         catch (Exception ex) { Fail(ex, "Scan GPO / registry conflicts"); }
     }
@@ -677,14 +678,15 @@ internal sealed partial class GpoOperationsForm : Form
             _agentValidReportCount = 0;
             _agentInvalidReportCount = 0;
             _agentReportsCheckedUtc = null;
-            _agentEvidenceNotice = "Agent reports not checked. Choose a managed GPO and refresh feedback.";
+            _agentEvidenceNotice = UiLocale.Display("Agent reports not checked. Choose a managed GPO and refresh feedback.");
             DrawAgentInventory();
             UiStyle.ApplyStatus(_agentProbeStatus,
                 "Loaded " + _agentInventory.Count +
                 " AD-verified computers. Check RPC reachability to find contactable endpoints.",
                 UiStatusKind.Neutral);
-            _status.Text = $"AD OU: {_adOuComputerTotal} computers; OU + campaign group: {_agentInventory.Count}. " +
-                "Last logon is approximate. Filters do not change AD or the GPO target scope.";
+            _status.Text = UiLocale.Display("AD OU: ") + _adOuComputerTotal +
+                UiLocale.Display(" computers; OU + campaign group: ") + _agentInventory.Count + ". " +
+                UiLocale.Display("Last logon is approximate. Filters do not change AD or the GPO target scope.");
             // Entering Agent Management performs an explicitly scoped,
             // read-only RPC reachability sample without waiting for the user
             // to navigate to another panel. No remote task is created.
@@ -704,7 +706,7 @@ internal sealed partial class GpoOperationsForm : Form
             _agentInventory.Clear();
             _adOuComputerTotal = 0;
             _agentShareAvailable = false;
-            _agentEvidenceNotice = "AD inventory unavailable; all computer and report counts are UNKNOWN.";
+            _agentEvidenceNotice = UiLocale.Display("AD inventory unavailable; all computer and report counts are UNKNOWN.");
             DrawAgentInventory();
             Fail(ex, "List eligible computers");
         }
@@ -809,7 +811,7 @@ internal sealed partial class GpoOperationsForm : Form
         if (string.IsNullOrWhiteSpace(id))
         {
             _status.Text = "Select a managed GPO in the first tab before previewing a remote task.";
-            _pushInfo.Text = "No remote task requested. Select a managed GPO, then eligible computers.";
+            _pushInfo.Text = UiLocale.Display("No remote task requested. Select a managed GPO, then eligible computers.");
             return;
         }
         try
@@ -826,7 +828,8 @@ internal sealed partial class GpoOperationsForm : Form
             _pushPlanPurpose = purpose;
             _pushPlanHosts = hosts;
             _push.Enabled = true;
-            _status.Text = $"Remote execution preview ready for {hosts.Length} PCs. No tasks created yet.";
+            _status.Text = UiLocale.Display("Remote execution preview ready for ") +
+                hosts.Length + UiLocale.Display(" PCs. No tasks created yet.");
         }
         catch (Exception ex) { Fail(ex, "Preview immediate remote execution"); }
     }
@@ -864,11 +867,12 @@ internal sealed partial class GpoOperationsForm : Form
             _pushInfo.Text = Pretty(data);
             UpdateAgentTaskOutcomes(data, mode);
             _status.Text = tracked.Tracked
-                ? $"Remote task attempted. Offline queued: {tracked.Offline}; " +
-                  $"awaiting healthy feedback: {tracked.AwaitingHealth + tracked.AwaitingTask}; " +
-                  $"failed/manual review: {tracked.NeedsAttention}. " +
-                  "Inspect actual lock screen on test clients."
-                : "WARNING: Repair ran, but result tracking failed; inspect PCs before retry.";
+                ? UiLocale.Display("Remote task attempted. Offline queued: ") + tracked.Offline +
+                  UiLocale.Display("; awaiting healthy feedback: ") +
+                  (tracked.AwaitingHealth + tracked.AwaitingTask) +
+                  UiLocale.Display("; failed/manual review: ") + tracked.NeedsAttention + ". " +
+                  UiLocale.Display("Inspect actual lock screen on test clients.")
+                : UiLocale.Display("WARNING: Repair ran, but result tracking failed; inspect PCs before retry.");
             int successful = data.GetProperty("successful").GetInt32();
             int pending = data.GetProperty("pending").GetInt32();
             int failed = data.GetProperty("failed").GetInt32();

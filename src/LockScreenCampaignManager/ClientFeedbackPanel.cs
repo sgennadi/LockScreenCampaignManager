@@ -171,11 +171,13 @@ internal sealed class ClientFeedbackPanel : UserControl
         var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         foot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _totals.Name = "ClientHealthTotals";
         _totals.Dock = DockStyle.Fill;
         _totals.AutoEllipsis = false;
         _totals.Padding = new Padding(4, 7, 4, 7);
         _totals.Font = new Font("Segoe UI Semibold", 10f);
         _totals.Text = "Load computers from OU + Security Group to calculate fleet totals.";
+        _message.Name = "ClientHealthStatus";
         _message.Dock = DockStyle.Fill;
         _message.AutoEllipsis = false;
         _message.Padding = new Padding(4, 6, 4, 6);
@@ -197,15 +199,16 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         using var picker = new FolderBrowserDialog
         {
-            Description = "Select the dedicated SMB share root, not a local directory.",
+            Description = UiLocale.Display("Select the dedicated SMB share root, not a local directory."),
             UseDescriptionForTitle = true, ShowNewFolderButton = false
         };
         if (picker.ShowDialog(FindForm()) != DialogResult.OK) return;
         try { _root.Text = FeedbackPath.ValidateRoot(picker.SelectedPath); }
         catch (ArgumentException)
         {
-            MessageBox.Show(FindForm(), "Select a UNC share root: \\\\server\\share$",
-                "SMB share root required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(FindForm(), UiLocale.Display("Select a UNC share root: ") +
+                @"\\server\share$", UiLocale.Display("SMB share root required"),
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -274,8 +277,10 @@ internal sealed class ClientFeedbackPanel : UserControl
                 UiLocale.Display("Stale: ") + snapshot.Stale + " | " +
                 UiLocale.Display("No report: ") + snapshot.NoReport + " | " +
                 UiLocale.Display("Completed: ") + snapshot.Completed;
-            _message.Text = $"Updated {DateTime.Now:HH:mm:ss}; invalid/foreign JSON: {snapshot.InvalidReports}. " +
-                            "Reports older than three intervals are marked stale.";
+            _message.Text = UiLocale.Display("Updated ") +
+                DateTime.Now.ToString("HH:mm:ss") +
+                UiLocale.Display("; invalid/foreign JSON: ") + snapshot.InvalidReports +
+                ". " + UiLocale.Display("Reports older than three intervals are marked stale.");
             string? alert = _alertEngine.Observe(snapshot, _alertPreferences, DateTimeOffset.UtcNow);
             if (!string.IsNullOrWhiteSpace(alert)) ShowLocalAlert(alert);
         }
@@ -314,9 +319,9 @@ internal sealed class ClientFeedbackPanel : UserControl
         if (_busy || _requestRepair is null) return;
         if (_expected.Count == 0)
         {
-            MessageBox.Show(FindForm(), "Click Load PCs from AD first. " +
-                "Repair requires a verified OU + Security Group scope.",
-                "Repair Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(FindForm(), UiLocale.Display("Click Load PCs from AD first. " +
+                "Repair requires a verified OU + Security Group scope."),
+                UiLocale.Display("Repair Selected"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         string[] selected = _grid.SelectedRows.Cast<DataGridViewRow>()
@@ -325,15 +330,15 @@ internal sealed class ClientFeedbackPanel : UserControl
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (selected.Length < 1 || selected.Length > 25)
         {
-            MessageBox.Show(FindForm(), "Select 1–25 computer rows (Ctrl/Shift to select multiple).",
-                "Repair Selected", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(FindForm(), UiLocale.Display("Select 1–25 computer rows (Ctrl/Shift to select multiple)."),
+                UiLocale.Display("Repair Selected"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var allowed = new HashSet<string>(_expected, StringComparer.OrdinalIgnoreCase);
         if (selected.Any(x => !allowed.Contains(x)))
         {
-            MessageBox.Show(FindForm(), "A selected computer is outside the verified OU and group.",
-                "Repair Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(FindForm(), UiLocale.Display("A selected computer is outside the verified OU and group."),
+                UiLocale.Display("Repair Selected"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (_snapshot is null || !string.Equals(_snapshot.CampaignId, SelectedCampaignId, StringComparison.Ordinal))
@@ -365,19 +370,19 @@ internal sealed class ClientFeedbackPanel : UserControl
         if (_snapshot is null) { _message.Text = UiLocale.Display("Refresh SMB feedback first."); return; }
         if (_snapshot.Expected == 0)
         {
-            MessageBox.Show(FindForm(), "Load the AD scope before exporting the final report, " +
-                "otherwise the total number of target computers is unknown.", "Final report",
+            MessageBox.Show(FindForm(), UiLocale.Display("Load the AD scope before exporting the final report, " +
+                "otherwise the total number of target computers is unknown."), UiLocale.Display("Final report"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         int unresolved = _snapshot.Errors + _snapshot.Stale + _snapshot.NoReport + _snapshot.Ready + _snapshot.Healthy;
         if (unresolved > 0 && MessageBox.Show(FindForm(),
-            $"There are {unresolved} computers without a completion report. " +
-            "Save a final report snapshot as of now? This does NOT confirm full completion.",
-            "Final report confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            UiLocale.Display("There are ") + unresolved +
+            UiLocale.Display(" computers without a completion report. Save a final report snapshot as of now? This does NOT confirm full completion."),
+            UiLocale.Display("Final report confirmation"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
         using var dialog = new SaveFileDialog { Filter = "HTML (*.html)|*.html",
-            Title = "Save final report", FileName =
+            Title = UiLocale.Display("Save final report"), FileName =
             $"LSCM-Final-{_snapshot.CampaignId}-{DateTime.Now:yyyyMMdd-HHmm}.html" };
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
         try
@@ -400,9 +405,9 @@ internal sealed class ClientFeedbackPanel : UserControl
         try
         {
             string path = FeedbackPath.CampaignDirectory(_root.Text, _campaignId.Text.Trim());
-            if (MessageBox.Show(FindForm(), "Create feedback folder?\n" + path +
-                "\n\nConfigure the share ACL separately. The application does not change permissions.",
-                "SMB Feedback", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            if (MessageBox.Show(FindForm(), UiLocale.Display("Create feedback folder?\n\n") + path +
+                "\n\n" + UiLocale.Display("Configure the share ACL separately. The application does not change permissions."),
+                UiLocale.Display("SMB Feedback"), MessageBoxButtons.YesNo, MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             Directory.CreateDirectory(path);
             _message.Text = UiLocale.Display("Folder ready. Verify Domain Computers ACLs and administrator access.");

@@ -349,5 +349,65 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             self.assertNotIn("UiLocale.Display(", source)
 
 
+    def test_preview97_gpo_client_health_readonly_consent_localization(self):
+        locale = read("UiLocale.cs")
+        words = read("UiLocale.Preview97.cs")
+        health = read("ClientFeedbackPanel.cs")
+        effective = read("EffectiveGpoConflictDialog.cs")
+        closure = read("CampaignClosureAuditDialog.cs")
+        ops = read("GpoOperationsForm.cs")
+        smoke = read("UiLayoutSmokeTests.cs")
+        for marker in (
+            "Preview97EnglishByRussian.TryGetValue",
+            "Preview97EnglishByHebrew.TryGetValue",
+            "Preview97Russian.TryGetValue",
+            "Preview97Hebrew.TryGetValue"
+        ):
+            self.assertIn(marker, locale)
+        for language in ("Preview97Russian", "Preview97Hebrew"):
+            start = words.index("private static readonly Dictionary<string,string> " + language)
+            end = words.index("    };", start)
+            keys = re.findall(r'^\s*\["([^"]+)"\]\s*=', words[start:end], re.M)
+            self.assertGreaterEqual(len(keys), 80)
+            self.assertEqual(len(keys), len(set(keys)))
+        for text in (
+            'UiLocale.Display("There are ")',
+            'UiLocale.Display("Configure the share ACL separately.',
+            'Name = "ClientHealthStatus"',
+            'Name = "ClientHealthTotals"',
+            'MessageBoxDefaultButton.Button2',
+            'FeedbackPath.ValidateRoot',
+            'Directory.CreateDirectory(path)'
+        ):
+            self.assertIn(text, health)
+        for source, terms in (
+            (effective, ('UiLocale.Display("Import private RSoP report")',
+                         'UiLocale.Display("Verify endpoint (read-only)")',
+                         'UiLocale.Display("Verify RSoP source + managed image")',
+                         'UiLocale.Display("Export private effective GPO analysis")',
+                         'MessageBoxDefaultButton.Button2', 'RsopEvidence.LoadLocalXml',
+                         'UiLocale.Display("Private read-only report exported locally.')),
+            (closure, ('UiLocale.Display("Verify post-cleanup")',
+                       'UiLocale.Display("Export private closure audit")',
+                       'MessageBoxDefaultButton.Button2',
+                       'PostCleanupVerificationStore.Save')),
+            (ops, ('UiLocale.Display("Read-only scan: ")',
+                   'UiLocale.Display("Remote execution preview ready for ")',
+                   'UiLocale.Display("WARNING: Repair ran, but result tracking failed;',
+                   'ConfirmGuid(this, SelectedPushPurpose'))
+        ):
+            for text in terms:
+                self.assertIn(text, source)
+        self.assertIn("CheckPreview97GpoClientHealth();", smoke)
+        for protected in (
+            "CampaignModels.cs", "ClientFeedback.cs", "RsopEvidence.cs",
+            "NativeGpoDeploymentApply.cs", "NativeImmediateApply.cs",
+            "PostCleanupVerification.cs"
+        ):
+            source = read(protected)
+            self.assertNotIn("UiLocale.Display(", source)
+            self.assertNotIn("UiLocale.Translate(", source)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1124,6 +1124,7 @@ internal static class UiLayoutSmokeTests
         CheckRussianThreeLanguageScheduleAndAdvanced();
         CheckRussianHebrewAdvanced95();
         CheckPreview96UpdaterLabLanguageAndDpi();
+        CheckPreview97GpoClientHealth();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1776,6 +1777,93 @@ internal static class UiLayoutSmokeTests
                 repository.RightToLeft != RightToLeft.No)
                 throw new InvalidOperationException(
                     "Preview.96 translation mutated release selection, architecture or raw evidence.");
+        }
+    }
+
+    private static void CheckPreview97GpoClientHealth()
+    {
+        // This is UI-only. Do not Show forms, click RPC/SMB/AD, confirm a GPO,
+        // write a report or read a production machine. Translations are display-only.
+        const string gpresultWarning =
+            "Read the selected local gpresult XML? It can contain private computer, " +
+            "domain, account, GPO and security settings. Only the current window will " +
+            "receive parsed GPO IDs and flags, and the original file will NOT be copied " +
+            "or uploaded. A user-supplied XML is NOT cryptographically authenticated.";
+        const string closingWarning =
+            "Export the visible closure assessment to a local CSV? It includes " +
+            "computer FQDNs, the selected campaign and GPO IDs, and operational " +
+            "information. Review it before sharing. A report is not proof of " +
+            "endpoint cleanup.";
+        foreach (var warning in new[] { gpresultWarning, closingWarning })
+        {
+            string ru = UiLocale.Translate(warning, "Russian");
+            string he = UiLocale.Translate(warning, "Hebrew");
+            if (ru == warning || he == warning ||
+                UiLocale.Translate(ru, "English") != warning ||
+                UiLocale.Translate(he, "English") != warning ||
+                UiLocale.Translate(ru, "Hebrew") != he)
+                throw new InvalidOperationException(
+                    "Preview.97 safety consent must translate and reverse without loss.");
+        }
+        foreach (var profile in Profiles)
+        {
+            UiPreferences Style(string lang) => new() {
+                Language = lang, Density = profile.Settings.Density,
+                UiScalePercent = profile.Settings.UiScalePercent,
+                FontScalePercent = profile.Settings.FontScalePercent
+            };
+            const string share = @"\\example.com\LockScreenReports$";
+            using var host = new Form { Size = new Size(1250, 820),
+                MinimumSize = new Size(920, 670) };
+            var project = new CampaignProject {
+                Name = "safe-rtl-ci", TimeZoneId = "UTC",
+                FeedbackShare = share
+            };
+            var panel = new ClientFeedbackPanel(
+                "example.com", "dc01.example.com",
+                "OU=Computers,DC=example,DC=com",
+                "CN=TestPCs,DC=example,DC=com",
+                new DomainCredentials("example.com", "", ""), project);
+            host.Controls.Add(panel);
+            var health = Descendants(host).OfType<DataGridView>()
+                .Single(x => x.Name == "ClientHealthGrid");
+            var shareText = Descendants(host).OfType<TextBox>()
+                .Single(x => x.Name == "ClientHealthSmbPath");
+            var status = Descendants(host).OfType<Label>()
+                .Single(x => x.Name == "ClientHealthStatus");
+            var totals = Descendants(host).OfType<Label>()
+                .Single(x => x.Name == "ClientHealthTotals");
+            var originalColumns = health.Columns.Cast<DataGridViewColumn>()
+                .Select(x => x.HeaderText).ToArray();
+            var initialStatus = status.Text;
+            var initialTotals = totals.Text;
+
+            foreach (var lang in new[] { "Russian", "Hebrew", "English" })
+            {
+                UiStyle.Apply(host, Style(lang));
+                host.PerformLayout();
+                bool rtl = lang == "Hebrew";
+                if (host.RightToLeftLayout != rtl ||
+                    shareText.RightToLeft != RightToLeft.No ||
+                    shareText.Text != share ||
+                    health.Columns[1].HeaderText !=
+                        UiLocale.Translate("Condition", lang) ||
+                    status.Text != UiLocale.Translate(initialStatus, lang) ||
+                    totals.Text != UiLocale.Translate(initialTotals, lang))
+                    throw new InvalidOperationException(
+                        "Preview.97 Client Health localized labels or LTR share damaged: " +
+                        lang + "/" + profile.Name);
+                if (health.Columns[1].HeaderText == "Condition" && lang != "English")
+                    throw new InvalidOperationException(
+                        "Preview.97 Client Health condition column untranslated.");
+            }
+            if (!health.Columns.Cast<DataGridViewColumn>()
+                    .Select(x => x.HeaderText).SequenceEqual(originalColumns) ||
+                status.Text != initialStatus ||
+                totals.Text != initialTotals ||
+                shareText.Text != share)
+                throw new InvalidOperationException(
+                    "Preview.97 language switching changed Client Health evidence.");
         }
     }
 
