@@ -67,6 +67,7 @@ internal sealed partial class GpoOperationsForm
         };
         panel.Controls.Add(introduction, 0, 0);
 
+        _deferredGrid.Name = "GpoDeferredRepairGrid";
         _deferredGrid.Dock = DockStyle.Fill;
         _deferredGrid.AllowUserToAddRows = false;
         _deferredGrid.AllowUserToDeleteRows = false;
@@ -370,7 +371,7 @@ internal sealed partial class GpoOperationsForm
                 : null;
             if (force && string.IsNullOrWhiteSpace(selectedId))
             {
-                _status.Text = "Select a Deferred Repair record to inspect.";
+                _status.Text = UiLocale.Display("Select a Deferred Repair record to inspect.");
                 return;
             }
 
@@ -499,7 +500,7 @@ internal sealed partial class GpoOperationsForm
             {
                 // Reporting share unavailable/invalid: wait for next poll, never repeat RPC.
                 AppLog.Write(ex, "Deferred client SMB confirmation");
-                _status.Text = "Client report is unavailable or invalid. RPC is not retried.";
+                _status.Text = UiLocale.Display("Client report is unavailable or invalid. RPC is not retried.");
             }
             finally
             {
