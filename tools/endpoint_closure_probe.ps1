@@ -192,8 +192,8 @@ try {
             Fail 'BASELINE_ALREADY_EXISTS_NEVER_OVERWRITE'
         }
         $completedRoot=Join-Path $env:ProgramData 'LockScreenCampaigns\Completed'
-        if (Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.json')) -or
-            Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.postcleanup.json'))) {
+        if ((Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.json'))) -or
+            (Test-Path -LiteralPath (Join-Path $completedRoot ($id+'.postcleanup.json')))) {
             Fail 'PRIOR_CAMPAIGN_COMPLETION_ID_NOT_REUSABLE'
         }
         $data=[ordered]@{
