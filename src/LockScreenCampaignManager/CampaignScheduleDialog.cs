@@ -319,6 +319,9 @@ internal sealed class CampaignScheduleDialog : Form
         _apply.Text = "Apply schedule";
         _apply.Width = 175;
         _apply.Height = 38;
+        _apply.MinimumSize = new Size(175, 38);
+        _apply.AutoSize = true;
+        _apply.AutoSizeMode = AutoSizeMode.GrowOnly;
         _apply.BackColor = UiStyle.Accent;
         _apply.ForeColor = Color.White;
         _apply.Click += (_, _) => Apply();
