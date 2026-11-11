@@ -415,14 +415,17 @@ internal sealed class UniversalUpdaterWindow : Form
             }
             else
             {
-                _output.Text = T("New release: ") + found.Version +
+                // Show a concise numbered, Markdown-free summary first.
+                // Complete unmodified notes remain available via Open releases.
+                string changes = ReleaseNotesSummary.Format(found.ReleaseNotes);
+                _output.Text = T("What's new:") + Environment.NewLine +
+                    (changes.Length == 0 ? T("No release notes provided.") : changes) +
+                    Environment.NewLine + Environment.NewLine +
+                    T("New release: ") + found.Version +
                     Environment.NewLine + T("Current: ") + options.InstalledVersion +
                     Environment.NewLine + T("Asset: ") + found.Rule.AssetName +
                     Environment.NewLine + T("Archive size: ") + found.SizeBytes.ToString("N0") + T(" bytes") +
-                    Environment.NewLine + "SHA-256: " + found.Sha256 +
-                    Environment.NewLine + Environment.NewLine +
-                    T("Release notes:") + Environment.NewLine +
-                    (found.ReleaseNotes.Length > 6000 ? found.ReleaseNotes[..6000] : found.ReleaseNotes);
+                    Environment.NewLine + "SHA-256: " + found.Sha256;
                 _state.Text = T("New release available. Choose Install to download, verify and apply.");
             }
         }

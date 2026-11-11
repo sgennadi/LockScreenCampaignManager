@@ -49,6 +49,32 @@ internal static class SelfTests
         TestSmbPreflightEvidence();
         TestLocalLabEvidenceImport();
         TestHebrewUiPreferences();
+        // The Updater displays untrusted GitHub Markdown as short plain-text notes.
+        // Keep these checks offline and separate from release/asset verification.
+        string whatsNew = ReleaseNotesSummary.Format(
+            "# Preview 98\n\n1. **Updater:** Cleaner formatting and [details](https://example.org/notes).\n" +
+            "2. **Indicator:** Short tooltip.\n\n**Open gates:** pilot acceptance pending.");
+        Check(whatsNew.StartsWith("1. Updater: Cleaner formatting and details.",
+                StringComparison.Ordinal), "What’s New strips Markdown/links");
+        Check(whatsNew.Contains("2. Indicator: Short tooltip.", StringComparison.Ordinal) &&
+            !whatsNew.Contains("Open gates", StringComparison.Ordinal) &&
+            !whatsNew.Contains("**", StringComparison.Ordinal),
+            "What’s New keeps only numbered change items");
+        string legacyNotes = ReleaseNotesSummary.Format(
+            "# Older release\n\n**GPO:** Read-only warnings.\n\n" +
+            "**Client Health:** Safer status descriptions.\n\n**Open gates:** live checks pending.");
+        Check(legacyNotes.StartsWith("1. GPO: Read-only warnings.", StringComparison.Ordinal) &&
+            legacyNotes.Contains("2. Client Health: Safer status descriptions.",
+                StringComparison.Ordinal) &&
+            !legacyNotes.Contains("live checks pending", StringComparison.Ordinal),
+            "Legacy paragraph-style notes form a concise numbered list");
+        Check(ReleaseNotesSummary.Format(" ").Length == 0, "Empty release notes");
+        string boundedNotes = ReleaseNotesSummary.Format(
+            string.Join("\n", Enumerable.Range(1, 20).Select(n =>
+                "- **Update:** " + new string('A', 260))), 5, 90);
+        Check(boundedNotes.Split(Environment.NewLine).Length == 5 &&
+            boundedNotes.Split(Environment.NewLine).All(s => s.Length <= 94),
+            "What’s New bounds item count and length");
         TestNativeExePreviewPackage();
         TestAdConnectionScope();
         TestDiagnosticsLogging();
