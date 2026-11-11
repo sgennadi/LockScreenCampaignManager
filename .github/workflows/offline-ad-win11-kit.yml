@@ -30,6 +30,8 @@ jobs:
         run: |
           python tools/test_offline_lab_kit_contracts.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_ou_group_targeting.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_smb_campaign_source.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_smb_system_canary.py
