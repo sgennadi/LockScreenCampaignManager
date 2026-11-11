@@ -1125,6 +1125,7 @@ internal static class UiLayoutSmokeTests
         CheckRussianHebrewAdvanced95();
         CheckPreview96UpdaterLabLanguageAndDpi();
         CheckPreview97GpoClientHealth();
+        CheckRepairResultTranslations();
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
@@ -1777,6 +1778,38 @@ internal static class UiLayoutSmokeTests
                 repository.RightToLeft != RightToLeft.No)
                 throw new InvalidOperationException(
                     "Preview.96 translation mutated release selection, architecture or raw evidence.");
+        }
+    }
+
+    private static void CheckRepairResultTranslations()
+    {
+        string[] templates =
+        {
+            "Repair attempted: {0} task success, {1} pending, {2} failed. Offline queued: {3}; health confirmation: {4}; uncertain tasks: {5}; failed: {6}. Check Client Health.",
+            "WARNING: Remote Repair may have executed but queue could not be saved; inspect clients before retry.",
+            "Repair request sent to {0} computers.\nSuccessful tasks: {1}\nPending: {2}\nFailures: {3}\n",
+            "Deferred offline: {0}\nAwaiting client verification: {1}\nRequire manual review: {2}\n\n",
+            "WARNING: result queue was not saved; inspect the PCs manually.\n\n",
+            "Check fresh Client Health reports and actual Lock Screen application.",
+            "Repair result",
+            "Select a managed GPO in the first tab before previewing a remote task.",
+            "Choose a managed GPO in the list first. Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.",
+        };
+        foreach (string template in templates)
+        foreach (string language in new[] { "Russian", "Hebrew" })
+        {
+            string translated = UiLocale.Translate(template, language);
+            if (translated == template || UiLocale.Translate(translated, "English") != template)
+                throw new InvalidOperationException("Repair result translation must round-trip: " + language);
+            object[] counts = { 103, 207, 311, 419, 523, 631, 743 };
+            string formatted = string.Format(translated, counts);
+            for (int index = 0; index < counts.Length; index++)
+            {
+                string placeholder = "{" + index + "}";
+                if (template.Contains(placeholder) != translated.Contains(placeholder) ||
+                    (template.Contains(placeholder) && !formatted.Contains(counts[index].ToString()!)))
+                    throw new InvalidOperationException("Repair result translation lost a counter: " + language);
+            }
         }
     }
 
