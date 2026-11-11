@@ -136,10 +136,8 @@ public sealed partial class MainForm
         }
         _updateNotice.Text = "Update available: " + release.Version;
         string date = release.PublishedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "not specified";
-        string notes = string.Join(" ", release.ReleaseNotes
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => x.Trim()).Where(x => x.Length > 0).Take(4));
-        if (notes.Length > 280) notes = notes[..280] + "...";
+        // A short numbered plain-text tooltip; never show raw GitHub Markdown.
+        string notes = ReleaseNotesSummary.Format(release.ReleaseNotes, 3, 90);
         _updateNoticeHelp.SetToolTip(_updateNotice,
             "Installed: " + AppVersion.Current +
             "\nAvailable: " + release.Version +
