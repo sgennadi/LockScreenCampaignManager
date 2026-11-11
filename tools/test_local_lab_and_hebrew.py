@@ -409,5 +409,39 @@ class LocalLabAndHebrewContracts(unittest.TestCase):
             self.assertNotIn("UiLocale.Translate(", source)
 
 
+    def test_preview98_numbered_whats_new_is_presentation_only(self):
+        formatter = read("ReleaseNotesSummary.cs")
+        updater = read("UniversalUpdaterWindow.cs")
+        indicator = read("MainForm.UpdateNotification.cs")
+        ruhe = read("UiLocale.Preview96.cs")
+        tests = read("SelfTests.cs")
+        notes = (ROOT / "docs" / "RELEASE-PREVIEW98.md").read_text(encoding="utf-8")
+        for needle in ("Regex ListMarker", "MarkdownLink", "Markdown-free",
+                       "maxItems = 5", "maxCharsPerItem = 180", "Open gates:"):
+            if needle == "Markdown-free":
+                continue
+            self.assertIn(needle, formatter)
+        self.assertIn("ReleaseNotesSummary.Format(found.ReleaseNotes)", updater)
+        self.assertIn('T("What\'s new:")', updater)
+        self.assertLess(updater.index('T("What\'s new:")'),
+                        updater.index('T("New release: ") + found.Version'))
+        self.assertIn("ReleaseNotesSummary.Format(release.ReleaseNotes, 3, 90)", indicator)
+        self.assertIn("TestHebrewUiPreferences();", tests)
+        self.assertIn('string whatsNew = ReleaseNotesSummary.Format(', tests)
+        self.assertIn('string legacyNotes = ReleaseNotesSummary.Format(', tests)
+        self.assertIn('["What\'s new:"] = "Что нового:"', ruhe)
+        self.assertIn('["What\'s new:"] = "מה חדש:"', ruhe)
+        numbers = re.findall(r"^([1-9])\. ", notes, re.M)
+        self.assertEqual(numbers, ["1", "2", "3", "4", "5"])
+        self.assertIn("**Safety and compatibility:**", notes)
+        self.assertNotIn("UiLocale.Display(", formatter)
+        self.assertNotIn("File.WriteAllText", formatter)
+        self.assertNotIn("HttpClient", formatter)
+        for protected in ("UniversalUpdater/GitHubReleaseClient.cs",
+                          "UniversalUpdater/UpdateDownloader.cs",
+                          "UniversalUpdater/PortableExeTransaction.cs"):
+            self.assertNotIn("ReleaseNotesSummary", read(protected))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

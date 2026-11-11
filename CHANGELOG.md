@@ -1,3 +1,12 @@
+## 0.4.0-preview.98 — compact numbered What's New and updater display (2026-11-11)
+
+- Show a five-item, plain-text, numbered What's New summary at the top of Updater results; retain installed version, package filename, size and raw SHA-256 underneath.
+- Accept numbered/bulleted release notes and summarize older paragraph-based notes, without displaying raw Markdown headings, bold markers or inline link destinations.
+- Make the update-notification tooltip show up to three concise numbered changes instead of copying the first raw Markdown lines.
+- Translate the What's New heading and empty-note state into Russian/Hebrew; preserve original release notes for the separate GitHub page.
+- Add offline self-tests and source contracts for parsing, localization, input length caps and release notes structure. This is only a UI change and does not change GitHub download, signature checks, manual install approval or rollback.
+- Windows x86/x64 CI and offline lab checks are required before publication. Real Windows 10/11 200% DPI, SMB LocalSystem and JPG User GPO pilot acceptance remain open (#36, #30, #25/#26).
+
 ## 0.4.0-preview.97 — Russian/Hebrew GPO safety and Client Health warnings (2026-11-10)
 
 - Add over 80 new display strings per language for Client Health SMB browsing/repair/final-report confirmation, read-only RSoP XML and remote HKLM verification, GPO candidate report export, Campaign Closure Audit, inventory counts and manual remote task status.
