@@ -26,6 +26,10 @@ internal sealed partial class DomainDeploymentForm : Form
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
     private readonly TextBox _groupFilter = new();
+    private readonly ComboBox _groupListMode = new();
+    private int _membershipRequestVersion;
+    private string _membershipOuDn = string.Empty;
+    private HashSet<string> _directComputerGroupDns = new(StringComparer.OrdinalIgnoreCase);
     private readonly ListBox _ous = new();
     private readonly ListBox _groups = new();
     private readonly TextBox _details = new();
@@ -448,9 +452,10 @@ internal sealed partial class DomainDeploymentForm : Form
             }
         };
         layout.Controls.Add(split, 0, 4);
-        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
+        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         split.Panel1.Controls.Add(lists);
@@ -461,8 +466,29 @@ internal sealed partial class DomainDeploymentForm : Form
         _ous.Dock = DockStyle.Fill;
         _ous.IntegralHeight = false;
         _ous.HorizontalScrollbar = true;
-        _ous.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _ous.SelectedIndexChanged += async (_, _) =>
+        {
+            InvalidatePlan();
+            await RefreshComputerGroupMembershipAsync();
+        };
         _ous.MouseMove += (_, e) => ShowDirectoryTooltip(_ous, e);
+        _groupListMode.Name = "DeploymentGroupListMode";
+        _groupListMode.Dock = DockStyle.Fill;
+        _groupListMode.DropDownStyle = ComboBoxStyle.DropDownList;
+        _groupListMode.RightToLeft = RightToLeft.No;
+        _groupListMode.DropDownWidth = 560;
+        _groupListMode.Items.Add("Groups with computers in selected OU (direct)");
+        _groupListMode.Items.Add("All domain security groups (choose group first)");
+        _groupListMode.SelectedIndex = 0;
+        _groupListMode.SelectedIndexChanged += async (_, _) =>
+        {
+            InvalidatePlan();
+            await RefreshComputerGroupMembershipAsync();
+        };
+        _directoryTooltip.SetToolTip(_groupListMode,
+            "Matched groups can be located in ANY OU. Direct computer membership only: " +
+            "nested and primary group memberships are not expanded. Choose All groups if needed. " +
+            "A GPO must still be linked to a target OU.");
         _groupFilter.Dock = DockStyle.Fill;
         _groupFilter.PlaceholderText = UiLocale.Display("Search computer security group...");
         _groupFilter.RightToLeft = RightToLeft.No;
@@ -470,12 +496,23 @@ internal sealed partial class DomainDeploymentForm : Form
         _groups.Dock = DockStyle.Fill;
         _groups.IntegralHeight = false;
         _groups.HorizontalScrollbar = true;
-        _groups.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _groups.SelectedIndexChanged += (_, _) =>
+        {
+            // Group-first is supported. Selecting a group while no OU is
+            // selected switches to All, preserving this deliberate choice.
+            if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null &&
+                _groupListMode.SelectedIndex == 0)
+                _groupListMode.SelectedIndex = 1;
+            InvalidatePlan();
+            if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null)
+                _progress.Text = "Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.";
+        };
         _groups.MouseMove += (_, e) => ShowDirectoryTooltip(_groups, e);
         lists.Controls.Add(_ouFilter, 0, 0);
         lists.Controls.Add(_ous, 0, 1);
-        lists.Controls.Add(_groupFilter, 0, 2);
-        lists.Controls.Add(_groups, 0, 3);
+        lists.Controls.Add(_groupListMode, 0, 2);
+        lists.Controls.Add(_groupFilter, 0, 3);
+        lists.Controls.Add(_groups, 0, 4);
         _details.Dock = DockStyle.Fill;
         _details.RightToLeft = RightToLeft.No; // exact plan/AD evidence
         _details.Multiline = true;
@@ -746,7 +783,8 @@ internal sealed partial class DomainDeploymentForm : Form
             _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
                 _allGroups.Count > 0;
         }
-        _ouFilter.Enabled = _groupFilter.Enabled = targetStep && directComputerTarget && !_running;
+        _ouFilter.Enabled = _groupFilter.Enabled = _groupListMode.Enabled =
+            targetStep && directComputerTarget && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
         _wizardBack.Enabled = !_running;
@@ -828,6 +866,9 @@ internal sealed partial class DomainDeploymentForm : Form
         UiStyle.ApplyStatus(_connectionStatus,
             "CHANGED — click Connect / Refresh to verify this domain/DC and list OU/groups.",
             UiStatusKind.Warning);
+        _membershipRequestVersion++; // Ignore any stale asynchronous LDAP result.
+        _membershipOuDn = string.Empty;
+        _directComputerGroupDns.Clear();
         _allOus.Clear();
         _allGroups.Clear();
         FilterOus();
@@ -928,6 +969,9 @@ internal sealed partial class DomainDeploymentForm : Form
             var groupsResponse = await RunBusy("Reading security groups...", () =>
                 DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Groups",
                     new { domain=actualDomain, dc=actualDc }, creds));
+            _membershipRequestVersion++;
+            _membershipOuDn = string.Empty;
+            _directComputerGroupDns.Clear();
             _allOus.Clear();
             var ouRows = ousResponse.GetProperty("data").EnumerateArray()
                 .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
@@ -1024,20 +1068,82 @@ internal sealed partial class DomainDeploymentForm : Form
         finally { _ous.EndUpdate(); }
     }
 
+    private bool IsOuGroupFilterActive =>
+        _groupListMode.SelectedIndex == 0 &&
+        _ous.SelectedItem is DirectoryRow &&
+        _project.EffectiveCampaignMode == CampaignTargetMode.LockScreen &&
+        _project.TargetAssignments.Count == 0;
+
     private void FilterGroups()
     {
         string query = _groupFilter.Text.Trim();
+        string selectedOu = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        bool limited = IsOuGroupFilterActive;
+        bool verified = string.Equals(selectedOu, _membershipOuDn,
+            StringComparison.OrdinalIgnoreCase);
         _groups.BeginUpdate();
         try
         {
             var selection = _groups.SelectedItem as DirectoryRow;
             _groups.Items.Clear();
             foreach (var row in _allGroups.Where(x => MatchesDirectoryQuery(x, query)))
-                _groups.Items.Add(row);
+            {
+                if (!limited || verified && _directComputerGroupDns.Contains(row.Dn))
+                    _groups.Items.Add(row);
+            }
             if (selection is not null && _groups.Items.Contains(selection))
                 _groups.SelectedItem = selection;
         }
         finally { _groups.EndUpdate(); }
+    }
+
+    private async Task RefreshComputerGroupMembershipAsync()
+    {
+        int request = ++_membershipRequestVersion;
+        string selectedOu = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        _membershipOuDn = string.Empty;
+        _directComputerGroupDns.Clear();
+        FilterGroups();
+        if (!IsOuGroupFilterActive || string.IsNullOrEmpty(selectedOu) ||
+            string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
+            return;
+
+        _progress.Text = "Checking direct computer group memberships in selected OU (read-only LDAP)...";
+        await Task.Delay(300); // Debounce repeated keyboard/OU navigation.
+        if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+        string domain = _connectedDomain, dc = _connectedDc;
+        DomainCredentials credentials = Credentials();
+        try
+        {
+            var response = await Task.Run(() => DomainPowerShellRunner.Execute(
+                DomainOperation.Discovery, "ComputerGroupsForOu",
+                new { domain, dc, ouDn = selectedOu }, credentials));
+            if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+            var data = response.GetProperty("data");
+            if (!string.Equals(data.GetProperty("ouDn").GetString(), selectedOu,
+                    StringComparison.OrdinalIgnoreCase) ||
+                data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
+                throw new InvalidDataException("OU group membership result scope mismatch.");
+            _directComputerGroupDns = data.GetProperty("directGroupDns")
+                .EnumerateArray().Select(x => x.GetString() ?? string.Empty)
+                .Where(x => x.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _membershipOuDn = selectedOu;
+            FilterGroups();
+            int computerCount = data.GetProperty("computerCount").GetInt32();
+            _progress.Text = $"Found {_groups.Items.Count} security groups with direct computer members " +
+                $"in selected OU ({computerCount} computers). Nested and primary groups are NOT included. " +
+                "Use All groups to choose any other group.";
+        }
+        catch (Exception)
+        {
+            if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+            // Do not quietly turn a failed/incomplete LDAP query into a
+            // seemingly complete filtered list. Offer explicit All groups.
+            _groupListMode.SelectedIndex = 1;
+            _progress.Text = "OU membership filter unavailable or incomplete. Switched to All groups. " +
+                "Select an OU for the GPO link and verify actual membership during Preview.";
+        }
     }
 
     private (string domain,string dc,DirectoryRow ou,DirectoryRow group,string gpoName) Selection()
