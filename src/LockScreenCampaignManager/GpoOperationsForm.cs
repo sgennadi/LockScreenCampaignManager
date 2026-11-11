@@ -474,8 +474,7 @@ internal sealed partial class GpoOperationsForm : Form
         {
             // Issue #11: a routine incomplete form is not an exception.
             // Keep the report dialog for actual failures only.
-            _lifecycleInfo.Text = "Choose a managed GPO in the list first. " +
-                "Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.";
+            _lifecycleInfo.Text = UiLocale.Display("Choose a managed GPO in the list first. Use Refresh GPOs to load policies managed by LockScreen Campaign Manager.");
             _status.Text = UiLocale.Display("Select a managed GPO first (no action performed).");
             return;
         }
@@ -785,21 +784,21 @@ internal sealed partial class GpoOperationsForm : Form
             approvedGmsaRoute);
         _pushInfo.Text = Pretty(data);
         _status.Text = tracked.Tracked
-            ? $"Repair attempted: {successful} task success, {pending} pending, {failed} failed. " +
-              $"Offline queued: {tracked.Offline}; health confirmation: {tracked.AwaitingHealth}; " +
-              $"uncertain tasks: {tracked.AwaitingTask}; failed: {tracked.NeedsAttention}. Check Client Health."
-            : "WARNING: Remote Repair may have executed but queue could not be saved; inspect clients before retry.";
+            ? string.Format(UiLocale.Display("Repair attempted: {0} task success, {1} pending, {2} failed. Offline queued: {3}; health confirmation: {4}; uncertain tasks: {5}; failed: {6}. Check Client Health."),
+                successful, pending, failed, tracked.Offline, tracked.AwaitingHealth,
+                tracked.AwaitingTask, tracked.NeedsAttention)
+            : UiLocale.Display("WARNING: Remote Repair may have executed but queue could not be saved; inspect clients before retry.");
         CampaignHistoryStore.TryRecordEvent(managed.CampaignId, "Repair Selected",
             $"Requested: {requested.Count}; task success: {successful}; pending: {pending}; failed: {failed}.");
-        MessageBox.Show(this, $"Repair request sent to {requested.Count} computers.\n" +
-            $"Successful tasks: {successful}\nPending: {pending}\nFailures: {failed}\n" +
+        MessageBox.Show(this,
+            string.Format(UiLocale.Display("Repair request sent to {0} computers.\nSuccessful tasks: {1}\nPending: {2}\nFailures: {3}\n"),
+                requested.Count, successful, pending, failed) +
             (tracked.Tracked
-                ? $"Deferred offline: {tracked.Offline}\n" +
-                  $"Awaiting client verification: {tracked.AwaitingHealth + tracked.AwaitingTask}\n" +
-                  $"Require manual review: {tracked.NeedsAttention}\n\n"
-                : "WARNING: result queue was not saved; inspect the PCs manually.\n\n") +
-            "Check fresh Client Health reports and actual Lock Screen application.",
-            "Repair result", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ? string.Format(UiLocale.Display("Deferred offline: {0}\nAwaiting client verification: {1}\nRequire manual review: {2}\n\n"),
+                    tracked.Offline, tracked.AwaitingHealth + tracked.AwaitingTask, tracked.NeedsAttention)
+                : UiLocale.Display("WARNING: result queue was not saved; inspect the PCs manually.\n\n")) +
+            UiLocale.Display("Check fresh Client Health reports and actual Lock Screen application."),
+            UiLocale.Display("Repair result"), MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task PreviewPushAsync()
@@ -810,7 +809,7 @@ internal sealed partial class GpoOperationsForm : Form
         string id = SelectedId;
         if (string.IsNullOrWhiteSpace(id))
         {
-            _status.Text = "Select a managed GPO in the first tab before previewing a remote task.";
+            _status.Text = UiLocale.Display("Select a managed GPO in the first tab before previewing a remote task.");
             _pushInfo.Text = UiLocale.Display("No remote task requested. Select a managed GPO, then eligible computers.");
             return;
         }

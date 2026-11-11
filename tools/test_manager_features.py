@@ -755,7 +755,7 @@ class ClientManagementContracts(unittest.TestCase):
             'UiLocale.cs', 'UiLocale.Wizard.cs', 'UiLocale.Russian.cs',
             'UiSettingsDialog.cs', 'UiLayoutSmokeTests.cs',
             'UiLocale.Advanced95.cs', 'UiLocale.Preview96.cs',
-            'UiLocale.Preview97.cs',
+            'UiLocale.Preview97.cs', 'UiLocale.RepairResults.cs',
             'ImageFilenameMatcher.cs', 'SelfTests.cs'
         }
         for source in APP.glob('*.cs'):

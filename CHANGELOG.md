@@ -1,3 +1,12 @@
+## 0.4.0-preview.99 — Russian/Hebrew Repair results and GPO selection guidance (2026-11-11)
+
+- Translate Repair completion summaries, counters and confirmation dialogs in Russian and Hebrew with reversible English fallback. Original numeric result values and their placeholder mapping are preserved.
+- Localize the warning that a remote Repair operation may have executed although the result queue failed to save, without implying safe automatic retry.
+- Translate missing managed-GPO selection guidance for GPO lifecycle and remote-task Preview.
+- Add layout smoke and offline contract tests that round-trip all repaired captions and verify count placeholders remain intact at six simulated Windows font/DPI profiles.
+- Keep Preview.98 numbered What's New and portable updater safety intact; no change to AD/GPO/SMB/RPC execution, repair queue/history schemas or install approval.
+- Real Windows 10/11 200% interactive RTL/LTR, SMB LocalSystem startup and JPG User Screen Saver GPO acceptance remain open (#36, #30, #25/#26).
+
 ## 0.4.0-preview.98 — compact numbered What's New and updater display (2026-11-11)
 
 - Show a five-item, plain-text, numbered What's New summary at the top of Updater results; retain installed version, package filename, size and raw SHA-256 underneath.
