@@ -581,13 +581,38 @@ internal sealed partial class DomainDeploymentForm : Form
         }
         using var editor = new CampaignAssignmentsDialog(_project,
             ous, groups, (_ous.SelectedItem as DirectoryRow)?.Dn ?? "",
-            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "");
+            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "",
+            FindScopedMemberGroupsAsync);
         if (editor.ShowDialog(this) != DialogResult.OK) return;
         InvalidatePlan();
         _progress.Text = _project.TargetAssignments.Count +
             " independent group assignment(s) saved locally. " +
             "Preview validates exact computer and user scopes; no GPO changed.";
         UpdateDeploymentSteps();
+    }
+
+
+    private async Task<IReadOnlyCollection<string>> FindScopedMemberGroupsAsync(
+        string ouDn, bool userScope)
+    {
+        if (string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
+            throw new InvalidOperationException("Reconnect to AD before listing OU membership.");
+        string domain = _connectedDomain, dc = _connectedDc;
+        DomainCredentials credentials = Credentials();
+        string mode = userScope ? "UserGroupsForOu" : "ComputerGroupsForOu";
+        var response = await Task.Run(() => DomainPowerShellRunner.Execute(
+            DomainOperation.Discovery, mode, new { domain, dc, ouDn }, credentials));
+        var data = response.GetProperty("data");
+        if (!string.Equals(data.GetProperty("ouDn").GetString(), ouDn,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(data.GetProperty("principalKind").GetString(),
+                userScope ? "User" : "Computer", StringComparison.Ordinal) ||
+            data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
+            throw new InvalidDataException("OU membership response differs from the selected scope.");
+        return data.GetProperty("directGroupDns").EnumerateArray()
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(value => value.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private bool HasSelectedTargets =>
@@ -779,6 +804,12 @@ internal sealed partial class DomainDeploymentForm : Form
         _contentShareBrowse.Enabled = _contentShareBox.Enabled;
         if (_groupAssignmentsButton is not null)
         {
+            _groupAssignmentsButton.Text = _project.EffectiveCampaignMode switch
+            {
+                CampaignTargetMode.ScreenSaver => "User OU / groups...",
+                CampaignTargetMode.Both => "Computer + User groups...",
+                _ => "Group assignments..."
+            };
             _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
             _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
                 _allGroups.Count > 0;
