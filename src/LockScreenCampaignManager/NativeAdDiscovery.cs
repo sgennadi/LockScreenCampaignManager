@@ -65,6 +65,8 @@ internal static class NativeAdDiscovery
             "Groups" => Groups(ldap, baseDn),
             "ComputerGroupsForOu" => ComputerGroupsForOu(ldap, baseDn,
                 Get(args, "ouDn")),
+            "UserGroupsForOu" => DirectGroupsForOu(ldap, baseDn,
+                Get(args, "ouDn"), "User"),
             "Users" => Users(ldap, baseDn, Get(args, "search")),
             "Permissions" => Permissions(ldap, args, credentials, discoveredDomain,
                 actualDc, baseDn, writable),
@@ -263,7 +265,10 @@ internal static class NativeAdDiscovery
     // the group object happens to be stored. MemberOf omits primary groups and
     // does not expand nested group membership; the UI exposes All Groups too.
     private static object ComputerGroupsForOu(LdapConnection ldap, string baseDn,
-        string selectedOuDn)
+        string selectedOuDn) => DirectGroupsForOu(ldap, baseDn, selectedOuDn, "Computer");
+
+    private static object DirectGroupsForOu(LdapConnection ldap, string baseDn,
+        string selectedOuDn, string principalKind)
     {
         string ouDn = selectedOuDn.Trim();
         if (ouDn.Length is < 8 or > 2048 || ouDn.Any(char.IsControl) ||
@@ -279,18 +284,20 @@ internal static class NativeAdDiscovery
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The selected OU no longer exists.");
 
-        var computers = Search(ldap, ouDn, "(objectCategory=computer)",
-            QueryLimit, "memberOf");
+        string principalFilter = principalKind == "User"
+            ? "(&(objectCategory=person)(objectClass=user))"
+            : "(objectCategory=computer)";
+        var principals = Search(ldap, ouDn, principalFilter, QueryLimit, "memberOf");
         // A capped query is never presented as a complete OU membership view.
-        if (computers.Count >= QueryLimit)
+        if (principals.Count >= QueryLimit)
             throw new InvalidOperationException(
-                "OU computer count exceeds the read-only membership filter limit. Use All security groups.");
+                "OU member count exceeds the read-only membership filter limit. Use All security groups.");
 
         var directGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (SearchResultEntry computer in computers)
+        foreach (SearchResultEntry principal in principals)
         {
-            if (!computer.Attributes.Contains("memberOf")) continue;
-            DirectoryAttribute memberships = computer.Attributes["memberOf"];
+            if (!principal.Attributes.Contains("memberOf")) continue;
+            DirectoryAttribute memberships = principal.Attributes["memberOf"];
             if (memberships is null) continue;
             foreach (object? value in memberships)
             {
@@ -303,7 +310,9 @@ internal static class NativeAdDiscovery
         return new
         {
             ouDn,
-            computerCount = computers.Count,
+            principalKind,
+            computerCount = principalKind == "Computer" ? principals.Count : 0,
+            userCount = principalKind == "User" ? principals.Count : 0,
             directGroupDns = directGroups.OrderBy(x => x,
                 StringComparer.OrdinalIgnoreCase).ToArray(),
             directMembershipOnly = true,
