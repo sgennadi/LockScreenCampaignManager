@@ -65,7 +65,7 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
             'await RefreshScopeGroupChoicesAsync(true)',
             'await RefreshScopeGroupChoicesAsync(false)',
             'filter.Checked = false',
-            'SelectDn(ou)',
+            'SelectedDn(ou)',
             'Nested groups / primary groups are not expanded',
         ):
             self.assertIn(token, matrix, token)
