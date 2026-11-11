@@ -912,7 +912,14 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
                     var preview = all.OfType<TextBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentReadOnlyPreview");
+                    var computerMemberFilter = all.OfType<CheckBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentFilterComputerGroupsByOu");
+                    var userMemberFilter = all.OfType<CheckBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentFilterUserGroupsByOu");
                     if (modes is null || modes.Items.Count != 3 ||
+                        computerMemberFilter is null || userMemberFilter is null ||
+                        !computerMemberFilter.Text.Contains("COMPUTER", StringComparison.Ordinal) ||
+                        !userMemberFilter.Text.Contains("USER", StringComparison.Ordinal) ||
                         !modes.Items.Contains(CampaignTargetMode.Both) ||
                         !modes.Items.Contains(CampaignTargetMode.LockScreen) ||
                         !modes.Items.Contains(CampaignTargetMode.ScreenSaver) ||
@@ -1057,6 +1064,13 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "DeploymentContentShareRoot");
                     var browse = Descendants(form).OfType<Button>()
                         .SingleOrDefault(x => x.Name == "DeploymentContentShareBrowse");
+                    var groupListMode = Descendants(form).OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentGroupListMode");
+                    if (groupListMode is null || groupListMode.Items.Count != 2 ||
+                        groupListMode.SelectedIndex != 0 ||
+                        groupListMode.DropDownStyle != ComboBoxStyle.DropDownList)
+                        throw new InvalidOperationException(
+                            $"OU direct computer membership / All groups selector missing at {profile.Name}.");
                     if (content is null || unc is null || browse is null ||
                         content.Items.Count != 2 || content.SelectedIndex != 0 ||
                         content.Width < 220 || content.Height < content.PreferredHeight ||
@@ -1065,6 +1079,17 @@ internal static class UiLayoutSmokeTests
                         !content.Items[1]!.ToString()!.Contains("SMB", StringComparison.Ordinal))
                         throw new InvalidOperationException(
                             $"Deployment SYSVOL/SMB selector or UNC editor missing/clipped at {profile.Name}.");
+                    // The Browse button must be in its own, visible two-column
+                    // folder row, not squeezed past a four-column fixed grid.
+                    if (browse.Parent is not TableLayoutPanel folderRow ||
+                        folderRow.Name != "DeploymentContentFolderRow" ||
+                        folderRow.ColumnCount != 2 ||
+                        folderRow.GetControlFromPosition(1, 0) != browse ||
+                        folderRow.GetControlFromPosition(0, 0) != unc ||
+                        browse.Width < 140 || browse.Height < 25 ||
+                        folderRow.Width < browse.Width + unc.Width)
+                        throw new InvalidOperationException(
+                            $"Deployment UNC Browse row missing or clipped at {profile.Name}.");
                     if (selector is null ||
                         selector.DropDownStyle != ComboBoxStyle.DropDownList ||
                         selector.Items.Count != 2 || selector.SelectedIndex != 0 ||
