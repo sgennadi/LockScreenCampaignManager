@@ -63,6 +63,10 @@ internal static class NativeAdDiscovery
             "DomainControllers" => Controllers(ldap, baseDn, actualDc, writable),
             "OUs" => OrganizationalUnits(ldap, baseDn),
             "Groups" => Groups(ldap, baseDn),
+            "ComputerGroupsForOu" => ComputerGroupsForOu(ldap, baseDn,
+                Get(args, "ouDn")),
+            "UserGroupsForOu" => DirectGroupsForOu(ldap, baseDn,
+                Get(args, "ouDn"), "User"),
             "Users" => Users(ldap, baseDn, Get(args, "search")),
             "Permissions" => Permissions(ldap, args, credentials, discoveredDomain,
                 actualDc, baseDn, writable),
@@ -255,6 +259,68 @@ internal static class NativeAdDiscovery
         .Select(x => new { name = Attr(x, "name"), dn = x.DistinguishedName })
         .OrderBy(x => x.dn, StringComparer.OrdinalIgnoreCase)
         .Cast<object>().ToArray();
+
+
+    // Read-only intersection by DIRECT computer membership, not the OU in which
+    // the group object happens to be stored. MemberOf omits primary groups and
+    // does not expand nested group membership; the UI exposes All Groups too.
+    private static object ComputerGroupsForOu(LdapConnection ldap, string baseDn,
+        string selectedOuDn) => DirectGroupsForOu(ldap, baseDn, selectedOuDn, "Computer");
+
+    private static object DirectGroupsForOu(LdapConnection ldap, string baseDn,
+        string selectedOuDn, string principalKind)
+    {
+        string ouDn = selectedOuDn.Trim();
+        if (ouDn.Length is < 8 or > 2048 || ouDn.Any(char.IsControl) ||
+            !ouDn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase) ||
+            !ouDn.EndsWith("," + baseDn, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Choose an OU inside the connected AD domain.");
+
+        var lookup = new SearchRequest(ouDn,
+            "(objectClass=organizationalUnit)", SearchScope.Base, "distinguishedName");
+        var exact = (SearchResponse)ldap.SendRequest(lookup);
+        if (exact.Entries.Count != 1 ||
+            !string.Equals(exact.Entries[0].DistinguishedName, ouDn,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The selected OU no longer exists.");
+
+        string principalFilter = principalKind == "User"
+            ? "(&(objectCategory=person)(objectClass=user))"
+            : "(objectCategory=computer)";
+        var principals = Search(ldap, ouDn, principalFilter, QueryLimit, "memberOf");
+        // A capped query is never presented as a complete OU membership view.
+        if (principals.Count >= QueryLimit)
+            throw new InvalidOperationException(
+                "OU member count exceeds the read-only membership filter limit. Use All security groups.");
+
+        var directGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (SearchResultEntry principal in principals)
+        {
+            if (!principal.Attributes.Contains("memberOf")) continue;
+            DirectoryAttribute memberships = principal.Attributes["memberOf"];
+            if (memberships is null) continue;
+            foreach (object? value in memberships)
+            {
+                if (value is string dn && dn.StartsWith("CN=",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    dn.Length <= 2048 && !dn.Any(char.IsControl))
+                    directGroups.Add(dn);
+            }
+        }
+        return new
+        {
+            ouDn,
+            principalKind,
+            computerCount = principalKind == "Computer" ? principals.Count : 0,
+            userCount = principalKind == "User" ? principals.Count : 0,
+            directGroupDns = directGroups.OrderBy(x => x,
+                StringComparer.OrdinalIgnoreCase).ToArray(),
+            directMembershipOnly = true,
+            nestedGroupsExpanded = false,
+            primaryGroupsIncluded = false,
+            readOnly = true
+        };
+    }
 
     private static object[] Groups(LdapConnection ldap, string baseDn) =>
         Search(ldap, baseDn,

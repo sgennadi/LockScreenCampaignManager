@@ -1,3 +1,11 @@
+## 0.4.0-preview.100 — OU/member-group targeting and AD deployment Browse (2026-11-11)
+
+- Selecting an OU in AD Deployment now offers read-only groups containing directly assigned computer accounts from that OU and descendants, using signed/sealed native LDAP memberOf. The group object may live in any OU.
+- All domain security groups remains available for group-first selection; an actual OU to link the GPO is still mandatory and independently verified before Deploy.
+- Screen Saver uses User OU and User Group selection with its own direct-user membership filter in the group matrix. Both continues to use independently scoped User and Computer GPOs; no implicit loopback.
+- Show parent OU paths to distinguish same-name OUs, de-duplicate exact DN entries and move SMB Browse into a non-clipped full-width row.
+- Add offline source/safety and multi-scale WinForms regressions; fail closed on incomplete OU membership results and preserve all Preview.99 updater and deployment protections. Physical DPI and real AD applicability checks remain open (#36, #30, #25/#26).
+
 ## 0.4.0-preview.99 — Russian/Hebrew Repair results and GPO selection guidance (2026-11-11)
 
 - Translate Repair completion summaries, counters and confirmation dialogs in Russian and Hebrew with reversible English fallback. Original numeric result values and their placeholder mapping are preserved.

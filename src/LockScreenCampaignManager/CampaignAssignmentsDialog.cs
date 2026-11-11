@@ -19,6 +19,13 @@ internal sealed class CampaignAssignmentsDialog : Form
     private readonly List<CampaignGroupTarget> _draft;
     private readonly List<AdChoice> _ous;
     private readonly List<AdChoice> _groups;
+    // Optional signed, read-only LDAP lookup provided by the connection form.
+    // Offline layout tests use All groups without any directory connection.
+    private readonly Func<string, bool, Task<IReadOnlyCollection<string>>>? _membershipLookup;
+    private readonly CheckBox _computerDirectMembers = new();
+    private readonly CheckBox _userDirectMembers = new();
+    private int _computerMembershipGeneration;
+    private int _userMembershipGeneration;
     private readonly ListBox _rows = new();
     private readonly TextBox _name = new();
     private readonly ComboBox _mode = new();
@@ -38,11 +45,15 @@ internal sealed class CampaignAssignmentsDialog : Form
 
     internal CampaignAssignmentsDialog(CampaignProject project,
         IEnumerable<AdChoice> ous, IEnumerable<AdChoice> groups,
-        string currentComputerOu, string currentComputerGroup)
+        string currentComputerOu, string currentComputerGroup,
+        Func<string, bool, Task<IReadOnlyCollection<string>>>? membershipLookup = null)
     {
         _project = project;
-        _ous = ous.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        _groups = groups.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        _membershipLookup = membershipLookup;
+        _ous = ous.DistinctBy(x => x.Dn, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        _groups = groups.DistinctBy(x => x.Dn, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
         _draft = (project.TargetAssignments ?? []).Select(x => x.Clone()).ToList();
         if (_draft.Count == 0)
             _draft.Add(new CampaignGroupTarget {
@@ -164,9 +175,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             Name = "AssignmentScrollableFields",
             Dock = DockStyle.Top, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            RowCount = 13, ColumnCount = 1, Padding = new Padding(5)
+            RowCount = 15, ColumnCount = 1, Padding = new Padding(5)
         };
-        foreach (int h in new[] { 75, 75, 74, 74, 75, 74, 75, 55, 65, 60, 62, 84, 50 })
+        foreach (int h in new[] { 75, 75, 74, 74, 50, 75, 74, 50, 75, 55, 65, 60, 62, 84, 58 })
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
@@ -190,14 +201,40 @@ internal sealed class CampaignAssignmentsDialog : Form
         FillAdChoices(_computerGroup, _groups, "AssignmentComputerGroup");
         FillAdChoices(_userOu, _ous, "AssignmentUserOu");
         FillAdChoices(_userGroup, _groups, "AssignmentUserGroup");
-        _computerOu.SelectedIndexChanged += (_, _) => CommitRow();
+        _computerOu.SelectedIndexChanged += async (_, _) =>
+        {
+            CommitRow();
+            if (!_loading) await RefreshScopeGroupChoicesAsync(false);
+        };
         _computerGroup.SelectedIndexChanged += (_, _) => CommitRow();
-        _userOu.SelectedIndexChanged += (_, _) => CommitRow();
+        _userOu.SelectedIndexChanged += async (_, _) =>
+        {
+            CommitRow();
+            if (!_loading) await RefreshScopeGroupChoicesAsync(true);
+        };
         _userGroup.SelectedIndexChanged += (_, _) => CommitRow();
         fields.Controls.Add(Field("Computer OU (Lock Screen target)", _computerOu), 0, 2);
         fields.Controls.Add(Field("Computer security group (Lock Screen)", _computerGroup), 0, 3);
-        fields.Controls.Add(Field("User OU (Screen Saver target)", _userOu), 0, 4);
-        fields.Controls.Add(Field("User security group (Screen Saver)", _userGroup), 0, 5);
+        _computerDirectMembers.Name = "AssignmentFilterComputerGroupsByOu";
+        _computerDirectMembers.Dock = DockStyle.Fill;
+        _computerDirectMembers.Text = "Only groups with direct COMPUTER members in the selected OU (uncheck for all groups)";
+        _computerDirectMembers.Checked = _membershipLookup is not null;
+        _computerDirectMembers.CheckedChanged += async (_, _) =>
+        {
+            if (!_loading) await RefreshScopeGroupChoicesAsync(false);
+        };
+        fields.Controls.Add(_computerDirectMembers, 0, 4);
+        fields.Controls.Add(Field("User OU (Screen Saver target)", _userOu), 0, 5);
+        fields.Controls.Add(Field("User security group (Screen Saver)", _userGroup), 0, 6);
+        _userDirectMembers.Name = "AssignmentFilterUserGroupsByOu";
+        _userDirectMembers.Dock = DockStyle.Fill;
+        _userDirectMembers.Text = "Only groups with direct USER members in the selected OU (uncheck for all groups)";
+        _userDirectMembers.Checked = _membershipLookup is not null;
+        _userDirectMembers.CheckedChanged += async (_, _) =>
+        {
+            if (!_loading) await RefreshScopeGroupChoicesAsync(true);
+        };
+        fields.Controls.Add(_userDirectMembers, 0, 7);
 
         _saver.Name = "AssignmentScreenSaverExecutable";
         _saver.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -205,21 +242,21 @@ internal sealed class CampaignAssignmentsDialog : Form
             .Cast<object>().ToArray());
         _saver.SelectedItem = _project.ScreenSaver.Executable;
         _saver.SelectedIndexChanged += (_, _) => Preview();
-        fields.Controls.Add(Field("Windows built-in .scr program", _saver), 0, 6);
+        fields.Controls.Add(Field("Windows built-in .scr program", _saver), 0, 8);
 
         _photo.Name = "AssignmentScreenSaverJpegMode";
         _photo.Dock = DockStyle.Fill;
         _photo.Text = "Use JPG slideshow from selected campaign images (pilot only)";
         _photo.Checked = _project.ScreenSaver.UseJpegSlideshow;
         _photo.CheckedChanged += (_, _) => { SetModeVisibility(); Preview(); };
-        fields.Controls.Add(_photo, 0, 7);
+        fields.Controls.Add(_photo, 0, 9);
         _slide.Name = "AssignmentScreenSaverSlideSeconds";
         _slide.Minimum = 5;
         _slide.Maximum = 3600;
         _slide.Increment = 5;
         _slide.Value = Math.Clamp(_project.ScreenSaver.SlideSeconds, 5, 3600);
         _slide.ValueChanged += (_, _) => Preview();
-        fields.Controls.Add(Field("JPG slide interval (seconds)", _slide), 0, 8);
+        fields.Controls.Add(Field("JPG slide interval (seconds)", _slide), 0, 10);
 
         _idle.Name = "AssignmentScreenSaverIdleSeconds";
         _idle.Minimum = 60;
@@ -227,14 +264,14 @@ internal sealed class CampaignAssignmentsDialog : Form
         _idle.Increment = 60;
         _idle.Value = Math.Clamp(_project.ScreenSaver.IdleSeconds, 60, 86400);
         _idle.ValueChanged += (_, _) => Preview();
-        fields.Controls.Add(Field("Screen Saver idle timeout (seconds)", _idle), 0, 9);
+        fields.Controls.Add(Field("Screen Saver idle timeout (seconds)", _idle), 0, 11);
         _password.Name = "AssignmentScreenSaverPassword";
         _password.Checked = _project.ScreenSaver.PasswordOnResume;
         _password.Text = "Require Windows sign-in when resuming Screen Saver";
         _password.Dock = DockStyle.Fill;
         _password.AutoSize = false;
         _password.CheckedChanged += (_, _) => Preview();
-        fields.Controls.Add(_password, 0, 10);
+        fields.Controls.Add(_password, 0, 12);
 
         _preview.Name = "AssignmentReadOnlyPreview";
         _preview.Multiline = true; _preview.ReadOnly = true;
@@ -242,13 +279,15 @@ internal sealed class CampaignAssignmentsDialog : Form
         _preview.ScrollBars = ScrollBars.Both;
         _preview.Font = new Font("Consolas", 9.5f);
         _preview.Dock = DockStyle.Fill;
-        fields.Controls.Add(_preview, 0, 11);
+        fields.Controls.Add(_preview, 0, 13);
         _help.Name = "AssignmentModeHelp";
         _help.Dock = DockStyle.Fill;
-        _help.Text = "Screen Saver is a User Configuration policy. " +
-            "No loopback/Replace setting is made automatically.";
+        _help.Text = "Screen Saver is a USER policy; Lock Screen is a COMPUTER policy. " +
+            "A group may be stored anywhere in AD: the OU is the GPO LINK target. " +
+            "Direct-member filters exclude nested/primary memberships; uncheck for All groups. " +
+            "No loopback/Replace is configured automatically.";
         _help.ForeColor = UiStyle.Muted;
-        fields.Controls.Add(_help, 0, 12);
+        fields.Controls.Add(_help, 0, 14);
 
         var footer = new FlowLayoutPanel {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
@@ -334,6 +373,8 @@ internal sealed class CampaignAssignmentsDialog : Form
         }
         finally { _loading = false; }
         SetModeVisibility();
+        _ = RefreshScopeGroupChoicesAsync(false);
+        _ = RefreshScopeGroupChoicesAsync(true);
         Preview();
     }
 
@@ -353,6 +394,78 @@ internal sealed class CampaignAssignmentsDialog : Form
         else Preview();
     }
 
+
+    private void ReplaceGroupChoices(ComboBox box, HashSet<string>? allowed)
+    {
+        string oldDn = SelectedDn(box);
+        bool priorLoading = _loading;
+        _loading = true;
+        try
+        {
+            box.BeginUpdate();
+            try
+            {
+                box.Items.Clear();
+                foreach (AdChoice choice in _groups)
+                    if (allowed is null || allowed.Contains(choice.Dn))
+                        box.Items.Add(choice);
+                SelectDn(box, oldDn);
+            }
+            finally { box.EndUpdate(); }
+        }
+        finally { _loading = priorLoading; }
+    }
+
+    private async Task RefreshScopeGroupChoicesAsync(bool userScope)
+    {
+        int generation = userScope
+            ? ++_userMembershipGeneration : ++_computerMembershipGeneration;
+        ComboBox ou = userScope ? _userOu : _computerOu;
+        ComboBox groups = userScope ? _userGroup : _computerGroup;
+        CheckBox filter = userScope ? _userDirectMembers : _computerDirectMembers;
+        string selectedOuDn = SelectedDn(ou);
+
+        // Selecting a group before an OU is allowed: show all domain groups.
+        // Only a verified OU + direct-member query enables the narrower view.
+        if (!filter.Checked || selectedOuDn.Length == 0 || _membershipLookup is null)
+        {
+            ReplaceGroupChoices(groups, null);
+            return;
+        }
+        ReplaceGroupChoices(groups, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        await Task.Delay(250);
+        if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
+            IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
+            return;
+        try
+        {
+            IReadOnlyCollection<string> groupDns =
+                await _membershipLookup(selectedOuDn, userScope);
+            if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
+                IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
+                return;
+            var allowed = new HashSet<string>(groupDns, StringComparer.OrdinalIgnoreCase);
+            ReplaceGroupChoices(groups, allowed);
+            _help.Text = (userScope ? "USER" : "COMPUTER") +
+                " OU direct member groups: " + groups.Items.Count +
+                ". Nested groups / primary groups are not expanded. " +
+                "Uncheck OU filter to choose any domain security group.";
+        }
+        catch
+        {
+            if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
+                IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
+                return;
+            // LDAP errors and capped OU inventories must not look like a
+            // successful empty group result. Restore the explicitly labeled
+            // All-groups list; a deployment still requires Preview approval.
+            filter.Checked = false;
+            ReplaceGroupChoices(groups, null);
+            _help.Text = "OU membership lookup unavailable/incomplete. All security groups shown. " +
+                "Confirm actual USER/COMPUTER targeting and OU link in read-only Preview.";
+        }
+    }
+
     private void SetModeVisibility()
     {
         bool hasComputer = _mode.SelectedItem is CampaignTargetMode.LockScreen
@@ -361,6 +474,8 @@ internal sealed class CampaignAssignmentsDialog : Form
             or CampaignTargetMode.Both;
         _computerOu.Enabled = _computerGroup.Enabled = hasComputer;
         _userOu.Enabled = _userGroup.Enabled = hasUser;
+        _computerDirectMembers.Enabled = hasComputer && _membershipLookup is not null;
+        _userDirectMembers.Enabled = hasUser && _membershipLookup is not null;
         _saver.Enabled = hasUser && !_photo.Checked;
         _photo.Enabled = hasUser;
         _slide.Enabled = hasUser && _photo.Checked;

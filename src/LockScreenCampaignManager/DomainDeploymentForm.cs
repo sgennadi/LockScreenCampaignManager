@@ -26,6 +26,10 @@ internal sealed partial class DomainDeploymentForm : Form
     private readonly RadioButton _alternateRadio = new();
     private readonly TextBox _ouFilter = new();
     private readonly TextBox _groupFilter = new();
+    private readonly ComboBox _groupListMode = new();
+    private int _membershipRequestVersion;
+    private string _membershipOuDn = string.Empty;
+    private HashSet<string> _directComputerGroupDns = new(StringComparer.OrdinalIgnoreCase);
     private readonly ListBox _ous = new();
     private readonly ListBox _groups = new();
     private readonly TextBox _details = new();
@@ -67,11 +71,21 @@ internal sealed partial class DomainDeploymentForm : Form
 
     private sealed record DirectoryRow(string Name, string Dn, string Sam = "")
     {
-        // Keep long DNs out of the list rows; they remain searchable and
-        // available through item tooltips and the deployment preview.
-        public override string ToString() => string.IsNullOrWhiteSpace(Sam)
-            ? Name
-            : Name + " (" + Sam + ")";
+        // AD allows different OUs to share the same short name. Display the
+        // parent OU chain, but always retain the exact DN for LDAP and GPO.
+        // Groups are different: their physical OU is not their policy scope.
+        public override string ToString()
+        {
+            if (!string.IsNullOrWhiteSpace(Sam))
+                return Name + " (" + Sam + ")";
+            int parent = Dn.IndexOf(",OU=", StringComparison.OrdinalIgnoreCase);
+            if (parent < 0) return Name + " [domain root]";
+            string remainder = Dn[(parent + 4)..];
+            int domain = remainder.IndexOf(",DC=", StringComparison.OrdinalIgnoreCase);
+            if (domain >= 0) remainder = remainder[..domain];
+            return Name + " [" + remainder.Replace(",OU=", " / ",
+                StringComparison.OrdinalIgnoreCase) + "]";
+        }
     }
 
     private sealed class SavedConnection
@@ -301,9 +315,9 @@ internal sealed partial class DomainDeploymentForm : Form
         layout.Controls.Add(connection, 0, 2);
 
         var notification = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(6, 5, 6, 5) };
-        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
-        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        notification.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         notification.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _connectionStatus.Dock = DockStyle.Fill;
         _connectionStatus.AutoEllipsis = true;
@@ -344,16 +358,24 @@ internal sealed partial class DomainDeploymentForm : Form
             ForeColor = UiStyle.Muted, AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
         notification.Controls.Add(engineChoice, 0, 2);
+        // Keep Browse on its OWN full-width row. The old four-column grid
+        // could put its final fixed-width column beyond the visible window at
+        // high DPI or with translated strings.
         var storage = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2
+            Name = "DeploymentContentStorageLayout",
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = Padding.Empty, Padding = Padding.Empty
         };
-        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 245));
-        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        storage.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
-        storage.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        storage.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         storage.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        storage.Controls.Add(new Label {
+        var sourceRow = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
+            Margin = Padding.Empty
+        };
+        sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        sourceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        sourceRow.Controls.Add(new Label {
             Text = "Campaign files", Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy
         }, 0, 0);
@@ -370,7 +392,7 @@ internal sealed partial class DomainDeploymentForm : Form
             UpdateContentSourceControls();
             InvalidatePlan();
         };
-        storage.Controls.Add(_contentSourceBox, 1, 0);
+        sourceRow.Controls.Add(_contentSourceBox, 1, 0);
         _contentShareBox.Name = "DeploymentContentShareRoot";
         _contentShareBox.RightToLeft = RightToLeft.No;
         _contentShareBox.PlaceholderText = @"\\files.example.com\Campaigns";
@@ -380,10 +402,23 @@ internal sealed partial class DomainDeploymentForm : Form
             _project.ContentShareRoot = _contentShareBox.Text.Trim();
             InvalidatePlan();
         };
-        storage.Controls.Add(_contentShareBox, 2, 0);
+        var folderRow = new TableLayoutPanel {
+            Name = "DeploymentContentFolderRow",
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Margin = Padding.Empty
+        };
+        folderRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        folderRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 166));
+        _contentShareBox.MinimumSize = new Size(120, 0);
+        folderRow.Controls.Add(_contentShareBox, 0, 0);
         _contentShareBrowse.Text = "Browse...";
         _contentShareBrowse.Name = "DeploymentContentShareBrowse";
         _contentShareBrowse.Dock = DockStyle.Fill;
+        _contentShareBrowse.AutoSize = true;
+        _contentShareBrowse.AutoSizeMode = AutoSizeMode.GrowOnly;
+        _contentShareBrowse.MinimumSize = new Size(145, 36);
+        _contentShareBrowse.AutoEllipsis = false;
+        _contentShareBrowse.Margin = new Padding(5, 0, 0, 0);
         _contentShareBrowse.Click += (_, _) => {
             using var choose = new FolderBrowserDialog {
                 Description = "Choose an EXISTING dedicated SMB UNC folder (Domain Computers READ; administrators WRITE)",
@@ -392,13 +427,14 @@ internal sealed partial class DomainDeploymentForm : Form
             if (choose.ShowDialog(this) == DialogResult.OK)
                 _contentShareBox.Text = choose.SelectedPath;
         };
-        storage.Controls.Add(_contentShareBrowse, 3, 0);
+        folderRow.Controls.Add(_contentShareBrowse, 1, 0);
         _contentSourceHint.Dock = DockStyle.Fill;
         _contentSourceHint.TextAlign = ContentAlignment.MiddleLeft;
         _contentSourceHint.ForeColor = UiStyle.Muted;
         _contentSourceHint.AutoEllipsis = true;
-        storage.Controls.Add(_contentSourceHint, 0, 1);
-        storage.SetColumnSpan(_contentSourceHint, 4);
+        sourceRow.Controls.Add(_contentSourceHint, 2, 0);
+        storage.Controls.Add(sourceRow, 0, 0);
+        storage.Controls.Add(folderRow, 0, 1);
         notification.Controls.Add(storage, 0, 3);
         UpdateContentSourceControls();
         layout.Controls.Add(notification, 0, 3);
@@ -416,9 +452,10 @@ internal sealed partial class DomainDeploymentForm : Form
             }
         };
         layout.Controls.Add(split, 0, 4);
-        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1 };
+        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         split.Panel1.Controls.Add(lists);
@@ -429,8 +466,29 @@ internal sealed partial class DomainDeploymentForm : Form
         _ous.Dock = DockStyle.Fill;
         _ous.IntegralHeight = false;
         _ous.HorizontalScrollbar = true;
-        _ous.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _ous.SelectedIndexChanged += async (_, _) =>
+        {
+            InvalidatePlan();
+            await RefreshComputerGroupMembershipAsync();
+        };
         _ous.MouseMove += (_, e) => ShowDirectoryTooltip(_ous, e);
+        _groupListMode.Name = "DeploymentGroupListMode";
+        _groupListMode.Dock = DockStyle.Fill;
+        _groupListMode.DropDownStyle = ComboBoxStyle.DropDownList;
+        _groupListMode.RightToLeft = RightToLeft.No;
+        _groupListMode.DropDownWidth = 560;
+        _groupListMode.Items.Add("Groups with computers in selected OU (direct)");
+        _groupListMode.Items.Add("All domain security groups (choose group first)");
+        _groupListMode.SelectedIndex = 0;
+        _groupListMode.SelectedIndexChanged += async (_, _) =>
+        {
+            InvalidatePlan();
+            await RefreshComputerGroupMembershipAsync();
+        };
+        _directoryTooltip.SetToolTip(_groupListMode,
+            "Matched groups can be located in ANY OU. Direct computer membership only: " +
+            "nested and primary group memberships are not expanded. Choose All groups if needed. " +
+            "A GPO must still be linked to a target OU.");
         _groupFilter.Dock = DockStyle.Fill;
         _groupFilter.PlaceholderText = UiLocale.Display("Search computer security group...");
         _groupFilter.RightToLeft = RightToLeft.No;
@@ -438,12 +496,23 @@ internal sealed partial class DomainDeploymentForm : Form
         _groups.Dock = DockStyle.Fill;
         _groups.IntegralHeight = false;
         _groups.HorizontalScrollbar = true;
-        _groups.SelectedIndexChanged += (_, _) => InvalidatePlan();
+        _groups.SelectedIndexChanged += (_, _) =>
+        {
+            // Group-first is supported. Selecting a group while no OU is
+            // selected switches to All, preserving this deliberate choice.
+            if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null &&
+                _groupListMode.SelectedIndex == 0)
+                _groupListMode.SelectedIndex = 1;
+            InvalidatePlan();
+            if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null)
+                _progress.Text = "Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.";
+        };
         _groups.MouseMove += (_, e) => ShowDirectoryTooltip(_groups, e);
         lists.Controls.Add(_ouFilter, 0, 0);
         lists.Controls.Add(_ous, 0, 1);
-        lists.Controls.Add(_groupFilter, 0, 2);
-        lists.Controls.Add(_groups, 0, 3);
+        lists.Controls.Add(_groupListMode, 0, 2);
+        lists.Controls.Add(_groupFilter, 0, 3);
+        lists.Controls.Add(_groups, 0, 4);
         _details.Dock = DockStyle.Fill;
         _details.RightToLeft = RightToLeft.No; // exact plan/AD evidence
         _details.Multiline = true;
@@ -451,7 +520,10 @@ internal sealed partial class DomainDeploymentForm : Form
         _details.ReadOnly = true;
         _details.BackColor = Color.White;
         _details.Font = new Font("Consolas", 9f);
-        _details.Text = "Select a domain, OU and computer security group; then click Preview.";
+        _details.Text = "Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. " +
+            "Screen Saver: use Group assignments to choose a user OU and user security group. " +
+            "AD security groups may reside in other OUs. A group alone cannot be a GPO link; " +
+            "Preview confirms the effective OU and security filtering before any deployment.";
         split.Panel2.Controls.Add(_details);
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 7, 0, 0) };
@@ -509,13 +581,38 @@ internal sealed partial class DomainDeploymentForm : Form
         }
         using var editor = new CampaignAssignmentsDialog(_project,
             ous, groups, (_ous.SelectedItem as DirectoryRow)?.Dn ?? "",
-            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "");
+            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "",
+            FindScopedMemberGroupsAsync);
         if (editor.ShowDialog(this) != DialogResult.OK) return;
         InvalidatePlan();
         _progress.Text = _project.TargetAssignments.Count +
             " independent group assignment(s) saved locally. " +
             "Preview validates exact computer and user scopes; no GPO changed.";
         UpdateDeploymentSteps();
+    }
+
+
+    private async Task<IReadOnlyCollection<string>> FindScopedMemberGroupsAsync(
+        string ouDn, bool userScope)
+    {
+        if (string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
+            throw new InvalidOperationException("Reconnect to AD before listing OU membership.");
+        string domain = _connectedDomain, dc = _connectedDc;
+        DomainCredentials credentials = Credentials();
+        string mode = userScope ? "UserGroupsForOu" : "ComputerGroupsForOu";
+        var response = await Task.Run(() => DomainPowerShellRunner.Execute(
+            DomainOperation.Discovery, mode, new { domain, dc, ouDn }, credentials));
+        var data = response.GetProperty("data");
+        if (!string.Equals(data.GetProperty("ouDn").GetString(), ouDn,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(data.GetProperty("principalKind").GetString(),
+                userScope ? "User" : "Computer", StringComparison.Ordinal) ||
+            data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
+            throw new InvalidDataException("OU membership response differs from the selected scope.");
+        return data.GetProperty("directGroupDns").EnumerateArray()
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(value => value.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private bool HasSelectedTargets =>
@@ -547,7 +644,14 @@ internal sealed partial class DomainDeploymentForm : Form
         }
         if (_wizardStep == 1 && !HasSelectedTargets)
         {
-            _progress.Text = "Select an OU, a computer group and a new GPO name.";
+            _progress.Text = _project.EffectiveCampaignMode switch
+            {
+                CampaignTargetMode.ScreenSaver =>
+                    "Open Group assignments: choose a User OU and User security group for Screen Saver.",
+                CampaignTargetMode.Both =>
+                    "Open Group assignments: choose independent Computer and User OU/security groups.",
+                _ => "Choose a Computer OU, a computer security group and a new GPO name."
+            };
             return;
         }
         if (_wizardStep == 1)
@@ -649,7 +753,14 @@ internal sealed partial class DomainDeploymentForm : Form
             : _wizardStep switch
             {
                 0 => "Step 1 / 3  Connect to a writable DC (credentials are session-only).",
-                1 => "Step 2 / 3  Select target OU and computer group, check GPO name.",
+                1 => _project.EffectiveCampaignMode switch
+                {
+                    CampaignTargetMode.ScreenSaver =>
+                        "Step 2 / 3  Screen Saver: User OU + User security group via Group assignments.",
+                    CampaignTargetMode.Both =>
+                        "Step 2 / 3  Both: Computer and User OU/groups via Group assignments.",
+                    _ => "Step 2 / 3  Lock Screen: Computer OU + security group."
+                },
                 _ => "Step 3 / 3  Preview permissions/conflicts; confirm deployment."
             });
         // Connection fields belong on step 1 only. Keep their selected values
@@ -680,7 +791,12 @@ internal sealed partial class DomainDeploymentForm : Form
             _alternateRadio.Checked && !_running;
         _usersButton.Enabled = credentialsStep && _alternateRadio.Checked && !_running;
         _connectButton.Enabled = credentialsStep && !_running;
-        _gpoBox.Enabled = _ous.Enabled = _groups.Enabled = targetStep && !_running;
+        _gpoBox.Enabled = targetStep && !_running;
+        // The simple lists are for legacy Computer Lock Screen targeting only.
+        // Screen Saver uses User OU + User Group in the assignment dialog.
+        bool directComputerTarget = _project.EffectiveCampaignMode == CampaignTargetMode.LockScreen &&
+            _project.TargetAssignments.Count == 0;
+        _ous.Enabled = _groups.Enabled = targetStep && directComputerTarget && !_running;
         _clientTypeBox.Enabled = targetStep && !_running;
         _contentSourceBox.Enabled = targetStep && !_running;
         _contentShareBox.Enabled = targetStep && !_running &&
@@ -688,11 +804,18 @@ internal sealed partial class DomainDeploymentForm : Form
         _contentShareBrowse.Enabled = _contentShareBox.Enabled;
         if (_groupAssignmentsButton is not null)
         {
+            _groupAssignmentsButton.Text = _project.EffectiveCampaignMode switch
+            {
+                CampaignTargetMode.ScreenSaver => "User OU / groups...",
+                CampaignTargetMode.Both => "Computer + User groups...",
+                _ => "Group assignments..."
+            };
             _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
             _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
                 _allGroups.Count > 0;
         }
-        _ouFilter.Enabled = _groupFilter.Enabled = targetStep && !_running;
+        _ouFilter.Enabled = _groupFilter.Enabled = _groupListMode.Enabled =
+            targetStep && directComputerTarget && !_running;
         _wizardBack.Visible = !_advancedMode && _wizardStep > 0;
         _wizardNext.Visible = !_advancedMode && _wizardStep < 2;
         _wizardBack.Enabled = !_running;
@@ -774,6 +897,9 @@ internal sealed partial class DomainDeploymentForm : Form
         UiStyle.ApplyStatus(_connectionStatus,
             "CHANGED — click Connect / Refresh to verify this domain/DC and list OU/groups.",
             UiStatusKind.Warning);
+        _membershipRequestVersion++; // Ignore any stale asynchronous LDAP result.
+        _membershipOuDn = string.Empty;
+        _directComputerGroupDns.Clear();
         _allOus.Clear();
         _allGroups.Clear();
         FilterOus();
@@ -874,12 +1000,26 @@ internal sealed partial class DomainDeploymentForm : Form
             var groupsResponse = await RunBusy("Reading security groups...", () =>
                 DomainPowerShellRunner.Execute(DomainOperation.Discovery, "Groups",
                     new { domain=actualDomain, dc=actualDc }, creds));
+            _membershipRequestVersion++;
+            _membershipOuDn = string.Empty;
+            _directComputerGroupDns.Clear();
             _allOus.Clear();
-            foreach (var item in ousResponse.GetProperty("data").EnumerateArray())
-                _allOus.Add(new DirectoryRow(item.GetProperty("name").GetString()!, item.GetProperty("dn").GetString()!));
+            var ouRows = ousResponse.GetProperty("data").EnumerateArray()
+                .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
+                    item.GetProperty("dn").GetString()!))
+                .Where(row => !string.IsNullOrWhiteSpace(row.Dn))
+                .DistinctBy(row => row.Dn, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(row => row.Dn, StringComparer.OrdinalIgnoreCase);
+            _allOus.AddRange(ouRows);
             _allGroups.Clear();
-            foreach (var item in groupsResponse.GetProperty("data").EnumerateArray())
-                _allGroups.Add(new DirectoryRow(item.GetProperty("name").GetString()!, item.GetProperty("dn").GetString()!, item.GetProperty("sam").GetString()!));
+            var groupRows = groupsResponse.GetProperty("data").EnumerateArray()
+                .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
+                    item.GetProperty("dn").GetString()!,
+                    item.GetProperty("sam").GetString()!))
+                .Where(row => !string.IsNullOrWhiteSpace(row.Dn))
+                .DistinctBy(row => row.Dn, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(row => row.Name, StringComparer.OrdinalIgnoreCase);
+            _allGroups.AddRange(groupRows);
             FilterOus();
             FilterGroups();
             if (_company is not null)
@@ -959,20 +1099,82 @@ internal sealed partial class DomainDeploymentForm : Form
         finally { _ous.EndUpdate(); }
     }
 
+    private bool IsOuGroupFilterActive =>
+        _groupListMode.SelectedIndex == 0 &&
+        _ous.SelectedItem is DirectoryRow &&
+        _project.EffectiveCampaignMode == CampaignTargetMode.LockScreen &&
+        _project.TargetAssignments.Count == 0;
+
     private void FilterGroups()
     {
         string query = _groupFilter.Text.Trim();
+        string selectedOu = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        bool limited = IsOuGroupFilterActive;
+        bool verified = string.Equals(selectedOu, _membershipOuDn,
+            StringComparison.OrdinalIgnoreCase);
         _groups.BeginUpdate();
         try
         {
             var selection = _groups.SelectedItem as DirectoryRow;
             _groups.Items.Clear();
             foreach (var row in _allGroups.Where(x => MatchesDirectoryQuery(x, query)))
-                _groups.Items.Add(row);
+            {
+                if (!limited || verified && _directComputerGroupDns.Contains(row.Dn))
+                    _groups.Items.Add(row);
+            }
             if (selection is not null && _groups.Items.Contains(selection))
                 _groups.SelectedItem = selection;
         }
         finally { _groups.EndUpdate(); }
+    }
+
+    private async Task RefreshComputerGroupMembershipAsync()
+    {
+        int request = ++_membershipRequestVersion;
+        string selectedOu = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        _membershipOuDn = string.Empty;
+        _directComputerGroupDns.Clear();
+        FilterGroups();
+        if (!IsOuGroupFilterActive || string.IsNullOrEmpty(selectedOu) ||
+            string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
+            return;
+
+        _progress.Text = "Checking direct computer group memberships in selected OU (read-only LDAP)...";
+        await Task.Delay(300); // Debounce repeated keyboard/OU navigation.
+        if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+        string domain = _connectedDomain, dc = _connectedDc;
+        DomainCredentials credentials = Credentials();
+        try
+        {
+            var response = await Task.Run(() => DomainPowerShellRunner.Execute(
+                DomainOperation.Discovery, "ComputerGroupsForOu",
+                new { domain, dc, ouDn = selectedOu }, credentials));
+            if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+            var data = response.GetProperty("data");
+            if (!string.Equals(data.GetProperty("ouDn").GetString(), selectedOu,
+                    StringComparison.OrdinalIgnoreCase) ||
+                data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
+                throw new InvalidDataException("OU group membership result scope mismatch.");
+            _directComputerGroupDns = data.GetProperty("directGroupDns")
+                .EnumerateArray().Select(x => x.GetString() ?? string.Empty)
+                .Where(x => x.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _membershipOuDn = selectedOu;
+            FilterGroups();
+            int computerCount = data.GetProperty("computerCount").GetInt32();
+            _progress.Text = $"Found {_groups.Items.Count} security groups with direct computer members " +
+                $"in selected OU ({computerCount} computers). Nested and primary groups are NOT included. " +
+                "Use All groups to choose any other group.";
+        }
+        catch (Exception)
+        {
+            if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
+            // Do not quietly turn a failed/incomplete LDAP query into a
+            // seemingly complete filtered list. Offer explicit All groups.
+            _groupListMode.SelectedIndex = 1;
+            _progress.Text = "OU membership filter unavailable or incomplete. Switched to All groups. " +
+                "Select an OU for the GPO link and verify actual membership during Preview.";
+        }
     }
 
     private (string domain,string dc,DirectoryRow ou,DirectoryRow group,string gpoName) Selection()
