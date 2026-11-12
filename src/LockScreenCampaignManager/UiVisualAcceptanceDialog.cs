@@ -283,12 +283,14 @@ internal sealed class UiVisualAcceptanceDialog : Form
         finally
         {
             process?.Dispose();
-            if (IsDisposed) return;
-            _smoke.Text = UiLocale.Display(_smokePassed
-                ? "Offline UI smoke: PASS (simulated layout only)."
-                : "Offline UI smoke: FAILED or timed out.");
             _smokeRunning = false;
-            RefreshDisplay();
+            if (!IsDisposed)
+            {
+                _smoke.Text = UiLocale.Display(_smokePassed
+                    ? "Offline UI smoke: PASS (simulated layout only)."
+                    : "Offline UI smoke: FAILED or timed out.");
+                RefreshDisplay();
+            }
         }
     }
 
