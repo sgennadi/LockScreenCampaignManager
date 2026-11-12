@@ -293,28 +293,37 @@ internal static class NativeAdDiscovery
             throw new InvalidOperationException(
                 "OU member count exceeds the read-only membership filter limit. Use All security groups.");
 
-        var directGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Count principals with each direct memberOf value. Do not return
+        // computer/user names, SIDs, or tokenGroups in the response.
+        var directGroupCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (SearchResultEntry principal in principals)
         {
             if (!principal.Attributes.Contains("memberOf")) continue;
             DirectoryAttribute memberships = principal.Attributes["memberOf"];
             if (memberships is null) continue;
+            var uniqueMemberships = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (object? value in memberships)
             {
                 if (value is string dn && dn.StartsWith("CN=",
                         StringComparison.OrdinalIgnoreCase) &&
-                    dn.Length <= 2048 && !dn.Any(char.IsControl))
-                    directGroups.Add(dn);
+                    dn.Length <= 2048 && !dn.Any(char.IsControl) &&
+                    uniqueMemberships.Add(dn))
+                    directGroupCounts[dn] = directGroupCounts.GetValueOrDefault(dn) + 1;
             }
         }
         return new
         {
             ouDn,
             principalKind,
+            principalCount = principals.Count,
             computerCount = principalKind == "Computer" ? principals.Count : 0,
             userCount = principalKind == "User" ? principals.Count : 0,
-            directGroupDns = directGroups.OrderBy(x => x,
+            directGroupDns = directGroupCounts.Keys.OrderBy(x => x,
                 StringComparer.OrdinalIgnoreCase).ToArray(),
+            directGroupCounts = directGroupCounts.OrderBy(pair => pair.Key,
+                StringComparer.OrdinalIgnoreCase)
+                .Select(pair => new { dn = pair.Key, directMemberCount = pair.Value })
+                .ToArray(),
             directMembershipOnly = true,
             nestedGroupsExpanded = false,
             primaryGroupsIncluded = false,
