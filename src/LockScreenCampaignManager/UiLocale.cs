@@ -222,6 +222,8 @@ internal static partial class UiLocale
             Preview97EnglishByRussian.TryGetValue(key, out english) ||
             RepairResultsEnglishByHebrew.TryGetValue(key, out english) ||
             RepairResultsEnglishByRussian.TryGetValue(key, out english) ||
+            Visual102EnglishByRussian.TryGetValue(key, out english) ||
+            Visual102EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -232,6 +234,7 @@ internal static partial class UiLocale
             if (Preview96Russian.TryGetValue(key, out ru)) return ru;
             if (Preview97Russian.TryGetValue(key, out ru)) return ru;
             if (RepairResultsRussian.TryGetValue(key, out ru)) return ru;
+            if (Visual102Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -244,6 +247,7 @@ internal static partial class UiLocale
             if (Preview96Hebrew.TryGetValue(key, out he)) return he;
             if (Preview97Hebrew.TryGetValue(key, out he)) return he;
             if (RepairResultsHebrew.TryGetValue(key, out he)) return he;
+            if (Visual102Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -287,7 +291,8 @@ internal static partial class UiLocale
             "Client Health — Alert settings",
             "gMSA 24/7 — Setup", "gMSA Production Readiness — read-only",
             "Updates — LockScreen Campaign Manager",
-            "LockScreen Campaign Manager - Local lab evidence" })
+            "LockScreen Campaign Manager - Local lab evidence",
+            "Visual DPI / language acceptance" })
         {
             if (new[] { "English", "Hebrew", "Russian" }
                 .Any(source => form.Text == Translate(englishTitle, source)))
