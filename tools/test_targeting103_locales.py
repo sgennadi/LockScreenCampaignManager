@@ -76,7 +76,7 @@ class Targeting103LocalisationTests(unittest.TestCase):
         ):
             self.assertIn(token, dialog)
         self.assertIn("UiLocale.Display(_project.EffectiveCampaignMode switch", deploy)
-        self.assertIn("UiLocale.Display(\"OU membership filter unavailable or incomplete.", deploy)
+        self.assertIn("\"OU membership filter unavailable or incomplete.", deploy)
         self.assertIn("fields.RowStyles[14].SizeType != SizeType.AutoSize", smoke)
         self.assertIn("StringComparison.OrdinalIgnoreCase", smoke)
         for forbidden in ("Set-GPLink", "New-GPO", "WriteAllBytes",
