@@ -942,6 +942,19 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentComputerGroup");
                     var userGroup = all.OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentUserGroup");
+                    var computerCoverage = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "AssignmentComputerCoverage");
+                    var userCoverage = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "AssignmentUserCoverage");
+                    if (computerCoverage?.AutoSize != true ||
+                        userCoverage?.AutoSize != true ||
+                        !computerCoverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !userCoverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "Independent User/Computer OU counts must start UNVERIFIED without LDAP: " +
+                            profile.Name);
                     // The offline matrix factory has two distinct selected
                     // groups. Rebuilding filtered options must retain their
                     // exact original distinguished names across User/Computer.
