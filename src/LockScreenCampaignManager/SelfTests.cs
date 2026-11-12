@@ -27,6 +27,22 @@ internal static class SelfTests
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
         TestGroupAssignmentMatrixAndScreenSaverPol();
+        // The direct-member list is a browsing aid, not a security verdict:
+        // group-first assignments must survive OU changes and row switches.
+        const string selectedUserGroup = "CN=PilotUsers,OU=Security,DC=example,DC=com";
+        const string selectedComputerGroup = "CN=PilotPCs,OU=Security,DC=example,DC=com";
+        Check(CampaignAssignmentsDialog.MustShowAllToKeepGroup(
+                selectedUserGroup, new[] { selectedComputerGroup }),
+            "user group-first selection must stay available under All groups");
+        Check(CampaignAssignmentsDialog.MustShowAllToKeepGroup(
+                selectedComputerGroup, Array.Empty<string>()),
+            "computer group-first selection must stay available when OU has zero direct groups");
+        Check(!CampaignAssignmentsDialog.MustShowAllToKeepGroup(
+                selectedUserGroup.ToUpperInvariant(), new[] { selectedUserGroup }),
+            "case-insensitive LDAP distinguished-name matches must preserve direct filter");
+        Check(!CampaignAssignmentsDialog.MustShowAllToKeepGroup(
+                string.Empty, Array.Empty<string>()),
+            "no prior selection should allow the OU direct-member filter");
         TestPhotoJpegSaverLocal();
         TestCampaignModeBeforeImages();
         TestFlexibleSchedules();
