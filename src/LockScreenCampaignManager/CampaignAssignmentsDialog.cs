@@ -325,6 +325,8 @@ internal sealed class CampaignAssignmentsDialog : Form
     private static void FillAdChoices(ComboBox box, List<AdChoice> choices, string name)
     {
         box.Name = name;
+        // AD distinguished names remain canonical LTR, including in Hebrew RTL.
+        box.RightToLeft = RightToLeft.No;
         box.DropDownStyle = ComboBoxStyle.DropDown;
         box.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
         box.AutoCompleteSource = AutoCompleteSource.ListItems;
