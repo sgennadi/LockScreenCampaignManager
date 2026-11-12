@@ -35,6 +35,7 @@ internal static class SelfTests
             !UiVisualAcceptanceDialog.Meets200PercentLocalConsole(144, true),
             "physical DPI pilot never treats remote or simulated layout as accepted");
         TestOuGroupDirectCoverage();
+        TestOuComputerActivityCoverage();
         TestGroupAssignmentMatrixAndScreenSaverPol();
         // The direct-member list is a browsing aid, not a security verdict:
         // group-first assignments must survive OU changes and row switches.
@@ -633,6 +634,64 @@ internal static class SelfTests
                 Check(rejected, "incomplete/duplicate/non-read-only LDAP coverage must fail closed");
             }
         }
+    }
+
+    private static void TestOuComputerActivityCoverage()
+    {
+        const string groupA = "CN=PilotPCs,OU=Security,DC=example,DC=com";
+        const string groupB = "CN=LabPCs,OU=Security,DC=example,DC=com";
+        var groups = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) {
+            [groupA] = 5, [groupB] = 3
+        };
+        var dcNow = new DateTimeOffset(2026, 11, 12, 12, 0, 0, TimeSpan.Zero);
+        string Timestamp(int days) => dcNow.AddDays(-days).ToFileTime()
+            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var accumulator = new OuComputerActivityAccumulator("20261112120000.0Z");
+        accumulator.Record("4096", Timestamp(10), [groupA, groupB]);
+        accumulator.Record("4096", Timestamp(50), [groupA]);
+        accumulator.Record("4096", Timestamp(110), [groupB]);
+        accumulator.Record("4096", Timestamp(500), [groupA]);
+        accumulator.Record("4096", "", [groupA]);
+        accumulator.Record("4098", Timestamp(5), [groupA]); // DISABLED
+        accumulator.Record("", Timestamp(5), [groupB]); // no userAccountControl
+        accumulator.Record("4096", Timestamp(200), []);
+        Check(accumulator.Enabled == 6 && accumulator.Disabled == 1 &&
+            accumulator.UnknownState == 1 && accumulator.UnknownTimestamp == 1,
+            "AD lastLogonTimestamp never counts disabled and unknown-state hosts as recent");
+        string json = System.Text.Json.JsonSerializer.Serialize(accumulator.Export(groups));
+        using (var document = System.Text.Json.JsonDocument.Parse(json))
+        {
+            var report = OuComputerActivityCoverage.Parse(document.RootElement, 8, groups);
+            Check(report.Recent(30) == 1 && report.Recent(90) == 2 &&
+                report.Recent(180) == 3 && report.Recent(365) == 4 &&
+                report.GroupRecent(groupA, 30) == 1 &&
+                report.GroupRecent(groupA, 90) == 2 &&
+                report.GroupRecent(groupB, 180) == 2 &&
+                report.GroupRecent(groupB, 365) == 2 &&
+                report.GroupRecent("CN=NotMember,DC=example,DC=com", 90) == 0,
+                "AD activity scopes and nested age windows never mutate group membership");
+        }
+        using (var wrongTotals = System.Text.Json.JsonDocument.Parse(
+            json.Replace("\"enabled\":6", "\"enabled\":7", StringComparison.Ordinal)))
+        {
+            bool rejected = false;
+            try { _ = OuComputerActivityCoverage.Parse(wrongTotals.RootElement, 8, groups); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "AD activity data inconsistent with principal count is rejected");
+        }
+        using (var wrongGroup = System.Text.Json.JsonDocument.Parse(
+            json.Replace("\"last30\":1", "\"last30\":9", StringComparison.Ordinal)))
+        {
+            bool rejected = false;
+            try { _ = OuComputerActivityCoverage.Parse(wrongGroup.RootElement, 8, groups); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "AD group activity larger than member count is rejected");
+        }
+        var noDc = new OuComputerActivityAccumulator("");
+        noDc.Record("4096", Timestamp(5), [groupA]);
+        Check(noDc.Export(groups) is null,
+            "missing RootDSE DC time cannot be reported as verified zero");
     }
 
     private static void TestGroupAssignmentMatrixAndScreenSaverPol()

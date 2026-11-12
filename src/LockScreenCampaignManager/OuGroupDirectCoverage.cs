@@ -12,17 +12,19 @@ internal sealed class OuGroupDirectCoverage
     private readonly Dictionary<string, int> _counts;
 
     private OuGroupDirectCoverage(string ouDn, string kind, int principals,
-        Dictionary<string, int> counts)
+        Dictionary<string, int> counts, OuComputerActivityCoverage? activity)
     {
         OuDn = ouDn;
         PrincipalKind = kind;
         PrincipalCount = principals;
         _counts = counts;
+        Activity = activity;
     }
 
     internal string OuDn { get; }
     internal string PrincipalKind { get; }
     internal int PrincipalCount { get; }
+    internal OuComputerActivityCoverage? Activity { get; }
     internal IReadOnlyCollection<string> DirectGroupDns => _counts.Keys;
 
     internal int DirectMatchesFor(string? groupDn) =>
@@ -72,6 +74,17 @@ internal sealed class OuGroupDirectCoverage
         if (!returnedDns.SetEquals(counts.Keys))
             throw new InvalidDataException("LDAP group counts and membership list do not agree.");
 
-        return new OuGroupDirectCoverage(expectedOuDn, expectedKind, principals, counts);
+        // Optional AD logon activity is never inferred for User scope. A
+        // missing/invalid DC clock remains "not verified"; it is not zero.
+        OuComputerActivityCoverage? activity = null;
+        if (data.TryGetProperty("activity", out JsonElement observed) &&
+            observed.ValueKind != JsonValueKind.Null)
+        {
+            if (expectedKind != "Computer")
+                throw new InvalidDataException("User OU must not return computer activity.");
+            activity = OuComputerActivityCoverage.Parse(observed, principals, counts);
+        }
+
+        return new OuGroupDirectCoverage(expectedOuDn, expectedKind, principals, counts, activity);
     }
 }

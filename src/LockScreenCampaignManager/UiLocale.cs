@@ -228,6 +228,8 @@ internal static partial class UiLocale
             Targeting103EnglishByHebrew.TryGetValue(key, out english) ||
             Coverage104EnglishByRussian.TryGetValue(key, out english) ||
             Coverage104EnglishByHebrew.TryGetValue(key, out english) ||
+            Activity105EnglishByRussian.TryGetValue(key, out english) ||
+            Activity105EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -241,6 +243,7 @@ internal static partial class UiLocale
             if (Visual102Russian.TryGetValue(key, out ru)) return ru;
             if (Targeting103Russian.TryGetValue(key, out ru)) return ru;
             if (Coverage104Russian.TryGetValue(key, out ru)) return ru;
+            if (Activity105Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -256,6 +259,7 @@ internal static partial class UiLocale
             if (Visual102Hebrew.TryGetValue(key, out he)) return he;
             if (Targeting103Hebrew.TryGetValue(key, out he)) return he;
             if (Coverage104Hebrew.TryGetValue(key, out he)) return he;
+            if (Activity105Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -403,7 +407,8 @@ internal static partial class UiLocale
                  "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
                  "CampaignClosureFilter" or "DeviceRepairFilter" or
-                 "UpdaterReleaseChannel" or "DeploymentGroupListMode"))
+                 "UpdaterReleaseChannel" or "DeploymentGroupListMode" or
+                 "DeploymentActivityWindow" or "AssignmentActivityWindow"))
                 ApplyComboLocalization(combo, language);
         }
     }

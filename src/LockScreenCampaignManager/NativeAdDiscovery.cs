@@ -287,7 +287,22 @@ internal static class NativeAdDiscovery
         string principalFilter = principalKind == "User"
             ? "(&(objectCategory=person)(objectClass=user))"
             : "(objectCategory=computer)";
-        var principals = Search(ldap, ouDn, principalFilter, QueryLimit, "memberOf");
+        // Activity is diagnostic only; the source is the selected AD DC's
+        // replicated lastLogonTimestamp, never a live heartbeat. Keep User
+        // membership discovery unchanged (no user logon metadata returned).
+        string[] attributes = principalKind == "Computer"
+            ? ["memberOf", "userAccountControl", "lastLogonTimestamp"]
+            : ["memberOf"];
+        var principals = Search(ldap, ouDn, principalFilter, QueryLimit, attributes);
+        OuComputerActivityAccumulator? activity = null;
+        if (principalKind == "Computer")
+        {
+            string dcTime = "";
+            try { dcTime = Attr(ReadRootDse(ldap), "currentTime"); }
+            catch (LdapException) { }
+            catch (DirectoryOperationException) { }
+            activity = new OuComputerActivityAccumulator(dcTime);
+        }
         // A capped query is never presented as a complete OU membership view.
         if (principals.Count >= QueryLimit)
             throw new InvalidOperationException(
@@ -298,18 +313,23 @@ internal static class NativeAdDiscovery
         var directGroupCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (SearchResultEntry principal in principals)
         {
-            if (!principal.Attributes.Contains("memberOf")) continue;
-            DirectoryAttribute memberships = principal.Attributes["memberOf"];
-            if (memberships is null) continue;
             var uniqueMemberships = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (object? value in memberships)
+            if (principal.Attributes.Contains("memberOf") &&
+                principal.Attributes["memberOf"] is DirectoryAttribute memberships)
             {
-                if (value is string dn && dn.StartsWith("CN=",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    dn.Length <= 2048 && !dn.Any(char.IsControl) &&
-                    uniqueMemberships.Add(dn))
-                    directGroupCounts[dn] = directGroupCounts.GetValueOrDefault(dn) + 1;
+                foreach (object? value in memberships)
+                {
+                    if (value is string dn && dn.StartsWith("CN=",
+                            StringComparison.OrdinalIgnoreCase) &&
+                        dn.Length <= 2048 && !dn.Any(char.IsControl) &&
+                        uniqueMemberships.Add(dn))
+                        directGroupCounts[dn] = directGroupCounts.GetValueOrDefault(dn) + 1;
+                }
             }
+            // All computer accounts count, including those without direct
+            // group memberships. Disabled and unknown last-seen are explicit.
+            activity?.Record(Attr(principal, "userAccountControl"),
+                Attr(principal, "lastLogonTimestamp"), uniqueMemberships);
         }
         return new
         {
@@ -324,6 +344,7 @@ internal static class NativeAdDiscovery
                 StringComparer.OrdinalIgnoreCase)
                 .Select(pair => new { dn = pair.Key, directMemberCount = pair.Value })
                 .ToArray(),
+            activity = activity?.Export(directGroupCounts),
             directMembershipOnly = true,
             nestedGroupsExpanded = false,
             primaryGroupsIncluded = false,

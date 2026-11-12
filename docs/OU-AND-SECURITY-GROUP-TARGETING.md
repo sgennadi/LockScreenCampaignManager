@@ -1,3 +1,11 @@
+## Preview.105 — approximate computer account activity (read-only)
+
+For **Computer OU + Computer Group** only, use the **Last 30 / 90 / 180 / 365 days** selector in AD Deployment or Group assignments. The total count stays unchanged; a separate activity line shows **enabled**, **disabled**, **unknown account status**, **no valid logon timestamp**, and the number of **enabled** computers with a recent replicated `lastLogonTimestamp`. If a computer security group is selected, its **direct** member count within the same age window is also shown.
+
+The cutoff uses the connected AD DC's RootDSE UTC rather than the manager PC's local time; if a trustworthy DC timestamp is unavailable, the activity estimate is **Not verified**. Disabled and unknown-state computers are not included in recent totals, even if a logon timestamp exists. A missing or malformed timestamp is not interpreted as a confirmed old/offline computer.
+
+**This is an estimate, not a true online/last logon status.** `lastLogonTimestamp` is replicated with delays, often many days, and may lag actual activity; it is not `lastLogon` (per DC), a live heartbeat, a client JSON report, or a GPO applicability verdict. Switching time windows is **display-only** and does not filter the members actually receiving a GPO, change the selected AD group, erase stale accounts, change User Screen Saver scope or change Client Health's expected computer list.
+
 # OU and security group targeting — Preview.100
 
 ## Preview.104 — verified direct coverage (read-only)

@@ -942,6 +942,13 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentComputerGroup");
                     var userGroup = all.OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentUserGroup");
+                    var activityWindow = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentActivityWindow");
+                    if (activityWindow is null || activityWindow.Items.Count != 4 ||
+                        activityWindow.SelectedIndex != 1 ||
+                        activityWindow.DropDownStyle != ComboBoxStyle.DropDownList)
+                        throw new InvalidOperationException(
+                            "Computer assignment activity window must be view-only at " + profile.Name);
                     var computerCoverage = all.OfType<Label>()
                         .SingleOrDefault(x => x.Name == "AssignmentComputerCoverage");
                     var userCoverage = all.OfType<Label>()
@@ -1129,6 +1136,13 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "DeploymentContentShareBrowse");
                     var groupListMode = Descendants(form).OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "DeploymentGroupListMode");
+                    var activityWindow = Descendants(form).OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "DeploymentActivityWindow");
+                    if (activityWindow is null || activityWindow.Items.Count != 4 ||
+                        activityWindow.SelectedIndex != 1 ||
+                        activityWindow.DropDownStyle != ComboBoxStyle.DropDownList)
+                        throw new InvalidOperationException(
+                            "Deployment activity window must be view-only at " + profile.Name);
                     var coverage = Descendants(form).OfType<Label>()
                         .SingleOrDefault(x => x.Name == "DeploymentOuGroupCoverage");
                     if (coverage?.AutoSize != true ||

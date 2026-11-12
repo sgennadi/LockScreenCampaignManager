@@ -21,7 +21,7 @@ class DirectCoverageContracts(unittest.TestCase):
         for token in (
             "SearchScope.Base",
             "(objectClass=organizationalUnit)",
-            'Search(ldap, ouDn, principalFilter, QueryLimit, "memberOf")',
+            'var principals = Search(ldap, ouDn, principalFilter, QueryLimit, attributes)',
             "principals.Count >= QueryLimit",
             'var directGroupCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)',
             "var uniqueMemberships = new HashSet<string>(StringComparer.OrdinalIgnoreCase)",

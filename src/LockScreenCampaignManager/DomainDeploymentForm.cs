@@ -32,6 +32,8 @@ internal sealed partial class DomainDeploymentForm : Form
     private HashSet<string> _directComputerGroupDns = new(StringComparer.OrdinalIgnoreCase);
     private OuGroupDirectCoverage? _computerCoverage;
     private readonly Label _coverageStatus = new() { Name = "DeploymentOuGroupCoverage" };
+    // Presentation-only activity window: never modifies OU, group, GPO or agent.
+    private readonly ComboBox _activityWindow = new() { Name = "DeploymentActivityWindow" };
     private readonly ListBox _ous = new();
     private readonly ListBox _groups = new();
     private readonly TextBox _details = new();
@@ -454,12 +456,13 @@ internal sealed partial class DomainDeploymentForm : Form
             }
         };
         layout.Controls.Add(split, 0, 4);
-        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1 };
+        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 7, ColumnCount = 1 };
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         lists.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         split.Panel1.Controls.Add(lists);
         _ouFilter.Dock = DockStyle.Fill;
@@ -520,6 +523,15 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.Controls.Add(_groupListMode, 0, 2);
         lists.Controls.Add(_groupFilter, 0, 3);
         lists.Controls.Add(_groups, 0, 4);
+        _activityWindow.Dock = DockStyle.Fill;
+        _activityWindow.DropDownStyle = ComboBoxStyle.DropDownList;
+        _activityWindow.Items.AddRange(
+            ["Last 30 days", "Last 90 days", "Last 180 days", "Last 365 days"]);
+        _activityWindow.SelectedIndex = 1;
+        _activityWindow.SelectedIndexChanged += (_, _) => UpdateCoverageStatus();
+        _directoryTooltip.SetToolTip(_activityWindow, UiLocale.Display(
+            "Approximate replicated lastLogonTimestamp. Not a live heartbeat, deployment filter or GPO application."));
+        lists.Controls.Add(_activityWindow, 0, 5);
         _coverageStatus.Dock = DockStyle.Top;
         _coverageStatus.AutoSize = true;
         _coverageStatus.AutoEllipsis = false;
@@ -533,7 +545,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _coverageStatus.TextAlign = ContentAlignment.MiddleLeft;
         _coverageStatus.ForeColor = UiStyle.Navy;
         _coverageStatus.Text = UiLocale.Display("OU/group coverage: not verified.");
-        lists.Controls.Add(_coverageStatus, 0, 5);
+        lists.Controls.Add(_coverageStatus, 0, 6);
         _details.Dock = DockStyle.Fill;
         _details.RightToLeft = RightToLeft.No; // exact plan/AD evidence
         _details.Multiline = true;
@@ -1162,7 +1174,7 @@ internal sealed partial class DomainDeploymentForm : Form
             return;
         }
         var selected = _groups.SelectedItem as DirectoryRow;
-        _coverageStatus.Text = selected is null
+        string direct = selected is null
             ? string.Format(UiLocale.Display(
                 "OU subtree: {0} computer objects. Choose a group to check direct matches."),
                 _computerCoverage.PrincipalCount)
@@ -1171,6 +1183,28 @@ internal sealed partial class DomainDeploymentForm : Form
                 "Includes inactive accounts; not effective GPO coverage."),
                 _computerCoverage.PrincipalCount,
                 _computerCoverage.DirectMatchesFor(selected.Dn));
+        var activity = _computerCoverage.Activity;
+        if (activity is null)
+        {
+            _coverageStatus.Text = direct + Environment.NewLine + UiLocale.Display(
+                "Computer activity: not verified (DC time unavailable).");
+            return;
+        }
+        int days = _activityWindow.SelectedIndex switch
+        {
+            0 => 30, 1 => 90, 2 => 180, 3 => 365, _ => 90
+        };
+        string line = selected is null
+            ? string.Format(UiLocale.Display(
+                "Replicated AD lastLogonTimestamp (approximate, not online): enabled {0}, disabled {1}, unknown state {2}, no valid timestamp {3}; seen in {4} days: {5}. Does not change GPO targeting."),
+                activity.Enabled, activity.Disabled, activity.UnknownState,
+                activity.UnknownTimestamp, days, activity.Recent(days))
+            : string.Format(UiLocale.Display(
+                "Replicated AD lastLogonTimestamp (approximate, not online): enabled {0}, disabled {1}, unknown state {2}, no valid timestamp {3}; seen in {4} days: {5}; selected group: {6}. Does not change GPO targeting."),
+                activity.Enabled, activity.Disabled, activity.UnknownState,
+                activity.UnknownTimestamp, days, activity.Recent(days),
+                activity.GroupRecent(selected.Dn, days));
+        _coverageStatus.Text = direct + Environment.NewLine + line;
     }
 
     private async Task RefreshComputerGroupMembershipAsync()

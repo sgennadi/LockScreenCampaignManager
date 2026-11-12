@@ -25,6 +25,7 @@ internal sealed class CampaignAssignmentsDialog : Form
     private OuGroupDirectCoverage? _computerCoverage;
     private OuGroupDirectCoverage? _userCoverage;
     private readonly Label _computerCoverageLabel = new() { Name = "AssignmentComputerCoverage" };
+    private readonly ComboBox _activityWindow = new() { Name = "AssignmentActivityWindow" };
     private readonly Label _userCoverageLabel = new() { Name = "AssignmentUserCoverage" };
     private readonly CheckBox _computerDirectMembers = new();
     private readonly CheckBox _userDirectMembers = new();
@@ -344,8 +345,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             Name = "AssignmentScopeCoverageRows",
             Dock = DockStyle.Top, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            RowCount = 2, ColumnCount = 1
+            RowCount = 3, ColumnCount = 1
         };
+        coverageRows.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         coverageRows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         coverageRows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         foreach (Label label in new[] { _computerCoverageLabel, _userCoverageLabel })
@@ -362,8 +364,18 @@ internal sealed class CampaignAssignmentsDialog : Form
                 if (label.MaximumSize.Width != width)
                     label.MaximumSize = new Size(width, 0);
         };
-        coverageRows.Controls.Add(_computerCoverageLabel, 0, 0);
-        coverageRows.Controls.Add(_userCoverageLabel, 0, 1);
+        _activityWindow.DropDownStyle = ComboBoxStyle.DropDownList;
+        _activityWindow.Dock = DockStyle.Top;
+        _activityWindow.Items.AddRange(
+            ["Last 30 days", "Last 90 days", "Last 180 days", "Last 365 days"]);
+        _activityWindow.SelectedIndex = 1;
+        _activityWindow.SelectedIndexChanged += (_, _) => UpdateCoverageLabel(false);
+        var activityTip = new ToolTip();
+        activityTip.SetToolTip(_activityWindow, UiLocale.Display(
+            "Approximate replicated lastLogonTimestamp. Not a live heartbeat, deployment filter or GPO application."));
+        coverageRows.Controls.Add(_activityWindow, 0, 0);
+        coverageRows.Controls.Add(_computerCoverageLabel, 0, 1);
+        coverageRows.Controls.Add(_userCoverageLabel, 0, 2);
         fields.Controls.Add(coverageRows, 0, 15);
         UpdateCoverageLabel(false);
         UpdateCoverageLabel(true);
@@ -630,7 +642,7 @@ internal sealed class CampaignAssignmentsDialog : Form
             return;
         }
         string chosenGroup = SelectedDn(userScope ? _userGroup : _computerGroup);
-        label.Text = string.IsNullOrWhiteSpace(chosenGroup)
+        string direct = string.IsNullOrWhiteSpace(chosenGroup)
             ? string.Format(UiLocale.Display(
                 "{0} objects in User/Computer OU subtree. Select a security group."),
                 coverage.PrincipalCount)
@@ -639,6 +651,32 @@ internal sealed class CampaignAssignmentsDialog : Form
                 "Inactive accounts included. Not effective GPO application."),
                 coverage.PrincipalCount, UiLocale.Display(userScope ? "User" : "Computer"),
                 coverage.DirectMatchesFor(chosenGroup));
+        if (userScope)
+        {
+            label.Text = direct; // Never use computer timestamps for User GPOs.
+            return;
+        }
+        if (coverage.Activity is not OuComputerActivityCoverage activity)
+        {
+            label.Text = direct + Environment.NewLine + UiLocale.Display(
+                "Computer activity: not verified (DC time unavailable).");
+            return;
+        }
+        int days = _activityWindow.SelectedIndex switch
+        {
+            0 => 30, 1 => 90, 2 => 180, 3 => 365, _ => 90
+        };
+        string age = string.IsNullOrWhiteSpace(chosenGroup)
+            ? string.Format(UiLocale.Display(
+                "Replicated AD lastLogonTimestamp (approximate, not online): enabled {0}, disabled {1}, unknown state {2}, no valid timestamp {3}; seen in {4} days: {5}. Does not change GPO targeting."),
+                activity.Enabled, activity.Disabled, activity.UnknownState,
+                activity.UnknownTimestamp, days, activity.Recent(days))
+            : string.Format(UiLocale.Display(
+                "Replicated AD lastLogonTimestamp (approximate, not online): enabled {0}, disabled {1}, unknown state {2}, no valid timestamp {3}; seen in {4} days: {5}; selected group: {6}. Does not change GPO targeting."),
+                activity.Enabled, activity.Disabled, activity.UnknownState,
+                activity.UnknownTimestamp, days, activity.Recent(days),
+                activity.GroupRecent(chosenGroup, days));
+        label.Text = direct + Environment.NewLine + age;
     }
 
     private void SetModeVisibility()
@@ -652,6 +690,7 @@ internal sealed class CampaignAssignmentsDialog : Form
         _computerDirectMembers.Enabled = hasComputer && _membershipLookup is not null;
         _userDirectMembers.Enabled = hasUser && _membershipLookup is not null;
         _computerCoverageLabel.Visible = hasComputer;
+        _activityWindow.Visible = hasComputer;
         _userCoverageLabel.Visible = hasUser;
         _saver.Enabled = hasUser && !_photo.Checked;
         _photo.Enabled = hasUser;
