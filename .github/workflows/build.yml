@@ -57,6 +57,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_ou_group_targeting.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_native_ui_visual_acceptance.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_smb_campaign_source.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_local_lab_and_hebrew.py
