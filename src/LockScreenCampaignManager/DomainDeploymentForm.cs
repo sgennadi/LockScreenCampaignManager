@@ -475,7 +475,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _groupListMode.Name = "DeploymentGroupListMode";
         _groupListMode.Dock = DockStyle.Fill;
         _groupListMode.DropDownStyle = ComboBoxStyle.DropDownList;
-        _groupListMode.RightToLeft = RightToLeft.No;
+        // Human-readable choices inherit Hebrew RTL; SelectedIndex remains unchanged.
         _groupListMode.DropDownWidth = 560;
         // Short visible values survive 200% DPI / RU / HE. Long descriptions
         // remain accessible in the tooltip without changing SelectedIndex.
@@ -523,10 +523,11 @@ internal sealed partial class DomainDeploymentForm : Form
         _details.ReadOnly = true;
         _details.BackColor = Color.White;
         _details.Font = new Font("Consolas", 9f);
-        _details.Text = "Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. " +
+        _details.Text = UiLocale.Display(
+            "Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. " +
             "Screen Saver: use Group assignments to choose a user OU and user security group. " +
             "AD security groups may reside in other OUs. A group alone cannot be a GPO link; " +
-            "Preview confirms the effective OU and security filtering before any deployment.";
+            "Preview confirms the effective OU and security filtering before any deployment.");
         split.Panel2.Controls.Add(_details);
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(0, 7, 0, 0) };
@@ -642,7 +643,7 @@ internal sealed partial class DomainDeploymentForm : Form
         if (_running) return;
         if (_wizardStep == 0 && (string.IsNullOrEmpty(_connectedDomain) || !_connectedWritable))
         {
-            _progress.Text = "Connect to a writable domain controller first.";
+            _progress.Text = UiLocale.Display("Connect to a writable domain controller first.");
             return;
         }
         if (_wizardStep == 1 && !HasSelectedTargets)
