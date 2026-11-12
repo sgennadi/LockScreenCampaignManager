@@ -8,6 +8,10 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string, string> Targeting103Russian = new(StringComparer.Ordinal)
     {
+        ["Direct memberOf only; nested/primary groups excluded. GPO link needs a target OU."] = "Только прямое memberOf: вложенные и основные группы исключены. Для GPO нужна OU привязки.",
+        ["{0} group assignment(s) saved locally. Preview verifies Computer/User targets; no GPO changed."] = "Локально сохранено назначений: {0}. Preview проверяет цели User/Computer; GPO не изменён.",
+        ["All domain groups (group first)"] = "Все группы домена",
+        ["OU member groups (computers)"] = "Группы OU (компьютеры)",
         ["Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. Screen Saver: use Group assignments to choose a user OU and user security group. AD security groups may reside in other OUs. A group alone cannot be a GPO link; Preview confirms the effective OU and security filtering before any deployment."] = "Экран блокировки: привяжите GPO к OU компьютеров и ограничьте группой компьютеров. Заставка: выберите OU и группу пользователей в назначениях. Группы могут храниться в других OU; GPO нельзя привязать только к группе. Перед развёртыванием проверьте Preview.",
         ["Matched groups can be located in ANY OU. Direct computer membership only: nested and primary group memberships are not expanded. Choose All groups if needed. A GPO must still be linked to a target OU."] = "Группы могут находиться в любой OU. Здесь показано только прямое членство компьютеров; вложенные и основные группы не раскрываются. При необходимости выберите «Все группы». Для GPO нужна OU привязки.",
         ["{0} independent group assignment(s) saved locally. Preview validates exact computer and user scopes; no GPO changed."] = "Сохранено назначений групп: {0}. Preview проверяет области компьютеров и пользователей; GPO не изменён.",
@@ -74,6 +78,10 @@ internal static partial class UiLocale
 
     private static readonly Dictionary<string, string> Targeting103Hebrew = new(StringComparer.Ordinal)
     {
+        ["Direct memberOf only; nested/primary groups excluded. GPO link needs a target OU."] = "חברות ישירה בלבד ב-memberOf; קבוצות מקוננות וראשיות אינן נכללות. קישור GPO מחייב יחידת יעד.",
+        ["{0} group assignment(s) saved locally. Preview verifies Computer/User targets; no GPO changed."] = "נשמרו מקומית {0} שיוכים. תצוגה מקדימה בודקת יעדי משתמש/מחשב; GPO לא השתנה.",
+        ["All domain groups (group first)"] = "כל קבוצות התחום",
+        ["OU member groups (computers)"] = "קבוצות מחשבים ביחידה",
         ["Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. Screen Saver: use Group assignments to choose a user OU and user security group. AD security groups may reside in other OUs. A group alone cannot be a GPO link; Preview confirms the effective OU and security filtering before any deployment."] = "מסך נעילה: קשרו GPO ליחידת המחשבים והגבילו באמצעות קבוצת מחשבים. שומר מסך: בחרו יחידת משתמשים וקבוצת משתמשים בשיוכים. קבוצות עשויות להימצא ביחידות אחרות; אי אפשר לקשר GPO לקבוצה בלבד. בדקו את התצוגה המקדימה לפני פריסה.",
         ["Matched groups can be located in ANY OU. Direct computer membership only: nested and primary group memberships are not expanded. Choose All groups if needed. A GPO must still be linked to a target OU."] = "קבוצות יכולות להימצא בכל יחידה ארגונית. מוצגת חברות ישירה של מחשבים בלבד; קבוצות מקוננות וראשיות אינן מורחבות. ניתן לבחור את כל הקבוצות. GPO עדיין חייב להיות מקושר ליחידה ארגונית.",
         ["{0} independent group assignment(s) saved locally. Preview validates exact computer and user scopes; no GPO changed."] = "נשמרו {0} שיוכי קבוצות מקומיים. התצוגה המקדימה מאמתת תחומי מחשב ומשתמש; GPO לא שונה.",
