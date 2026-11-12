@@ -1,3 +1,11 @@
+## 0.4.0-preview.101 — preserve group-first OU/Group targeting (2026-11-12)
+
+- Preserve explicitly chosen Computer and User security groups when selecting/changing their target OU, instead of allowing direct-member LDAP filter refresh to clear the selected DN.
+- If a chosen group does not appear in an OU's direct memberOf results, switch visibly to All groups and show a warning about nested/primary membership and Preview verification; no silent deletion of group assignment.
+- Restore independently saved Computer/User group DNs when changing assignment rows; preserve a company's saved group default rather than losing it during first OU selection.
+- Add model, WinForms matrix and offline source-contract regression checks for two independent scopes, case-insensitive DNs and group-first operation.
+- Retain Preview.100 read-only LDAP, mandatory OU/GPO Preview, explicit deployment approval and verified ZIP/update behavior. Real AD membership/physical DPI 200% and JPG User GPO pilot remain open.
+
 ## 0.4.0-preview.100 — OU/member-group targeting and AD deployment Browse (2026-11-11)
 
 - Selecting an OU in AD Deployment now offers read-only groups containing directly assigned computer accounts from that OU and descendants, using signed/sealed native LDAP memberOf. The group object may live in any OU.

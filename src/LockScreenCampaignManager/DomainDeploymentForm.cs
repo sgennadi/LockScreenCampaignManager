@@ -1024,6 +1024,11 @@ internal sealed partial class DomainDeploymentForm : Form
             FilterGroups();
             if (_company is not null)
             {
+                // An explicitly saved group preference must survive selecting
+                // the saved OU. Direct memberOf lists omit nested groups and
+                // can be incomplete for primary group membership.
+                if (!string.IsNullOrWhiteSpace(_company.DefaultGroupDn))
+                    _groupListMode.SelectedIndex = 1;
                 // The profile merely suggests existing AD entries. Select only
                 // exact DNs returned by the fresh LDAP discovery. Do not invent
                 // a row from profile text or bypass the normal Preview step.
@@ -1132,6 +1137,17 @@ internal sealed partial class DomainDeploymentForm : Form
     {
         int request = ++_membershipRequestVersion;
         string selectedOu = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        // The group-first workflow and a previously chosen computer group
+        // have priority over a refreshed direct-member filter. Keep that
+        // selection under an explicitly visible All-groups mode, never clear
+        // it while LDAP is loading or because an OU changed.
+        if (IsOuGroupFilterActive && _groups.SelectedItem is DirectoryRow chosen)
+        {
+            _groupListMode.SelectedIndex = 1; // Cancels older async lookups.
+            _progress.Text = "Kept selected computer group: " + chosen.Name +
+                ". All domain groups shown; verify membership and OU link in Preview.";
+            return;
+        }
         _membershipOuDn = string.Empty;
         _directComputerGroupDns.Clear();
         FilterGroups();

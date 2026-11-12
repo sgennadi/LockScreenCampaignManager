@@ -912,6 +912,20 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
                     var preview = all.OfType<TextBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentReadOnlyPreview");
+                    var computerGroup = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentComputerGroup");
+                    var userGroup = all.OfType<ComboBox>()
+                        .SingleOrDefault(x => x.Name == "AssignmentUserGroup");
+                    // The offline matrix factory has two distinct selected
+                    // groups. Rebuilding filtered options must retain their
+                    // exact original distinguished names across User/Computer.
+                    if (computerGroup?.SelectedItem is not CampaignAssignmentsDialog.AdChoice c ||
+                        userGroup?.SelectedItem is not CampaignAssignmentsDialog.AdChoice u ||
+                        c.Dn != "CN=PCs,OU=Groups,DC=example,DC=com" ||
+                        u.Dn != "CN=Pilots,OU=Groups,DC=example,DC=com")
+                        throw new InvalidOperationException(
+                            "User/Computer group assignments lost during offline matrix initialization: " +
+                            profile.Name);
                     var computerMemberFilter = all.OfType<CheckBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentFilterComputerGroupsByOu");
                     var userMemberFilter = all.OfType<CheckBox>()

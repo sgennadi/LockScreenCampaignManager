@@ -366,6 +366,11 @@ internal sealed class CampaignAssignmentsDialog : Form
         {
             _name.Text = current.Name;
             _mode.SelectedItem = current.Mode;
+            // Restore complete choices before selecting each saved group;
+            // the previous assignment row may have shown a different OU's
+            // direct-member subset, which omits this row's saved group.
+            ReplaceGroupChoices(_computerGroup, null, current.ComputerGroupDn);
+            ReplaceGroupChoices(_userGroup, null, current.UserGroupDn);
             SelectDn(_computerOu, current.ComputerOuDn);
             SelectDn(_computerGroup, current.ComputerGroupDn);
             SelectDn(_userOu, current.UserOuDn);
@@ -395,9 +400,27 @@ internal sealed class CampaignAssignmentsDialog : Form
     }
 
 
-    private void ReplaceGroupChoices(ComboBox box, HashSet<string>? allowed)
+    // UI filter rules never silently erase an explicitly selected group.
+    // A group outside a direct-member filter is still valid to BROWSE,
+    // but its effective GPO applicability requires independent Preview.
+    internal static bool MustShowAllToKeepGroup(string? chosenDn,
+        IReadOnlyCollection<string> directGroupDns) =>
+        !string.IsNullOrWhiteSpace(chosenDn) &&
+        !directGroupDns.Contains(chosenDn, StringComparer.OrdinalIgnoreCase);
+
+    private string RememberedGroupDn(bool userScope, ComboBox box)
     {
-        string oldDn = SelectedDn(box);
+        string selected = SelectedDn(box);
+        if (selected.Length > 0) return selected;
+        if (_editing < 0 || _editing >= _draft.Count) return string.Empty;
+        return userScope ? _draft[_editing].UserGroupDn :
+            _draft[_editing].ComputerGroupDn;
+    }
+
+    private void ReplaceGroupChoices(ComboBox box, HashSet<string>? allowed,
+        string? preferredDn = null)
+    {
+        string oldDn = preferredDn ?? SelectedDn(box);
         bool priorLoading = _loading;
         _loading = true;
         try
@@ -424,15 +447,20 @@ internal sealed class CampaignAssignmentsDialog : Form
         ComboBox groups = userScope ? _userGroup : _computerGroup;
         CheckBox filter = userScope ? _userDirectMembers : _computerDirectMembers;
         string selectedOuDn = SelectedDn(ou);
+        string chosenDn = RememberedGroupDn(userScope, groups);
 
-        // Selecting a group before an OU is allowed: show all domain groups.
-        // Only a verified OU + direct-member query enables the narrower view.
+        // Group-first mode: show all security groups until an OU is chosen.
+        // Rebuilding items should not change the saved assignment.
         if (!filter.Checked || selectedOuDn.Length == 0 || _membershipLookup is null)
         {
-            ReplaceGroupChoices(groups, null);
+            ReplaceGroupChoices(groups, null, chosenDn);
             return;
         }
-        ReplaceGroupChoices(groups, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        // Retain the current choice until LDAP has returned an exact answer.
+        // The prior implementation cleared the list immediately and then
+        // CommitRow() silently replaced a saved DN with an empty string.
+        _help.Text = "Reading direct " + (userScope ? "USER" : "COMPUTER") +
+            " group membership in selected OU. Existing target is retained.";
         await Task.Delay(250);
         if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
             IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
@@ -444,25 +472,42 @@ internal sealed class CampaignAssignmentsDialog : Form
             if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
                 IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
                 return;
+            // The operator can change the selected group during lookup;
+            // do not overwrite that newer selection with a stale snapshot.
+            chosenDn = RememberedGroupDn(userScope, groups);
             var allowed = new HashSet<string>(groupDns, StringComparer.OrdinalIgnoreCase);
-            ReplaceGroupChoices(groups, allowed);
-            _help.Text = (userScope ? "USER" : "COMPUTER") +
-                " OU direct member groups: " + groups.Items.Count +
-                ". Nested groups / primary groups are not expanded. " +
-                "Uncheck OU filter to choose any domain security group.";
+            if (MustShowAllToKeepGroup(chosenDn, allowed))
+            {
+                bool priorLoading = _loading;
+                _loading = true;
+                try { filter.Checked = false; }
+                finally { _loading = priorLoading; }
+                ReplaceGroupChoices(groups, null, chosenDn);
+                _help.Text = "Selected " + (userScope ? "USER" : "COMPUTER") +
+                    " group kept. It is not in the selected OU's DIRECT membership list. " +
+                    "Showing All groups; verify nesting, GPO link and applicability in Preview.";
+            }
+            else
+            {
+                ReplaceGroupChoices(groups, allowed, chosenDn);
+                _help.Text = (userScope ? "USER" : "COMPUTER") +
+                    " OU direct member groups: " + groups.Items.Count +
+                    ". Nested groups / primary groups are not expanded. " +
+                    "Uncheck OU filter to choose any domain security group.";
+            }
         }
         catch
         {
             if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
                 IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
                 return;
-            // LDAP errors and capped OU inventories must not look like a
-            // successful empty group result. Restore the explicitly labeled
-            // All-groups list; a deployment still requires Preview approval.
-            filter.Checked = false;
-            ReplaceGroupChoices(groups, null);
-            _help.Text = "OU membership lookup unavailable/incomplete. All security groups shown. " +
-                "Confirm actual USER/COMPUTER targeting and OU link in read-only Preview.";
+            bool priorLoading = _loading;
+            _loading = true;
+            try { filter.Checked = false; }
+            finally { _loading = priorLoading; }
+            ReplaceGroupChoices(groups, null, RememberedGroupDn(userScope, groups));
+            _help.Text = "OU membership lookup unavailable/incomplete. All security groups shown, " +
+                "existing selection retained. Verify USER/COMPUTER targeting and OU link in Preview.";
         }
     }
 

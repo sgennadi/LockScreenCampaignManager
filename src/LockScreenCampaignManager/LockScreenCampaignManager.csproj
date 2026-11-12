@@ -8,7 +8,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>LockScreenCampaignManager</AssemblyName>
     <RootNamespace>LockScreenCampaignManager</RootNamespace>
-    <Version>0.4.0-preview.100</Version>
+    <Version>0.4.0-preview.101</Version>
     <ApplicationIcon>Assets\LockScreen.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
