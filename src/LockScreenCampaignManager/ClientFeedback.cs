@@ -93,12 +93,14 @@ public static class ClientFeedbackReader
         value is "PowerShell" or "Executable" ? value : "Unknown";
 
     public static ClientHealthSnapshot Read(string share, string campaignId,
-        IEnumerable<string> expectedComputers, DateTimeOffset nowUtc, int staleAfterMinutes = 45)
+        IEnumerable<string> expectedComputers, DateTimeOffset nowUtc, int staleAfterMinutes = 45,
+        bool expectedScopeVerified = false)
     {
         if (staleAfterMinutes is < 5 or > 180)
             throw new ArgumentOutOfRangeException(nameof(staleAfterMinutes));
         string directory = FeedbackPath.CampaignDirectory(share, campaignId);
-        return ReadDirectory(directory, campaignId, expectedComputers, nowUtc, staleAfterMinutes);
+        return ReadDirectory(directory, campaignId, expectedComputers, nowUtc,
+            staleAfterMinutes, expectedScopeVerified);
     }
 
     /// <summary>
@@ -153,7 +155,8 @@ public static class ClientFeedbackReader
 
     // Internal entrypoint used by isolated tests; network-path validation stays in public Read.
     internal static ClientHealthSnapshot ReadDirectory(string directory, string campaignId,
-        IEnumerable<string> expectedComputers, DateTimeOffset nowUtc, int staleAfterMinutes = 45)
+        IEnumerable<string> expectedComputers, DateTimeOffset nowUtc, int staleAfterMinutes = 45,
+        bool expectedScopeVerified = false)
     {
         // Missing share is a setup error, not proof that every machine is offline.
         if (!Directory.Exists(directory))
@@ -207,7 +210,11 @@ public static class ClientFeedbackReader
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
         // If AD discovery was not performed, display reports but do not claim a fleet denominator.
-        var names = expected.Count > 0 ? expected : reports.Keys.OrderBy(x => x).ToList();
+        // An AD-verified empty group is ZERO eligible computers, not an
+        // invitation to display unrelated SMB filenames as target endpoints.
+        // Before AD verification, keep legacy diagnostic-only report browsing.
+        var names = expectedScopeVerified || expected.Count > 0
+            ? expected : reports.Keys.OrderBy(x => x).ToList();
         var rows = new List<ClientHealthRow>();
         int healthy = 0, ready = 0, stale = 0, missing = 0, errors = 0, completed = 0;
         foreach (var name in names)
@@ -241,7 +248,7 @@ public static class ClientFeedbackReader
             Rows = rows, CampaignId = campaignId, SharePath = directory,
             Expected = expected.Count, Healthy = healthy, Ready = ready, Stale = stale,
             NoReport = missing, Errors = errors, Completed = completed, InvalidReports = invalid,
-            LatestReports = reports.Where(item => expected.Count == 0 ||
+            LatestReports = reports.Where(item => !expectedScopeVerified && expected.Count == 0 ||
                     expected.Contains(item.Key, StringComparer.OrdinalIgnoreCase))
                 .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
             ObservedUtc = nowUtc
