@@ -490,8 +490,8 @@ internal sealed partial class DomainDeploymentForm : Form
         _directoryTooltip.SetToolTip(_groupListMode,
             UiLocale.Display("Groups with computers in selected OU (direct)") + " / " +
             UiLocale.Display("All domain security groups (choose group first)") +
-            Environment.NewLine + "Direct memberOf only; nested/primary groups excluded. " +
-            "GPO link needs a target OU.");
+            Environment.NewLine + UiLocale.Display(
+                "Direct memberOf only; nested/primary groups excluded. GPO link needs a target OU."));
         _groupFilter.Dock = DockStyle.Fill;
         _groupFilter.PlaceholderText = UiLocale.Display("Search computer security group...");
         _groupFilter.RightToLeft = RightToLeft.No;
