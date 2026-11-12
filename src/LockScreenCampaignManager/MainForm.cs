@@ -525,6 +525,7 @@ public sealed partial class MainForm : Form
             ("Settings...", OpenUiSettings, null),
             ("Diagnostics...", OpenDiagnostics, null),
             ("Review local lab evidence...", OpenLocalLabEvidence, null),
+            ("Visual DPI / language check...", OpenVisualDpiCheck, null),
             ("Check updates...", OpenUniversalUpdater, null)
         });
         _status.Text = "Ready — add images or open a project";
@@ -546,6 +547,7 @@ public sealed partial class MainForm : Form
         AddActionMenu(_quickButtons, "Help / tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
             ("Settings...", OpenUiSettings, null),
             ("Diagnostics...", OpenDiagnostics, null),
+            ("Visual DPI / language check...", OpenVisualDpiCheck, null),
             ("Check updates...", OpenUniversalUpdater, null),
             ("History...", OpenCampaignHistory, null)
         });
@@ -1518,6 +1520,12 @@ public sealed partial class MainForm : Form
     private void OpenUniversalUpdater()
     {
         using var form = new UniversalUpdaterWindow();
+        form.ShowDialog(this);
+    }
+
+    private void OpenVisualDpiCheck()
+    {
+        using var form = new UiVisualAcceptanceDialog();
         form.ShowDialog(this);
     }
 
