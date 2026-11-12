@@ -109,7 +109,9 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
         for prefix in ("Targeting103Russian", "Targeting103Hebrew"):
             self.assertIn(prefix + " = new(StringComparer.Ordinal)", target)
             body = target.split(prefix + " = new(StringComparer.Ordinal)", 1)[1].split("};", 1)[0]
-            keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', body, re.M)
+            keys = [line.strip()[2:].split('"] =', 1)[0]
+                    for line in body.splitlines()
+                    if line.strip().startswith('["')]
             self.assertGreaterEqual(len(keys), 55)
             self.assertEqual(len(keys), len(set(keys)))
             for key in (
