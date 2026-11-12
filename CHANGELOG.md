@@ -1,3 +1,11 @@
+## 0.4.0-preview.103 — translated OU/User/Computer group targeting (2026-11-12)
+
+- Localize AD Deployment OU-first and group-first choices, direct-membership results, connection warnings, GPO link guidance and User/Computer assignment buttons into Russian/Hebrew. Do not change LDAP distinguished names, group identities, GPO rights or security filtering.
+- Use reversible UI-only ComboBox formatting for the two group-list modes. Keep SelectedIndex and the original English command/serialization values, even when switching English ↔ Russian ↔ Hebrew.
+- Localize independent Screen Saver (User OU + User Group) and Lock Screen (Computer OU + Computer Group) editing instructions, including notices for group-first selection and nested/primary-group limitations.
+- Improve assignment-window DPI resilience: shorten visible group filters, preserve full descriptions in tooltips, and auto-wrap long operator guidance and titles in 100–200% WinForms layouts.
+- Add offline locale-key, reversible-value and format-placeholder contracts plus x86/x64 WinForms scale tests and a concise numbered What's New. Real physical 200% and live AD/RSoP acceptance remain open (#36, #30, #25/#26).
+
 ## 0.4.0-preview.102 — native 200% display / EN-RU-HE visual acceptance (2026-11-12)
 
 - Add native **Tools / Help → Visual DPI / language check** in the portable EXE with a scrollable six-item checklist for real UI inspection (Wizard, AD Browse, Client Health, RTL, mixed technical LTR and English/Russian/Hebrew switching).
