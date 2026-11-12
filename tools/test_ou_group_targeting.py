@@ -41,7 +41,7 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
             'Groups with computers in selected OU (direct)',
             'All domain security groups (choose group first)',
             '"ComputerGroupsForOu"',
-            "directGroupDns",
+            "OuGroupDirectCoverage.Parse",
             "_directComputerGroupDns.Contains(row.Dn)",
             "await Task.Delay(300)",
             "_membershipRequestVersion",
