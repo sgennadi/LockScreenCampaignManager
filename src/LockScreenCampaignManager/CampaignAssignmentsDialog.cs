@@ -141,6 +141,14 @@ internal sealed class CampaignAssignmentsDialog : Form
             Dock = DockStyle.Top, AutoSize = true,
             ForeColor = UiStyle.Muted
         }, 0, 1);
+        // Header captions vary considerably across RU/HE at 200% DPI.
+        heading.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(300, heading.ClientSize.Width - 18);
+            foreach (Label label in heading.Controls.OfType<Label>())
+                if (label.MaximumSize.Width != width)
+                    label.MaximumSize = new Size(width, 0);
+        };
         root.Controls.Add(heading, 0, 0);
 
         var split = new SplitContainer {
@@ -191,7 +199,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             RowCount = 15, ColumnCount = 1, Padding = new Padding(5)
         };
         foreach (int h in new[] { 75, 75, 74, 74, 50, 75, 74, 50, 75, 55, 65, 60, 62, 84, 58 })
-            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            fields.RowStyles.Add(h == 58
+                ? new RowStyle(SizeType.AutoSize) // Long translated warning must not be clipped.
+                : new RowStyle(SizeType.Absolute, h));
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
 
@@ -299,7 +309,14 @@ internal sealed class CampaignAssignmentsDialog : Form
         _preview.Dock = DockStyle.Fill;
         fields.Controls.Add(_preview, 0, 13);
         _help.Name = "AssignmentModeHelp";
-        _help.Dock = DockStyle.Fill;
+        _help.Dock = DockStyle.Top;
+        _help.AutoSize = true;
+        fields.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(210, fields.ClientSize.Width - fields.Padding.Horizontal - 22);
+            if (_help.MaximumSize.Width != width)
+                _help.MaximumSize = new Size(width, 0);
+        };
         _help.Text = UiLocale.Display(
             "Screen Saver is a USER policy; Lock Screen is a COMPUTER policy. " +
             "A group may be stored anywhere in AD: the OU is the GPO LINK target. " +
