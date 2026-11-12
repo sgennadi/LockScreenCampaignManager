@@ -974,8 +974,9 @@ internal static class UiLayoutSmokeTests
                     var fields = all.OfType<TableLayoutPanel>()
                         .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
                     if (fields is null || help?.AutoSize != true ||
-                        fields.RowStyles.Count < 15 ||
-                        fields.RowStyles[14].SizeType != SizeType.AutoSize)
+                        fields.RowStyles.Count < 16 ||
+                        fields.RowStyles[14].SizeType != SizeType.AutoSize ||
+                        fields.RowStyles[15].SizeType != SizeType.AutoSize)
                         throw new InvalidOperationException(
                             "Group assignment warnings must auto-wrap at high DPI: " + profile.Name);
                     if (modes is null || modes.Items.Count != 3 ||
