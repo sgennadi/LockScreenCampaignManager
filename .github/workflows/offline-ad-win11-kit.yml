@@ -90,6 +90,7 @@ jobs:
           Copy-Item 'docs/OFFLINE-AD-WIN11-LAB.md' (Join-Path $root 'README.md')
           Copy-Item 'docs/SMB-SYSTEM-CANARY.md' (Join-Path $root 'SMB-SYSTEM-CANARY.md')
           Copy-Item 'docs/ENDPOINT-CLOSURE-AUDIT.md' (Join-Path $root 'ENDPOINT-CLOSURE-AUDIT.md')
+          Copy-Item 'docs/WINDOWS-200-DPI-VISUAL-CHECK.md' (Join-Path $root 'WINDOWS-200-DPI-VISUAL-CHECK.md')
           foreach ($name in @('run_lab_local.ps1','lab_ad_integration.ps1','lab_win11_probe.ps1',
               'run_smb_canary_local.ps1','smb_system_canary_probe.ps1',
               'smb_canary_rsop.ps1', 'endpoint_closure_probe.ps1',
@@ -110,7 +111,7 @@ jobs:
           Compress-Archive -Path "$root/*" -DestinationPath $zip
           $verify = Join-Path $env:RUNNER_TEMP 'LSCM-kit-verify'
           Expand-Archive -LiteralPath $zip -DestinationPath $verify
-          foreach ($path in @('README.md','SMB-SYSTEM-CANARY.md','ENDPOINT-CLOSURE-AUDIT.md','Run-Preflight.cmd','Run-Full-Lab.cmd',
+          foreach ($path in @('README.md','SMB-SYSTEM-CANARY.md','ENDPOINT-CLOSURE-AUDIT.md','WINDOWS-200-DPI-VISUAL-CHECK.md','Run-Preflight.cmd','Run-Full-Lab.cmd',
               'lab.config.sample.json','tools/run_lab_local.ps1',
               'tools/lab_ad_integration.ps1','tools/lab_win11_probe.ps1',
               'tools/run_smb_canary_local.ps1','tools/smb_system_canary_probe.ps1',
