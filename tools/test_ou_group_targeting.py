@@ -74,6 +74,31 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
         self.assertIn('No loopback/Replace is configured automatically.', matrix)
         self.assertIn('Screen Saver is a USER policy', matrix)
 
+    def test_group_first_preserves_exact_dn_across_ou_changes(self):
+        matrix = source("CampaignAssignmentsDialog.cs")
+        deploy = source("DomainDeploymentForm.cs")
+        tests = source("SelfTests.cs")
+        for value in (
+            "MustShowAllToKeepGroup(chosenDn, allowed)",
+            'ReplaceGroupChoices(groups, null, chosenDn)',
+            'ReplaceGroupChoices(_computerGroup, null, current.ComputerGroupDn)',
+            'ReplaceGroupChoices(_userGroup, null, current.UserGroupDn)',
+            'existing selection retained',
+            'selected OU\'s DIRECT membership list',
+            'await Task.Delay(250)',
+        ):
+            self.assertIn(value, matrix, value)
+        # Never empty the list before the LDAP lookup has completed.
+        self.assertNotIn(
+            'ReplaceGroupChoices(groups, new HashSet<string>(StringComparer.OrdinalIgnoreCase));',
+            matrix,
+        )
+        self.assertIn("if (IsOuGroupFilterActive && _groups.SelectedItem is DirectoryRow chosen)", deploy)
+        self.assertIn('_groupListMode.SelectedIndex = 1; // Cancels older async lookups.', deploy)
+        self.assertIn("if (!string.IsNullOrWhiteSpace(_company.DefaultGroupDn))", deploy)
+        self.assertIn("MustShowAllToKeepGroup(", tests)
+        self.assertIn("group-first selection", tests)
+
     def test_browse_has_independent_full_width_layout(self):
         deploy = source("DomainDeploymentForm.cs")
         smoke = source("UiLayoutSmokeTests.cs")
