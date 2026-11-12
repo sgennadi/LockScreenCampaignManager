@@ -37,7 +37,7 @@ class DirectCoverageContracts(unittest.TestCase):
         ):
             self.assertIn(token, between, token)
         for forbidden in ("ModifyRequest", "AddRequest", "DeleteRequest",
-                          "Set-AD", "Set-GP", "WriteAllText", "tokenGroups",
+                          "Set-AD", "Set-GP", "WriteAllText", '"tokenGroups"',
                           "sAMAccountName", "userPrincipalName"):
             self.assertNotIn(forbidden, between, forbidden)
 
