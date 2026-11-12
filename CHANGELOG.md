@@ -1,3 +1,11 @@
+## 0.4.0-preview.104 — verified OU/group direct coverage counters (2026-11-12)
+
+- Extend signed/sealed read-only LDAP OU discovery to count **computer or user objects** in the selected subtree and **how many are direct members** of each group; count each principal once per group and expose no individual identities.
+- Show a scoped Computer OU/group coverage status in AD Deployment; the multi-group matrix gets separate User and Computer count labels. All-groups/group-first mode still shows counts without silently filtering away a chosen group.
+- Fail closed on truncated queries (5,000 objects), wrong OU/principal scope, missing flags, duplicate/mismatched group counts or stale asynchronous requests. `Not verified` is explicitly different from verified zero; OU/DC/selection changes invalidate previous evidence.
+- RU/HE translations and scrollable, auto-wrapping count labels for 100–200% DPI. Add self-tests, layout smoke and offline Python contracts for User/Computer isolation, count bounds and no AD/GPO writes.
+- **No GPO/AD changes:** these are *direct memberOf counts*, including disabled/inactive AD objects; they do not include nested/primary group membership or prove GPO applicability. Real Windows 10/11 gpresult/RSoP, physical 200% UI, SMB LocalSystem and JPG User Screen Saver acceptance remain open.
+
 ## 0.4.0-preview.103 — translated OU/User/Computer group targeting (2026-11-12)
 
 - Localize AD Deployment OU-first and group-first choices, direct-membership results, connection warnings, GPO link guidance and User/Computer assignment buttons into Russian/Hebrew. Do not change LDAP distinguished names, group identities, GPO rights or security filtering.
