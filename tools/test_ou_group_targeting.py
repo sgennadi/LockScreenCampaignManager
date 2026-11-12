@@ -99,6 +99,46 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
         self.assertIn("MustShowAllToKeepGroup(", tests)
         self.assertIn("group-first selection", tests)
 
+    def test_preview103_target_labels_translated_without_changing_ad_values(self):
+        ui = source("UiLocale.cs")
+        target = source("UiLocale.Targeting103.cs")
+        deploy = source("DomainDeploymentForm.cs")
+        matrix = source("CampaignAssignmentsDialog.cs")
+        smoke = source("UiLayoutSmokeTests.cs")
+        import re
+        for prefix in ("Targeting103Russian", "Targeting103Hebrew"):
+            self.assertIn(prefix + " = new(StringComparer.Ordinal)", target)
+            body = target.split(prefix + " = new(StringComparer.Ordinal)", 1)[1].split("};", 1)[0]
+            keys = re.findall(r'^\\s*\\["([^"]+)"\\]\\s*=', body, re.M)
+            self.assertGreaterEqual(len(keys), 55)
+            self.assertEqual(len(keys), len(set(keys)))
+            for key in (
+                "OU member groups (computers)",
+                "All domain groups (group first)",
+                "User OU / groups...",
+                "Computer + User groups...",
+                "Filter user groups by selected OU",
+                "Filter computer groups by selected OU",
+                "Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.",
+            ):
+                self.assertIn(key, keys, (prefix, key))
+        for token in (
+            "Targeting103EnglishByRussian.TryGetValue",
+            "Targeting103EnglishByHebrew.TryGetValue",
+            "Targeting103Russian.TryGetValue",
+            "Targeting103Hebrew.TryGetValue",
+            '"DeploymentGroupListMode"',
+        ):
+            self.assertIn(token, ui)
+        self.assertIn('UiLocale.Display(_project.EffectiveCampaignMode switch', deploy)
+        self.assertIn('UiLocale.Display("Group chosen. Select the OU', deploy)
+        self.assertIn('"Filter computer groups by selected OU"', matrix)
+        self.assertIn('"Filter user groups by selected OU"', matrix)
+        self.assertIn('SizeType.AutoSize) // Long translated warning', matrix)
+        self.assertIn('fields.RowStyles[14].SizeType != SizeType.AutoSize', smoke)
+        self.assertNotIn('selectedOu.Dn + translated', deploy)
+        self.assertNotIn('row.Dn = UiLocale', deploy)
+
     def test_browse_has_independent_full_width_layout(self):
         deploy = source("DomainDeploymentForm.cs")
         smoke = source("UiLayoutSmokeTests.cs")
