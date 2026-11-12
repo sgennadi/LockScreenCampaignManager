@@ -21,7 +21,11 @@ internal sealed class CampaignAssignmentsDialog : Form
     private readonly List<AdChoice> _groups;
     // Optional signed, read-only LDAP lookup provided by the connection form.
     // Offline layout tests use All groups without any directory connection.
-    private readonly Func<string, bool, Task<IReadOnlyCollection<string>>>? _membershipLookup;
+    private readonly Func<string, bool, Task<OuGroupDirectCoverage>>? _membershipLookup;
+    private OuGroupDirectCoverage? _computerCoverage;
+    private OuGroupDirectCoverage? _userCoverage;
+    private readonly Label _computerCoverageLabel = new() { Name = "AssignmentComputerCoverage" };
+    private readonly Label _userCoverageLabel = new() { Name = "AssignmentUserCoverage" };
     private readonly CheckBox _computerDirectMembers = new();
     private readonly CheckBox _userDirectMembers = new();
     private int _computerMembershipGeneration;
@@ -46,7 +50,7 @@ internal sealed class CampaignAssignmentsDialog : Form
     internal CampaignAssignmentsDialog(CampaignProject project,
         IEnumerable<AdChoice> ous, IEnumerable<AdChoice> groups,
         string currentComputerOu, string currentComputerGroup,
-        Func<string, bool, Task<IReadOnlyCollection<string>>>? membershipLookup = null)
+        Func<string, bool, Task<OuGroupDirectCoverage>>? membershipLookup = null)
     {
         _project = project;
         _membershipLookup = membershipLookup;
@@ -196,12 +200,13 @@ internal sealed class CampaignAssignmentsDialog : Form
             Name = "AssignmentScrollableFields",
             Dock = DockStyle.Top, AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            RowCount = 15, ColumnCount = 1, Padding = new Padding(5)
+            RowCount = 16, ColumnCount = 1, Padding = new Padding(5)
         };
         foreach (int h in new[] { 75, 75, 74, 74, 50, 75, 74, 50, 75, 55, 65, 60, 62, 84, 58 })
             fields.RowStyles.Add(h == 58
                 ? new RowStyle(SizeType.AutoSize) // Long translated warning must not be clipped.
                 : new RowStyle(SizeType.Absolute, h));
+        fields.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Coverage summary for both scopes
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
 
@@ -226,16 +231,26 @@ internal sealed class CampaignAssignmentsDialog : Form
         FillAdChoices(_userGroup, _groups, "AssignmentUserGroup");
         _computerOu.SelectedIndexChanged += async (_, _) =>
         {
+            _computerCoverage = null;
+            UpdateCoverageLabel(false);
             CommitRow();
             if (!_loading) await RefreshScopeGroupChoicesAsync(false);
         };
-        _computerGroup.SelectedIndexChanged += (_, _) => CommitRow();
+        _computerGroup.SelectedIndexChanged += (_, _) => {
+            CommitRow();
+            UpdateCoverageLabel(false);
+        };
         _userOu.SelectedIndexChanged += async (_, _) =>
         {
+            _userCoverage = null;
+            UpdateCoverageLabel(true);
             CommitRow();
             if (!_loading) await RefreshScopeGroupChoicesAsync(true);
         };
-        _userGroup.SelectedIndexChanged += (_, _) => CommitRow();
+        _userGroup.SelectedIndexChanged += (_, _) => {
+            CommitRow();
+            UpdateCoverageLabel(true);
+        };
         fields.Controls.Add(Field("Computer OU (Lock Screen target)", _computerOu), 0, 2);
         fields.Controls.Add(Field("Computer security group (Lock Screen)", _computerGroup), 0, 3);
         _computerDirectMembers.Name = "AssignmentFilterComputerGroupsByOu";
@@ -324,6 +339,34 @@ internal sealed class CampaignAssignmentsDialog : Form
             "No loopback/Replace is configured automatically.");
         _help.ForeColor = UiStyle.Muted;
         fields.Controls.Add(_help, 0, 14);
+
+        var coverageRows = new TableLayoutPanel {
+            Name = "AssignmentScopeCoverageRows",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            RowCount = 2, ColumnCount = 1
+        };
+        coverageRows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        coverageRows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        foreach (Label label in new[] { _computerCoverageLabel, _userCoverageLabel })
+        {
+            label.AutoSize = true;
+            label.Dock = DockStyle.Top;
+            label.ForeColor = UiStyle.Navy;
+            label.MaximumSize = new Size(600, 0);
+        }
+        fields.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(210, fields.ClientSize.Width - fields.Padding.Horizontal - 22);
+            foreach (Label label in new[] { _computerCoverageLabel, _userCoverageLabel })
+                if (label.MaximumSize.Width != width)
+                    label.MaximumSize = new Size(width, 0);
+        };
+        coverageRows.Controls.Add(_computerCoverageLabel, 0, 0);
+        coverageRows.Controls.Add(_userCoverageLabel, 0, 1);
+        fields.Controls.Add(coverageRows, 0, 15);
+        UpdateCoverageLabel(false);
+        UpdateCoverageLabel(true);
 
         var footer = new FlowLayoutPanel {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
@@ -415,6 +458,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             SelectDn(_userGroup, current.UserGroupDn);
         }
         finally { _loading = false; }
+        _computerCoverage = null;
+        _userCoverage = null;
+        UpdateCoverageLabel(false);
+        UpdateCoverageLabel(true);
         SetModeVisibility();
         _ = RefreshScopeGroupChoicesAsync(false);
         _ = RefreshScopeGroupChoicesAsync(true);
@@ -487,13 +534,17 @@ internal sealed class CampaignAssignmentsDialog : Form
         string selectedOuDn = SelectedDn(ou);
         string chosenDn = RememberedGroupDn(userScope, groups);
 
-        // Group-first mode: show all security groups until an OU is chosen.
-        // Rebuilding items should not change the saved assignment.
-        if (!filter.Checked || selectedOuDn.Length == 0 || _membershipLookup is null)
+        // Retain a chosen group while querying. Even in All groups mode we
+        // read the OU counts when possible, without filtering the choices.
+        if (selectedOuDn.Length == 0 || _membershipLookup is null)
         {
+            if (userScope) _userCoverage = null;
+            else _computerCoverage = null;
             ReplaceGroupChoices(groups, null, chosenDn);
+            UpdateCoverageLabel(userScope);
             return;
         }
+        if (!filter.Checked) ReplaceGroupChoices(groups, null, chosenDn);
         // Retain the current choice until LDAP has returned an exact answer.
         // The prior implementation cleared the list immediately and then
         // CommitRow() silently replaced a saved DN with an empty string.
@@ -506,7 +557,7 @@ internal sealed class CampaignAssignmentsDialog : Form
             return;
         try
         {
-            IReadOnlyCollection<string> groupDns =
+            OuGroupDirectCoverage coverage =
                 await _membershipLookup(selectedOuDn, userScope);
             if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
                 IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
@@ -514,8 +565,16 @@ internal sealed class CampaignAssignmentsDialog : Form
             // The operator can change the selected group during lookup;
             // do not overwrite that newer selection with a stale snapshot.
             chosenDn = RememberedGroupDn(userScope, groups);
-            var allowed = new HashSet<string>(groupDns, StringComparer.OrdinalIgnoreCase);
-            if (MustShowAllToKeepGroup(chosenDn, allowed))
+            if (userScope) _userCoverage = coverage;
+            else _computerCoverage = coverage;
+            var allowed = coverage.DirectGroupDns.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!filter.Checked)
+            {
+                ReplaceGroupChoices(groups, null, chosenDn);
+                _help.Text = UiLocale.Display(
+                    "All groups shown. OU direct-member coverage is read-only and not effective GPO application.");
+            }
+            else if (MustShowAllToKeepGroup(chosenDn, allowed))
             {
                 bool priorLoading = _loading;
                 _loading = true;
@@ -535,21 +594,51 @@ internal sealed class CampaignAssignmentsDialog : Form
                     "Uncheck OU filter to choose any domain security group."),
                     UiLocale.Display(userScope ? "User" : "Computer"), groups.Items.Count);
             }
+            UpdateCoverageLabel(userScope);
         }
         catch
         {
             if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
                 IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
                 return;
+            if (userScope) _userCoverage = null;
+            else _computerCoverage = null;
             bool priorLoading = _loading;
             _loading = true;
             try { filter.Checked = false; }
             finally { _loading = priorLoading; }
             ReplaceGroupChoices(groups, null, RememberedGroupDn(userScope, groups));
+            UpdateCoverageLabel(userScope);
             _help.Text = UiLocale.Display(
                 "OU membership lookup unavailable/incomplete. All security groups shown, " +
                 "existing selection retained. Verify USER/COMPUTER targeting and OU link in Preview.");
         }
+    }
+
+    private void UpdateCoverageLabel(bool userScope)
+    {
+        Label label = userScope ? _userCoverageLabel : _computerCoverageLabel;
+        OuGroupDirectCoverage? coverage = userScope ? _userCoverage : _computerCoverage;
+        string expectedOu = SelectedDn(userScope ? _userOu : _computerOu);
+        if (coverage is null ||
+            !string.Equals(coverage.OuDn, expectedOu,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            label.Text = UiLocale.Display(userScope
+                ? "User OU/group coverage: not verified."
+                : "Computer OU/group coverage: not verified.");
+            return;
+        }
+        string chosenGroup = SelectedDn(userScope ? _userGroup : _computerGroup);
+        label.Text = string.IsNullOrWhiteSpace(chosenGroup)
+            ? string.Format(UiLocale.Display(
+                "{0} objects in User/Computer OU subtree. Select a security group."),
+                coverage.PrincipalCount)
+            : string.Format(UiLocale.Display(
+                "OU subtree: {0} {1} objects; selected group: {2} direct matches. " +
+                "Inactive accounts included. Not effective GPO application."),
+                coverage.PrincipalCount, UiLocale.Display(userScope ? "User" : "Computer"),
+                coverage.DirectMatchesFor(chosenGroup));
     }
 
     private void SetModeVisibility()
@@ -562,6 +651,8 @@ internal sealed class CampaignAssignmentsDialog : Form
         _userOu.Enabled = _userGroup.Enabled = hasUser;
         _computerDirectMembers.Enabled = hasComputer && _membershipLookup is not null;
         _userDirectMembers.Enabled = hasUser && _membershipLookup is not null;
+        _computerCoverageLabel.Visible = hasComputer;
+        _userCoverageLabel.Visible = hasUser;
         _saver.Enabled = hasUser && !_photo.Checked;
         _photo.Enabled = hasUser;
         _slide.Enabled = hasUser && _photo.Checked;

@@ -942,6 +942,19 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentComputerGroup");
                     var userGroup = all.OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentUserGroup");
+                    var computerCoverage = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "AssignmentComputerCoverage");
+                    var userCoverage = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "AssignmentUserCoverage");
+                    if (computerCoverage?.AutoSize != true ||
+                        userCoverage?.AutoSize != true ||
+                        !computerCoverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !userCoverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "Independent User/Computer OU counts must start UNVERIFIED without LDAP: " +
+                            profile.Name);
                     // The offline matrix factory has two distinct selected
                     // groups. Rebuilding filtered options must retain their
                     // exact original distinguished names across User/Computer.
@@ -961,8 +974,9 @@ internal static class UiLayoutSmokeTests
                     var fields = all.OfType<TableLayoutPanel>()
                         .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
                     if (fields is null || help?.AutoSize != true ||
-                        fields.RowStyles.Count < 15 ||
-                        fields.RowStyles[14].SizeType != SizeType.AutoSize)
+                        fields.RowStyles.Count < 16 ||
+                        fields.RowStyles[14].SizeType != SizeType.AutoSize ||
+                        fields.RowStyles[15].SizeType != SizeType.AutoSize)
                         throw new InvalidOperationException(
                             "Group assignment warnings must auto-wrap at high DPI: " + profile.Name);
                     if (modes is null || modes.Items.Count != 3 ||
@@ -1115,6 +1129,13 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "DeploymentContentShareBrowse");
                     var groupListMode = Descendants(form).OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "DeploymentGroupListMode");
+                    var coverage = Descendants(form).OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "DeploymentOuGroupCoverage");
+                    if (coverage?.AutoSize != true ||
+                        !coverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "AD OU/group coverage must stay UNVERIFIED in offline wizard: " + profile.Name);
                     if (groupListMode is null || groupListMode.Items.Count != 2 ||
                         groupListMode.SelectedIndex != 0 ||
                         groupListMode.DropDownStyle != ComboBoxStyle.DropDownList)

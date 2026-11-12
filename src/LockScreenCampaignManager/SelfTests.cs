@@ -34,6 +34,7 @@ internal static class SelfTests
             !UiVisualAcceptanceDialog.Meets200PercentLocalConsole(192, false) &&
             !UiVisualAcceptanceDialog.Meets200PercentLocalConsole(144, true),
             "physical DPI pilot never treats remote or simulated layout as accepted");
+        TestOuGroupDirectCoverage();
         TestGroupAssignmentMatrixAndScreenSaverPol();
         // The direct-member list is a browsing aid, not a security verdict:
         // group-first assignments must survive OU changes and row switches.
@@ -554,6 +555,83 @@ internal static class SelfTests
         {
             try { Directory.Delete(root, recursive: true); }
             catch (Exception ex) { AppLog.Write(ex, "JPG self-test cleanup"); }
+        }
+    }
+
+
+    private static void TestOuGroupDirectCoverage()
+    {
+        const string computerOu = "OU=Devices,DC=example,DC=com";
+        const string userOu = "OU=Users,DC=example,DC=com";
+        const string groupA = "CN=PilotPCs,OU=Groups,DC=example,DC=com";
+        const string groupB = "CN=Computers,OU=Groups,DC=example,DC=com";
+        string groupC = "CN=Other,OU=Groups,DC=example,DC=com";
+
+        static System.Text.Json.JsonDocument Evidence(string ou, string kind,
+            int total, (string dn, int count)[] rows, bool readOnly = true)
+        {
+            return System.Text.Json.JsonDocument.Parse(
+                System.Text.Json.JsonSerializer.Serialize(new {
+                    ouDn = ou,
+                    principalKind = kind,
+                    principalCount = total,
+                    computerCount = kind == "Computer" ? total : 0,
+                    userCount = kind == "User" ? total : 0,
+                    directGroupDns = rows.Select(x => x.dn).ToArray(),
+                    directGroupCounts = rows.Select(x =>
+                        new { dn = x.dn, directMemberCount = x.count }).ToArray(),
+                    directMembershipOnly = true,
+                    nestedGroupsExpanded = false,
+                    primaryGroupsIncluded = false,
+                    readOnly
+                }));
+        }
+
+        using (var computers = Evidence(computerOu, "Computer", 8,
+            [(groupA, 3), (groupB, 1)]))
+        {
+            var snapshot = OuGroupDirectCoverage.Parse(computers.RootElement,
+                computerOu.ToUpperInvariant(), "Computer");
+            Check(snapshot.PrincipalCount == 8 &&
+                snapshot.DirectMatchesFor(groupA.ToUpperInvariant()) == 3 &&
+                snapshot.DirectMatchesFor(groupB) == 1 &&
+                snapshot.DirectMatchesFor(groupC) == 0 &&
+                snapshot.DirectGroupDns.Count == 2,
+                "capped direct OU group coverage is exact, case-insensitive and independent");
+        }
+        using (var users = Evidence(userOu, "User", 2, [(groupC, 2)]))
+        {
+            var snapshot = OuGroupDirectCoverage.Parse(users.RootElement, userOu, "User");
+            Check(snapshot.PrincipalKind == "User" &&
+                snapshot.PrincipalCount == 2 &&
+                snapshot.DirectMatchesFor(groupC) == 2 &&
+                snapshot.DirectMatchesFor(groupA) == 0,
+                "user OU/group totals are distinct from computer OU/group totals");
+        }
+        using (var noMembers = Evidence(userOu, "User", 0, []))
+        {
+            var snapshot = OuGroupDirectCoverage.Parse(noMembers.RootElement,
+                userOu, "User");
+            Check(snapshot.PrincipalCount == 0 &&
+                snapshot.DirectMatchesFor(groupC) == 0,
+                "verified empty OU is zero, not unverified");
+        }
+
+        foreach (var invalid in new[] {
+            Evidence(computerOu, "Computer", 5000, [(groupA, 1)]),
+            Evidence(computerOu, "Computer", 4, [(groupA, 5)]),
+            Evidence(computerOu, "Computer", 4, [(groupA, 1), (groupA, 1)]),
+            Evidence(computerOu, "Computer", 4, [(groupA, 1)], false)
+        })
+        {
+            using (invalid)
+            {
+                bool rejected = false;
+                try { _ = OuGroupDirectCoverage.Parse(invalid.RootElement, computerOu,
+                    "Computer"); }
+                catch (InvalidDataException) { rejected = true; }
+                Check(rejected, "incomplete/duplicate/non-read-only LDAP coverage must fail closed");
+            }
         }
     }
 
