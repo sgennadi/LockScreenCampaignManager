@@ -226,6 +226,8 @@ internal static partial class UiLocale
             Visual102EnglishByHebrew.TryGetValue(key, out english) ||
             Targeting103EnglishByRussian.TryGetValue(key, out english) ||
             Targeting103EnglishByHebrew.TryGetValue(key, out english) ||
+            Coverage104EnglishByRussian.TryGetValue(key, out english) ||
+            Coverage104EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -238,6 +240,7 @@ internal static partial class UiLocale
             if (RepairResultsRussian.TryGetValue(key, out ru)) return ru;
             if (Visual102Russian.TryGetValue(key, out ru)) return ru;
             if (Targeting103Russian.TryGetValue(key, out ru)) return ru;
+            if (Coverage104Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -252,6 +255,7 @@ internal static partial class UiLocale
             if (RepairResultsHebrew.TryGetValue(key, out he)) return he;
             if (Visual102Hebrew.TryGetValue(key, out he)) return he;
             if (Targeting103Hebrew.TryGetValue(key, out he)) return he;
+            if (Coverage104Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
