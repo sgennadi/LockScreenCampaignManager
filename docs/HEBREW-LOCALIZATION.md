@@ -18,6 +18,8 @@ Use **Settings → Language → English / עברית (Hebrew) / Русский �
 
 **Expanded in Preview.97:** Client Health SMB/Repair and final-report confirmation, read-only gpresult XML/HKLM verification warnings, privacy-sensitive GPO/closure CSV exports, campaign inventory and GPO status descriptions now include Russian and Hebrew display strings. Technical data, report evidence and commands remain canonical English. Existing approval defaults and GPO GUID confirmations remain unmodified. Six simulated 100–200% layouts test three-language reversibility; live Windows display acceptance remains open.
 
+**Preview.102:** Native Tools / Help visual-DPI acceptance adds 25 English/Russian/Hebrew UI strings and reversible labels. The report records only anonymous operator checks and DPI; it does not prove real physical RTL or GPO applicability. [Run the interactive visual checklist](WINDOWS-200-DPI-VISUAL-CHECK.md). The issue remains open pending real Windows acceptance.
+
 **Partial translation by design:** some advanced AD/GPO dialogs, validation details, raw diagnostic evidence, settings/status subdialogs, some Client Health text and additional dynamic status messages remain English. English and Hebrew are not yet 100% complete, nor is Russian. JPG photo saver deployment still requires real Windows/AD pilot acceptance. A missing translation is displayed in English rather than being silently changed. Restart/reopen a dialog after changing language if a status was generated before the switch.
 
 English is the default. Switching back to English is reversible. This setting changes **UI presentation only**, not campaign schedules, timezone IDs, serialized JSON, agent package structure, Active Directory, GPO behavior or shell script output.

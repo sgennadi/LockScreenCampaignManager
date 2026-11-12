@@ -26,6 +26,14 @@ internal static class SelfTests
         p.StartLocal = new DateTime(2028, 2, 28, 14, 0, 0);
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 1)) == "2028-02-29T14:00:00", "leap year");
         Check(CampaignSchedule.Format(CampaignSchedule.At(p, 2)) == "2028-03-01T14:00:00", "after leap day");
+        Check(UiVisualAcceptanceDialog.ScalePercent(192) == 200 &&
+            UiVisualAcceptanceDialog.ScalePercent(144) == 150 &&
+            UiVisualAcceptanceDialog.ScalePercent(0) == 0,
+            "physical DPI scale calculation is bounded");
+        Check(UiVisualAcceptanceDialog.Meets200PercentLocalConsole(192, true) &&
+            !UiVisualAcceptanceDialog.Meets200PercentLocalConsole(192, false) &&
+            !UiVisualAcceptanceDialog.Meets200PercentLocalConsole(144, true),
+            "physical DPI pilot never treats remote or simulated layout as accepted");
         TestGroupAssignmentMatrixAndScreenSaverPol();
         // The direct-member list is a browsing aid, not a security verdict:
         // group-first assignments must survive OU changes and row switches.

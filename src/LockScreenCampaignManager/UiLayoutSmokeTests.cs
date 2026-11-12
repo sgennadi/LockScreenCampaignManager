@@ -100,6 +100,8 @@ internal static class UiLayoutSmokeTests
             new[] { "Import SMB canary JSON...", "Import cleanup JSON..." }),
         ("Interface settings", () => new UiSettingsDialog(),
             new[] { "Apply" }),
+        ("Visual DPI / language acceptance", () => new UiVisualAcceptanceDialog(),
+            new[] { "Refresh display", "Run offline UI smoke", "Save local report", "Close" }),
         ("SMB feedback settings", () => new FeedbackSettingsDialog(
             new CampaignProject { Name = "layout-only", TimeZoneId = "UTC",
                 FeedbackShare = @"\\example.com\LockScreenReports$",
@@ -903,6 +905,30 @@ internal static class UiLayoutSmokeTests
                             "Full read-only group GPO report grid/filter/export missing at " +
                             profile.Name);
                 }
+                if (window.Name == "Visual DPI / language acceptance")
+                {
+                    var all = Descendants(form).ToArray();
+                    var viewport = all.OfType<Panel>()
+                        .SingleOrDefault(x => x.Name == "VisualAcceptanceScroll");
+                    var checks = all.OfType<CheckBox>()
+                        .Where(x => x.Name.StartsWith("VisualAcceptanceCheck",
+                            StringComparison.Ordinal)).ToArray();
+                    var save = all.OfType<Button>()
+                        .SingleOrDefault(x => x.Name == "VisualAcceptanceSave");
+                    var smoke = all.OfType<Button>()
+                        .SingleOrDefault(x => x.Name == "VisualAcceptanceRunSmoke");
+                    var output = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "VisualAcceptanceDisplayStatus");
+                    if (viewport?.AutoScroll != true || checks.Length != 6 ||
+                        checks.Any(x => x.Checked || x.Height < 45) ||
+                        save is null || save.Enabled ||
+                        smoke is null || !smoke.Enabled || output is null ||
+                        !output.Text.Contains("not checked",
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "Visual DPI review must start offline, unapproved and scrollable at " +
+                            profile.Name);
+                }
                 if (window.Name == "Campaign assignment matrix")
                 {
                     var all = Descendants(form).ToArray();
@@ -1165,6 +1191,16 @@ internal static class UiLayoutSmokeTests
         CheckPreview96UpdaterLabLanguageAndDpi();
         CheckPreview97GpoClientHealth();
         CheckRepairResultTranslations();
+        foreach (string language in new[] { "Russian", "Hebrew" })
+        {
+            const string caption = "Visual DPI / language acceptance";
+            string translated = UiLocale.Translate(caption, language);
+            if (translated == caption ||
+                UiLocale.Translate(translated, "English") != caption ||
+                UiLocale.Translate(translated, language) != translated)
+                throw new InvalidOperationException(
+                    "Preview.102 visual DPI caption must translate and reverse: " + language);
+        }
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");

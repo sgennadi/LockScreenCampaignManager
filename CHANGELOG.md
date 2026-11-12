@@ -1,3 +1,11 @@
+## 0.4.0-preview.102 — native 200% display / EN-RU-HE visual acceptance (2026-11-12)
+
+- Add native **Tools / Help → Visual DPI / language check** in the portable EXE with a scrollable six-item checklist for real UI inspection (Wizard, AD Browse, Client Health, RTL, mixed technical LTR and English/Russian/Hebrew switching).
+- Read effective DPI of the check window with Windows GetDpiForWindow (PerMonitorV2), verify a local console and exactly 192 DPI (200%); remote desktop or simulated DPI never qualifies for local acceptance.
+- Allow explicit offline `--ui-smoke-test` execution with a bounded subprocess timeout, then gate local report saving on smoke success and all six checked physical observations.
+- Store unsigned operator evidence only in LocalAppData with no machine/domain identity, screenshots, remote commands, network upload or GPO operations; never mistake it for cryptographic attestation or real policy results.
+- Add reversible Russian/Hebrew captions, WinForms simulated-scale smoke, native selection/acceptance unit assertions and offline source/privacy CI tests. Include operator guide in the Lab Kit. Real physical checks still require a Windows desktop (#36).
+
 ## 0.4.0-preview.101 — preserve group-first OU/Group targeting (2026-11-12)
 
 - Preserve explicitly chosen Computer and User security groups when selecting/changing their target OU, instead of allowing direct-member LDAP filter refresh to clear the selected DN.
