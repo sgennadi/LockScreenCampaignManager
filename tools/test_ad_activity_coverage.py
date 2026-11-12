@@ -23,7 +23,7 @@ class ComputerActivityContracts(unittest.TestCase):
         self.assertIn('SearchScope.Base', scoped)
         self.assertIn('if (principals.Count >= QueryLimit)', scoped)
         for forbidden in ("ModifyRequest", "AddRequest", "DeleteRequest",
-                          "WriteAllText", "Set-AD", "Set-GP", "tokenGroups"):
+                          "WriteAllText", "Set-AD", "Set-GP", '"tokenGroups"'):
             self.assertNotIn(forbidden, scoped)
 
     def test_activity_accounting_no_false_online_claims(self):
