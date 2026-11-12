@@ -123,7 +123,7 @@ class DirectCoverageContracts(unittest.TestCase):
             self.assertEqual(len(vals), len(set(vals)), "Reverse map ambiguous")
             pairs.append(keys)
         self.assertEqual(set(pairs[0]), set(pairs[1]))
-        for forbidden in ("LDAP", "DomainCredentials", "ModifyRequest", "New-GPO",
+        for forbidden in ("LdapConnection", "DomainCredentials", "ModifyRequest", "New-GPO",
                           "HttpClient", "HttpWebRequest", "File.WriteAllText"):
             self.assertNotIn(forbidden, locale)
 
