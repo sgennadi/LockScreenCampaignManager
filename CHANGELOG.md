@@ -1,3 +1,11 @@
+## 0.4.0-preview.105 — approximate AD computer logon activity (2026-11-12)
+
+- Extend signed/sealed read-only Computer OU discovery with `userAccountControl`, replicated `lastLogonTimestamp` and DC RootDSE UTC; return only aggregate enabled/disabled/unknown and direct group counts, never individual identities.
+- Add view-only 30/90/180/365-day selectors in AD Deployment and Computer group assignments. Distinguish unknown/invalid timestamps from verified zero and never use User account activity for Screen Saver OU/group scope.
+- Validate monotone age buckets, group count bounds, incomplete activity evidence and mismatched principals; keep existing 5,000-principal cap, stale-request cancellation, group-first behavior and all deployment permissions/approvals.
+- RU/HE translations, local Windows simulated 100–200% layout checks and self-tests plus offline CI contracts. Display selections do not modify OU/group GPO policy data.
+- **Important:** replicated `lastLogonTimestamp` can lag substantially; it does not represent online clients, effective group-policy results or actual agent response. Real Windows 10/11 GPO, SMB LocalSystem, physical 200% RTL and JPG User GPO acceptance still require isolated domain testing.
+
 ## 0.4.0-preview.104 — verified OU/group direct coverage counters (2026-11-12)
 
 - Extend signed/sealed read-only LDAP OU discovery to count **computer or user objects** in the selected subtree and **how many are direct members** of each group; count each principal once per group and expose no individual identities.
