@@ -1129,6 +1129,13 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "DeploymentContentShareBrowse");
                     var groupListMode = Descendants(form).OfType<ComboBox>()
                         .SingleOrDefault(x => x.Name == "DeploymentGroupListMode");
+                    var coverage = Descendants(form).OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "DeploymentOuGroupCoverage");
+                    if (coverage?.AutoSize != true ||
+                        !coverage.Text.Contains("not verified",
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException(
+                            "AD OU/group coverage must stay UNVERIFIED in offline wizard: " + profile.Name);
                     if (groupListMode is null || groupListMode.Items.Count != 2 ||
                         groupListMode.SelectedIndex != 0 ||
                         groupListMode.DropDownStyle != ComboBoxStyle.DropDownList)
