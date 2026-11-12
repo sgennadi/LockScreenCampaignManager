@@ -8,6 +8,9 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string, string> Targeting103Russian = new(StringComparer.Ordinal)
     {
+        ["Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. Screen Saver: use Group assignments to choose a user OU and user security group. AD security groups may reside in other OUs. A group alone cannot be a GPO link; Preview confirms the effective OU and security filtering before any deployment."] = "Экран блокировки: привяжите GPO к OU компьютеров и ограничьте группой компьютеров. Заставка: выберите OU и группу пользователей в назначениях. Группы могут храниться в других OU; GPO нельзя привязать только к группе. Перед развёртыванием проверьте Preview.",
+        ["Matched groups can be located in ANY OU. Direct computer membership only: nested and primary group memberships are not expanded. Choose All groups if needed. A GPO must still be linked to a target OU."] = "קבוצпы могут находиться в любой OU. Здесь показано только прямое членство компьютеров; вложенные и основные группы не раскрываются. При необходимости выберите «Все группы». Для GPO нужна OU привязки.",
+        ["{0} independent group assignment(s) saved locally. Preview validates exact computer and user scopes; no GPO changed."] = "Сохранено назначений групп: {0}. Preview проверяет области компьютеров и пользователей; GPO не изменён.",
         ["Group assignments: Lock Screen / Screen Saver / Both"] = "Назначение групп: экран блокировки / заставка / оба",
         ["Groups with computers in selected OU (direct)"] = "Группы с компьютерами выбранной OU (прямое членство)",
         ["All domain security groups (choose group first)"] = "Все группы безопасности домена (сначала группа)",
@@ -71,6 +74,9 @@ internal static partial class UiLocale
 
     private static readonly Dictionary<string, string> Targeting103Hebrew = new(StringComparer.Ordinal)
     {
+        ["Lock Screen: link Computer GPO to computer OU; restrict with a computer security group. Screen Saver: use Group assignments to choose a user OU and user security group. AD security groups may reside in other OUs. A group alone cannot be a GPO link; Preview confirms the effective OU and security filtering before any deployment."] = "מסך נעילה: קשרו GPO ליחידת המחשבים והגבילו באמצעות קבוצת מחשבים. שומר מסך: בחרו יחידת משתמשים וקבוצת משתמשים בשיוכים. קבוצות עשויות להימצא ביחידות אחרות; אי אפשר לקשר GPO לקבוצה בלבד. בדקו את התצוגה המקדימה לפני פריסה.",
+        ["Matched groups can be located in ANY OU. Direct computer membership only: nested and primary group memberships are not expanded. Choose All groups if needed. A GPO must still be linked to a target OU."] = "קבוצות יכולות להימצא בכל יחידה ארגונית. מוצגת חברות ישירה של מחשבים בלבד; קבוצות מקוננות וראשיות אינן מורחבות. ניתן לבחור את כל הקבוצות. GPO עדיין חייב להיות מקושר ליחידה ארגונית.",
+        ["{0} independent group assignment(s) saved locally. Preview validates exact computer and user scopes; no GPO changed."] = "נשמרו {0} שיוכי קבוצות מקומיים. התצוגה המקדימה מאמתת תחומי מחשב ומשתמש; GPO לא שונה.",
         ["Group assignments: Lock Screen / Screen Saver / Both"] = "שיוך קבוצות: מסך נעילה / שומר מסך / שניהם",
         ["Groups with computers in selected OU (direct)"] = "קבוצות עם מחשבים ביחידה שנבחרה (חברות ישירה)",
         ["All domain security groups (choose group first)"] = "כל קבוצות האבטחה בתחום (בחירת קבוצה תחילה)",
@@ -131,6 +137,11 @@ internal static partial class UiLocale
         ["DC writable status could not be verified. Select another DC or inspect LDAP diagnostics."] = "לא ניתן לאמת הרשאות כתיבה בבקר התחום. בחרו בקר אחר או בדקו את אבחון LDAP.",
         ["Confirmed read-only DC. Select a writable domain controller before deployment."] = "בקר התחום לקריאה בלבד. בחרו בקר הניתן לכתיבה לפני הפריסה.",
     };
+
+    // Localize operator-facing variable descriptions, never the DN/GUID/identity itself.
+    internal static string Targeting103Format(string template, params object[] arguments) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture,
+            Display(template), arguments);
 
     private static readonly Dictionary<string, string> Targeting103EnglishByRussian =
         Targeting103Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
