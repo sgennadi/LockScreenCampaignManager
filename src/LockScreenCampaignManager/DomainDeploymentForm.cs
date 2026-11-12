@@ -30,6 +30,8 @@ internal sealed partial class DomainDeploymentForm : Form
     private int _membershipRequestVersion;
     private string _membershipOuDn = string.Empty;
     private HashSet<string> _directComputerGroupDns = new(StringComparer.OrdinalIgnoreCase);
+    private OuGroupDirectCoverage? _computerCoverage;
+    private readonly Label _coverageStatus = new() { Name = "DeploymentOuGroupCoverage" };
     private readonly ListBox _ous = new();
     private readonly ListBox _groups = new();
     private readonly TextBox _details = new();
@@ -452,12 +454,13 @@ internal sealed partial class DomainDeploymentForm : Form
             }
         };
         layout.Controls.Add(split, 0, 4);
-        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
+        var lists = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1 };
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
         split.Panel1.Controls.Add(lists);
         _ouFilter.Dock = DockStyle.Fill;
         _ouFilter.PlaceholderText = UiLocale.Display("Search OU...");
@@ -507,6 +510,7 @@ internal sealed partial class DomainDeploymentForm : Form
                 _groupListMode.SelectedIndex == 0)
                 _groupListMode.SelectedIndex = 1;
             InvalidatePlan();
+            UpdateCoverageStatus();
             if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null)
                 _progress.Text = UiLocale.Display("Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.");
         };
@@ -516,6 +520,12 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.Controls.Add(_groupListMode, 0, 2);
         lists.Controls.Add(_groupFilter, 0, 3);
         lists.Controls.Add(_groups, 0, 4);
+        _coverageStatus.Dock = DockStyle.Fill;
+        _coverageStatus.AutoEllipsis = false;
+        _coverageStatus.TextAlign = ContentAlignment.MiddleLeft;
+        _coverageStatus.ForeColor = UiStyle.Navy;
+        _coverageStatus.Text = UiLocale.Display("OU/group coverage: not verified.");
+        lists.Controls.Add(_coverageStatus, 0, 5);
         _details.Dock = DockStyle.Fill;
         _details.RightToLeft = RightToLeft.No; // exact plan/AD evidence
         _details.Multiline = true;
@@ -596,7 +606,7 @@ internal sealed partial class DomainDeploymentForm : Form
     }
 
 
-    private async Task<IReadOnlyCollection<string>> FindScopedMemberGroupsAsync(
+    private async Task<OuGroupDirectCoverage> FindScopedMemberGroupsAsync(
         string ouDn, bool userScope)
     {
         if (string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
@@ -606,17 +616,8 @@ internal sealed partial class DomainDeploymentForm : Form
         string mode = userScope ? "UserGroupsForOu" : "ComputerGroupsForOu";
         var response = await Task.Run(() => DomainPowerShellRunner.Execute(
             DomainOperation.Discovery, mode, new { domain, dc, ouDn }, credentials));
-        var data = response.GetProperty("data");
-        if (!string.Equals(data.GetProperty("ouDn").GetString(), ouDn,
-                StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(data.GetProperty("principalKind").GetString(),
-                userScope ? "User" : "Computer", StringComparison.Ordinal) ||
-            data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
-            throw new InvalidDataException("OU membership response differs from the selected scope.");
-        return data.GetProperty("directGroupDns").EnumerateArray()
-            .Select(item => item.GetString() ?? string.Empty)
-            .Where(value => value.Length > 0)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return OuGroupDirectCoverage.Parse(response.GetProperty("data"), ouDn,
+            userScope ? "User" : "Computer");
     }
 
     private bool HasSelectedTargets =>
@@ -904,6 +905,8 @@ internal sealed partial class DomainDeploymentForm : Form
         _membershipRequestVersion++; // Ignore any stale asynchronous LDAP result.
         _membershipOuDn = string.Empty;
         _directComputerGroupDns.Clear();
+        _computerCoverage = null;
+        UpdateCoverageStatus();
         _allOus.Clear();
         _allGroups.Clear();
         FilterOus();
@@ -1007,6 +1010,8 @@ internal sealed partial class DomainDeploymentForm : Form
             _membershipRequestVersion++;
             _membershipOuDn = string.Empty;
             _directComputerGroupDns.Clear();
+            _computerCoverage = null;
+            UpdateCoverageStatus();
             _allOus.Clear();
             var ouRows = ousResponse.GetProperty("data").EnumerateArray()
                 .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
@@ -1138,6 +1143,28 @@ internal sealed partial class DomainDeploymentForm : Form
         finally { _groups.EndUpdate(); }
     }
 
+    private void UpdateCoverageStatus()
+    {
+        string ouDn = (_ous.SelectedItem as DirectoryRow)?.Dn ?? string.Empty;
+        if (_computerCoverage is null ||
+            !string.Equals(_computerCoverage.OuDn, ouDn,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _coverageStatus.Text = UiLocale.Display("OU/group coverage: not verified.");
+            return;
+        }
+        var selected = _groups.SelectedItem as DirectoryRow;
+        _coverageStatus.Text = selected is null
+            ? string.Format(UiLocale.Display(
+                "OU subtree: {0} computer objects. Choose a group to check direct matches."),
+                _computerCoverage.PrincipalCount)
+            : string.Format(UiLocale.Display(
+                "OU subtree: {0} computers; selected group: {1} direct matches. " +
+                "Includes inactive accounts; not effective GPO coverage."),
+                _computerCoverage.PrincipalCount,
+                _computerCoverage.DirectMatchesFor(selected.Dn));
+    }
+
     private async Task RefreshComputerGroupMembershipAsync()
     {
         int request = ++_membershipRequestVersion;
@@ -1156,9 +1183,13 @@ internal sealed partial class DomainDeploymentForm : Form
         }
         _membershipOuDn = string.Empty;
         _directComputerGroupDns.Clear();
+        _computerCoverage = null;
+        UpdateCoverageStatus();
         FilterGroups();
-        if (!IsOuGroupFilterActive || string.IsNullOrEmpty(selectedOu) ||
-            string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
+        if (string.IsNullOrEmpty(selectedOu) ||
+            string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc) ||
+            _project.EffectiveCampaignMode != CampaignTargetMode.LockScreen ||
+            _project.TargetAssignments.Count != 0)
             return;
 
         _progress.Text = UiLocale.Display(
@@ -1173,18 +1204,14 @@ internal sealed partial class DomainDeploymentForm : Form
                 DomainOperation.Discovery, "ComputerGroupsForOu",
                 new { domain, dc, ouDn = selectedOu }, credentials));
             if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
-            var data = response.GetProperty("data");
-            if (!string.Equals(data.GetProperty("ouDn").GetString(), selectedOu,
-                    StringComparison.OrdinalIgnoreCase) ||
-                data.GetProperty("directMembershipOnly").ValueKind != JsonValueKind.True)
-                throw new InvalidDataException("OU group membership result scope mismatch.");
-            _directComputerGroupDns = data.GetProperty("directGroupDns")
-                .EnumerateArray().Select(x => x.GetString() ?? string.Empty)
-                .Where(x => x.Length > 0)
+            _computerCoverage = OuGroupDirectCoverage.Parse(
+                response.GetProperty("data"), selectedOu, "Computer");
+            _directComputerGroupDns = _computerCoverage.DirectGroupDns
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             _membershipOuDn = selectedOu;
             FilterGroups();
-            int computerCount = data.GetProperty("computerCount").GetInt32();
+            UpdateCoverageStatus();
+            int computerCount = _computerCoverage.PrincipalCount;
             _progress.Text = string.Format(UiLocale.Display(
                 "Found {0} security groups with direct computer members in selected OU ({1} computers). " +
                 "Nested and primary groups are NOT included. Use All groups to choose any other group."),
@@ -1195,7 +1222,11 @@ internal sealed partial class DomainDeploymentForm : Form
             if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
             // Do not quietly turn a failed/incomplete LDAP query into a
             // seemingly complete filtered list. Offer explicit All groups.
+            _computerCoverage = null;
+            _membershipOuDn = string.Empty;
+            _directComputerGroupDns.Clear();
             _groupListMode.SelectedIndex = 1;
+            UpdateCoverageStatus();
             _progress.Text = UiLocale.Display(
                 "OU membership filter unavailable or incomplete. Switched to All groups. " +
                 "Select an OU for the GPO link and verify actual membership during Preview.");
