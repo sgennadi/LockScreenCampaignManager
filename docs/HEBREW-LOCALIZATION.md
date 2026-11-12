@@ -1,5 +1,7 @@
 # English / Hebrew / Russian interface — iterative localization (Preview.97)
 
+**Preview.103:** AD Deployment and Group assignments now translate OU-first/Group-first, separate User/Computer target labels, LDAP direct-membership warnings and Save/Preview guidance into Russian and Hebrew. Selected LDAP DN/GUID/OU and policy keys never change with language. Group assignments provides auto-wrapping warnings for 200% DPI; actual physical Windows 10/11 RTL inspection remains required (#36). [Targeting guide](OU-AND-SECURITY-GROUP-TARGETING.md).
+
 Use **Settings → Language → English / עברית (Hebrew) / Русский → Apply**. Language is stored in the existing per-user `ui-settings.json` beside density, UI scale and font size. No AD privileges, additional installation or language packs are required.
 
 **Covered in Preview.90:** most primary navigation buttons, menu labels, Wizard actions, Settings, key software-update controls, GPO Operations tabs, and the Local Lab Evidence viewer. Main windows use WinForms RTL mirroring. Technical text/values (UNC, LDAP, GPO GUID, logs, JSON, machine names, hashes, report summary) stay LTR to avoid corrupting their perceived order.

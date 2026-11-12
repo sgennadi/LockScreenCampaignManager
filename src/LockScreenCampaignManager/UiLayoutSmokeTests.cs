@@ -956,10 +956,19 @@ internal static class UiLayoutSmokeTests
                         .SingleOrDefault(x => x.Name == "AssignmentFilterComputerGroupsByOu");
                     var userMemberFilter = all.OfType<CheckBox>()
                         .SingleOrDefault(x => x.Name == "AssignmentFilterUserGroupsByOu");
+                    var help = all.OfType<Label>()
+                        .SingleOrDefault(x => x.Name == "AssignmentModeHelp");
+                    var fields = all.OfType<TableLayoutPanel>()
+                        .SingleOrDefault(x => x.Name == "AssignmentScrollableFields");
+                    if (fields is null || help?.AutoSize != true ||
+                        fields.RowStyles.Count < 15 ||
+                        fields.RowStyles[14].SizeType != SizeType.AutoSize)
+                        throw new InvalidOperationException(
+                            "Group assignment warnings must auto-wrap at high DPI: " + profile.Name);
                     if (modes is null || modes.Items.Count != 3 ||
                         computerMemberFilter is null || userMemberFilter is null ||
-                        !computerMemberFilter.Text.Contains("COMPUTER", StringComparison.Ordinal) ||
-                        !userMemberFilter.Text.Contains("USER", StringComparison.Ordinal) ||
+                        !computerMemberFilter.Text.Contains("computer", StringComparison.OrdinalIgnoreCase) ||
+                        !userMemberFilter.Text.Contains("user", StringComparison.OrdinalIgnoreCase) ||
                         !modes.Items.Contains(CampaignTargetMode.Both) ||
                         !modes.Items.Contains(CampaignTargetMode.LockScreen) ||
                         !modes.Items.Contains(CampaignTargetMode.ScreenSaver) ||

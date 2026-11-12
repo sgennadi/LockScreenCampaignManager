@@ -115,20 +115,41 @@ internal sealed class CampaignAssignmentsDialog : Form
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
             Padding = new Padding(17)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 79));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         Controls.Add(root);
 
-        var title = new Label {
-            Text = "Group assignments — choose Lock Screen, Screen Saver or Both" +
-                Environment.NewLine +
-                "Lock Screen = computer OU/group (HKLM). Screen Saver = user OU/group (HKCU). " +
-                "Both uses two independent, filtered GPOs.",
-            Dock = DockStyle.Fill, ForeColor = UiStyle.Navy,
-            Font = new Font("Segoe UI Semibold", 11f)
+        // Use two independently translated labels; concatenating both into
+        // a single Label used to bypass the reversible RU/HE caption map.
+        var heading = new TableLayoutPanel {
+            Name = "AssignmentTargetHeading", Dock = DockStyle.Fill,
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 2
         };
-        root.Controls.Add(title, 0, 0);
+        heading.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        heading.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        heading.Controls.Add(new Label {
+            Name = "AssignmentTargetHeadingTitle",
+            Text = "Group assignments — choose Lock Screen, Screen Saver or Both",
+            Dock = DockStyle.Top, AutoSize = true,
+            ForeColor = UiStyle.Navy, Font = new Font("Segoe UI Semibold", 11f)
+        }, 0, 0);
+        heading.Controls.Add(new Label {
+            Name = "AssignmentTargetHeadingHelp",
+            Text = "Lock Screen = computer OU/group (HKLM). Screen Saver = user OU/group (HKCU). Both uses two independent, filtered GPOs.",
+            Dock = DockStyle.Top, AutoSize = true,
+            ForeColor = UiStyle.Muted
+        }, 0, 1);
+        // Header captions vary considerably across RU/HE at 200% DPI.
+        heading.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(300, heading.ClientSize.Width - 18);
+            foreach (Label label in heading.Controls.OfType<Label>())
+                if (label.MaximumSize.Width != width)
+                    label.MaximumSize = new Size(width, 0);
+        };
+        root.Controls.Add(heading, 0, 0);
 
         var split = new SplitContainer {
             Dock = DockStyle.Fill, Orientation = Orientation.Vertical,
@@ -178,7 +199,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             RowCount = 15, ColumnCount = 1, Padding = new Padding(5)
         };
         foreach (int h in new[] { 75, 75, 74, 74, 50, 75, 74, 50, 75, 55, 65, 60, 62, 84, 58 })
-            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            fields.RowStyles.Add(h == 58
+                ? new RowStyle(SizeType.AutoSize) // Long translated warning must not be clipped.
+                : new RowStyle(SizeType.Absolute, h));
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
 
@@ -217,7 +240,7 @@ internal sealed class CampaignAssignmentsDialog : Form
         fields.Controls.Add(Field("Computer security group (Lock Screen)", _computerGroup), 0, 3);
         _computerDirectMembers.Name = "AssignmentFilterComputerGroupsByOu";
         _computerDirectMembers.Dock = DockStyle.Fill;
-        _computerDirectMembers.Text = "Only groups with direct COMPUTER members in the selected OU (uncheck for all groups)";
+        _computerDirectMembers.Text = "Filter computer groups by selected OU";
         _computerDirectMembers.Checked = _membershipLookup is not null;
         _computerDirectMembers.CheckedChanged += async (_, _) =>
         {
@@ -228,13 +251,18 @@ internal sealed class CampaignAssignmentsDialog : Form
         fields.Controls.Add(Field("User security group (Screen Saver)", _userGroup), 0, 6);
         _userDirectMembers.Name = "AssignmentFilterUserGroupsByOu";
         _userDirectMembers.Dock = DockStyle.Fill;
-        _userDirectMembers.Text = "Only groups with direct USER members in the selected OU (uncheck for all groups)";
+        _userDirectMembers.Text = "Filter user groups by selected OU";
         _userDirectMembers.Checked = _membershipLookup is not null;
         _userDirectMembers.CheckedChanged += async (_, _) =>
         {
             if (!_loading) await RefreshScopeGroupChoicesAsync(true);
         };
         fields.Controls.Add(_userDirectMembers, 0, 7);
+        var scopeTooltip = new ToolTip();
+        scopeTooltip.SetToolTip(_computerDirectMembers, UiLocale.Display(
+            "Only groups with direct COMPUTER members in the selected OU (uncheck for all groups)"));
+        scopeTooltip.SetToolTip(_userDirectMembers, UiLocale.Display(
+            "Only groups with direct USER members in the selected OU (uncheck for all groups)"));
 
         _saver.Name = "AssignmentScreenSaverExecutable";
         _saver.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -281,11 +309,19 @@ internal sealed class CampaignAssignmentsDialog : Form
         _preview.Dock = DockStyle.Fill;
         fields.Controls.Add(_preview, 0, 13);
         _help.Name = "AssignmentModeHelp";
-        _help.Dock = DockStyle.Fill;
-        _help.Text = "Screen Saver is a USER policy; Lock Screen is a COMPUTER policy. " +
+        _help.Dock = DockStyle.Top;
+        _help.AutoSize = true;
+        fields.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(210, fields.ClientSize.Width - fields.Padding.Horizontal - 22);
+            if (_help.MaximumSize.Width != width)
+                _help.MaximumSize = new Size(width, 0);
+        };
+        _help.Text = UiLocale.Display(
+            "Screen Saver is a USER policy; Lock Screen is a COMPUTER policy. " +
             "A group may be stored anywhere in AD: the OU is the GPO LINK target. " +
             "Direct-member filters exclude nested/primary memberships; uncheck for All groups. " +
-            "No loopback/Replace is configured automatically.";
+            "No loopback/Replace is configured automatically.");
         _help.ForeColor = UiStyle.Muted;
         fields.Controls.Add(_help, 0, 14);
 
@@ -306,6 +342,8 @@ internal sealed class CampaignAssignmentsDialog : Form
     private static void FillAdChoices(ComboBox box, List<AdChoice> choices, string name)
     {
         box.Name = name;
+        // AD distinguished names remain canonical LTR, including in Hebrew RTL.
+        box.RightToLeft = RightToLeft.No;
         box.DropDownStyle = ComboBoxStyle.DropDown;
         box.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
         box.AutoCompleteSource = AutoCompleteSource.ListItems;
@@ -459,8 +497,9 @@ internal sealed class CampaignAssignmentsDialog : Form
         // Retain the current choice until LDAP has returned an exact answer.
         // The prior implementation cleared the list immediately and then
         // CommitRow() silently replaced a saved DN with an empty string.
-        _help.Text = "Reading direct " + (userScope ? "USER" : "COMPUTER") +
-            " group membership in selected OU. Existing target is retained.";
+        _help.Text = string.Format(UiLocale.Display(
+            "Reading direct {0} group membership in selected OU. Existing target is retained."),
+            UiLocale.Display(userScope ? "User" : "Computer"));
         await Task.Delay(250);
         if (generation != (userScope ? _userMembershipGeneration : _computerMembershipGeneration) ||
             IsDisposed || Disposing || SelectedDn(ou) != selectedOuDn)
@@ -483,17 +522,18 @@ internal sealed class CampaignAssignmentsDialog : Form
                 try { filter.Checked = false; }
                 finally { _loading = priorLoading; }
                 ReplaceGroupChoices(groups, null, chosenDn);
-                _help.Text = "Selected " + (userScope ? "USER" : "COMPUTER") +
-                    " group kept. It is not in the selected OU's DIRECT membership list. " +
-                    "Showing All groups; verify nesting, GPO link and applicability in Preview.";
+                _help.Text = string.Format(UiLocale.Display(
+                    "Selected {0} group kept. It is not in the selected OU's DIRECT membership list. " +
+                    "Showing All groups; verify nesting, GPO link and applicability in Preview."),
+                    UiLocale.Display(userScope ? "User" : "Computer"));
             }
             else
             {
                 ReplaceGroupChoices(groups, allowed, chosenDn);
-                _help.Text = (userScope ? "USER" : "COMPUTER") +
-                    " OU direct member groups: " + groups.Items.Count +
-                    ". Nested groups / primary groups are not expanded. " +
-                    "Uncheck OU filter to choose any domain security group.";
+                _help.Text = string.Format(UiLocale.Display(
+                    "{0} OU direct member groups: {1}. Nested groups / primary groups are not expanded. " +
+                    "Uncheck OU filter to choose any domain security group."),
+                    UiLocale.Display(userScope ? "User" : "Computer"), groups.Items.Count);
             }
         }
         catch
@@ -506,8 +546,9 @@ internal sealed class CampaignAssignmentsDialog : Form
             try { filter.Checked = false; }
             finally { _loading = priorLoading; }
             ReplaceGroupChoices(groups, null, RememberedGroupDn(userScope, groups));
-            _help.Text = "OU membership lookup unavailable/incomplete. All security groups shown, " +
-                "existing selection retained. Verify USER/COMPUTER targeting and OU link in Preview.";
+            _help.Text = UiLocale.Display(
+                "OU membership lookup unavailable/incomplete. All security groups shown, " +
+                "existing selection retained. Verify USER/COMPUTER targeting and OU link in Preview.");
         }
     }
 
