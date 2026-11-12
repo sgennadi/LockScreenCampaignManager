@@ -460,7 +460,7 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         lists.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 65));
+        lists.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         split.Panel1.Controls.Add(lists);
         _ouFilter.Dock = DockStyle.Fill;
         _ouFilter.PlaceholderText = UiLocale.Display("Search OU...");
@@ -520,8 +520,16 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.Controls.Add(_groupListMode, 0, 2);
         lists.Controls.Add(_groupFilter, 0, 3);
         lists.Controls.Add(_groups, 0, 4);
-        _coverageStatus.Dock = DockStyle.Fill;
+        _coverageStatus.Dock = DockStyle.Top;
+        _coverageStatus.AutoSize = true;
         _coverageStatus.AutoEllipsis = false;
+        _coverageStatus.MaximumSize = new Size(390, 0);
+        lists.SizeChanged += (_, _) =>
+        {
+            int width = Math.Max(210, lists.ClientSize.Width - 14);
+            if (_coverageStatus.MaximumSize.Width != width)
+                _coverageStatus.MaximumSize = new Size(width, 0);
+        };
         _coverageStatus.TextAlign = ContentAlignment.MiddleLeft;
         _coverageStatus.ForeColor = UiStyle.Navy;
         _coverageStatus.Text = UiLocale.Display("OU/group coverage: not verified.");
