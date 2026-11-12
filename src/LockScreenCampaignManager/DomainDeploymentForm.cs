@@ -477,8 +477,10 @@ internal sealed partial class DomainDeploymentForm : Form
         _groupListMode.DropDownStyle = ComboBoxStyle.DropDownList;
         _groupListMode.RightToLeft = RightToLeft.No;
         _groupListMode.DropDownWidth = 560;
-        _groupListMode.Items.Add("Groups with computers in selected OU (direct)");
-        _groupListMode.Items.Add("All domain security groups (choose group first)");
+        // Short visible values survive 200% DPI / RU / HE. Long descriptions
+        // remain accessible in the tooltip without changing SelectedIndex.
+        _groupListMode.Items.Add("OU member groups (computers)");
+        _groupListMode.Items.Add("All domain groups (group first)");
         _groupListMode.SelectedIndex = 0;
         _groupListMode.SelectedIndexChanged += async (_, _) =>
         {
@@ -486,9 +488,10 @@ internal sealed partial class DomainDeploymentForm : Form
             await RefreshComputerGroupMembershipAsync();
         };
         _directoryTooltip.SetToolTip(_groupListMode,
-            "Matched groups can be located in ANY OU. Direct computer membership only: " +
-            "nested and primary group memberships are not expanded. Choose All groups if needed. " +
-            "A GPO must still be linked to a target OU.");
+            UiLocale.Display("Groups with computers in selected OU (direct)") + " / " +
+            UiLocale.Display("All domain security groups (choose group first)") +
+            Environment.NewLine + "Direct memberOf only; nested/primary groups excluded. " +
+            "GPO link needs a target OU.");
         _groupFilter.Dock = DockStyle.Fill;
         _groupFilter.PlaceholderText = UiLocale.Display("Search computer security group...");
         _groupFilter.RightToLeft = RightToLeft.No;
@@ -505,7 +508,7 @@ internal sealed partial class DomainDeploymentForm : Form
                 _groupListMode.SelectedIndex = 1;
             InvalidatePlan();
             if (_groups.SelectedItem is DirectoryRow && _ous.SelectedItem is null)
-                _progress.Text = "Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.";
+                _progress.Text = UiLocale.Display("Group chosen. Select the OU to LINK the GPO; a security group is not a GPO link.");
         };
         _groups.MouseMove += (_, e) => ShowDirectoryTooltip(_groups, e);
         lists.Controls.Add(_ouFilter, 0, 0);
@@ -576,7 +579,7 @@ internal sealed partial class DomainDeploymentForm : Form
             new CampaignAssignmentsDialog.AdChoice(x.Name, x.Dn)).ToList();
         if (ous.Count == 0 || groups.Count == 0)
         {
-            _progress.Text = "Connect to AD and load OU/security groups before assigning modes.";
+            _progress.Text = UiLocale.Display("Connect to AD and load OU/security groups before assigning modes.");
             return;
         }
         using var editor = new CampaignAssignmentsDialog(_project,
@@ -585,9 +588,9 @@ internal sealed partial class DomainDeploymentForm : Form
             FindScopedMemberGroupsAsync);
         if (editor.ShowDialog(this) != DialogResult.OK) return;
         InvalidatePlan();
-        _progress.Text = _project.TargetAssignments.Count +
-            " independent group assignment(s) saved locally. " +
-            "Preview validates exact computer and user scopes; no GPO changed.";
+        _progress.Text = string.Format(UiLocale.Display(
+            "{0} group assignment(s) saved locally. Preview verifies Computer/User targets; no GPO changed."),
+            _project.TargetAssignments.Count);
         UpdateDeploymentSteps();
     }
 
@@ -644,14 +647,14 @@ internal sealed partial class DomainDeploymentForm : Form
         }
         if (_wizardStep == 1 && !HasSelectedTargets)
         {
-            _progress.Text = _project.EffectiveCampaignMode switch
+            _progress.Text = UiLocale.Display(_project.EffectiveCampaignMode switch
             {
                 CampaignTargetMode.ScreenSaver =>
                     "Open Group assignments: choose a User OU and User security group for Screen Saver.",
                 CampaignTargetMode.Both =>
                     "Open Group assignments: choose independent Computer and User OU/security groups.",
                 _ => "Choose a Computer OU, a computer security group and a new GPO name."
-            };
+            });
             return;
         }
         if (_wizardStep == 1)
@@ -804,12 +807,12 @@ internal sealed partial class DomainDeploymentForm : Form
         _contentShareBrowse.Enabled = _contentShareBox.Enabled;
         if (_groupAssignmentsButton is not null)
         {
-            _groupAssignmentsButton.Text = _project.EffectiveCampaignMode switch
+            _groupAssignmentsButton.Text = UiLocale.Display(_project.EffectiveCampaignMode switch
             {
                 CampaignTargetMode.ScreenSaver => "User OU / groups...",
                 CampaignTargetMode.Both => "Computer + User groups...",
                 _ => "Group assignments..."
-            };
+            });
             _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
             _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
                 _allGroups.Count > 0;
@@ -1048,7 +1051,8 @@ internal sealed partial class DomainDeploymentForm : Form
                     }
                 if ((_company.DefaultOuDn.Length > 0 && _ous.SelectedItem is null) ||
                     (_company.DefaultGroupDn.Length > 0 && _groups.SelectedItem is null))
-                    _progress.Text = "Some saved company OU/group defaults were not found in AD; select them manually.";
+                    _progress.Text = UiLocale.Display(
+                        "Some saved company OU/group defaults were not found in AD; select them manually.");
             }
             UiStyle.ApplyStatus(_connectionStatus,
                 $"CONNECTED / LDAP: {actualDomain} | DC: {actualDc} | " +
@@ -1056,7 +1060,7 @@ internal sealed partial class DomainDeploymentForm : Form
                 (!writableKnown ? " | Write capability UNKNOWN" :
                     writable ? " | Writable DC" : " | Confirmed RODC"),
                 _connectedWritable ? UiStatusKind.Success : UiStatusKind.Warning);
-            _progress.Text = !writableKnown
+            _progress.Text = UiLocale.Display(!writableKnown
                 ? "DC writable status could not be verified. Select another DC or inspect LDAP diagnostics."
                 : !writable
                     ? "Confirmed read-only DC. Select a writable domain controller before deployment."
@@ -1064,7 +1068,7 @@ internal sealed partial class DomainDeploymentForm : Form
                     ((_company.DefaultOuDn.Length > 0 && _ous.SelectedItem is null) ||
                      (_company.DefaultGroupDn.Length > 0 && _groups.SelectedItem is null))
                     ? "Company OU/group default was not found; select a verified AD entry before Preview."
-                    : "LDAP verified. No RSAT/WinRM. A new GPO still requires Preview and confirmation.";
+                    : "LDAP verified. No RSAT/WinRM. A new GPO still requires Preview and confirmation.");
             SaveConnection();
             InvalidatePlan();
             UpdateDeploymentSteps();
@@ -1144,8 +1148,9 @@ internal sealed partial class DomainDeploymentForm : Form
         if (IsOuGroupFilterActive && _groups.SelectedItem is DirectoryRow chosen)
         {
             _groupListMode.SelectedIndex = 1; // Cancels older async lookups.
-            _progress.Text = "Kept selected computer group: " + chosen.Name +
-                ". All domain groups shown; verify membership and OU link in Preview.";
+            _progress.Text = string.Format(UiLocale.Display(
+                "Kept selected computer group: {0}. All domain groups shown; verify membership and OU link in Preview."),
+                chosen.Name);
             return;
         }
         _membershipOuDn = string.Empty;
@@ -1155,7 +1160,8 @@ internal sealed partial class DomainDeploymentForm : Form
             string.IsNullOrEmpty(_connectedDomain) || string.IsNullOrEmpty(_connectedDc))
             return;
 
-        _progress.Text = "Checking direct computer group memberships in selected OU (read-only LDAP)...";
+        _progress.Text = UiLocale.Display(
+            "Checking direct computer group memberships in selected OU (read-only LDAP)...");
         await Task.Delay(300); // Debounce repeated keyboard/OU navigation.
         if (request != _membershipRequestVersion || IsDisposed || Disposing) return;
         string domain = _connectedDomain, dc = _connectedDc;
@@ -1178,9 +1184,10 @@ internal sealed partial class DomainDeploymentForm : Form
             _membershipOuDn = selectedOu;
             FilterGroups();
             int computerCount = data.GetProperty("computerCount").GetInt32();
-            _progress.Text = $"Found {_groups.Items.Count} security groups with direct computer members " +
-                $"in selected OU ({computerCount} computers). Nested and primary groups are NOT included. " +
-                "Use All groups to choose any other group.";
+            _progress.Text = string.Format(UiLocale.Display(
+                "Found {0} security groups with direct computer members in selected OU ({1} computers). " +
+                "Nested and primary groups are NOT included. Use All groups to choose any other group."),
+                _groups.Items.Count, computerCount);
         }
         catch (Exception)
         {
@@ -1188,8 +1195,9 @@ internal sealed partial class DomainDeploymentForm : Form
             // Do not quietly turn a failed/incomplete LDAP query into a
             // seemingly complete filtered list. Offer explicit All groups.
             _groupListMode.SelectedIndex = 1;
-            _progress.Text = "OU membership filter unavailable or incomplete. Switched to All groups. " +
-                "Select an OU for the GPO link and verify actual membership during Preview.";
+            _progress.Text = UiLocale.Display(
+                "OU membership filter unavailable or incomplete. Switched to All groups. " +
+                "Select an OU for the GPO link and verify actual membership during Preview.");
         }
     }
 
