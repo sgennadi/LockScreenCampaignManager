@@ -224,6 +224,8 @@ internal static partial class UiLocale
             RepairResultsEnglishByRussian.TryGetValue(key, out english) ||
             Visual102EnglishByRussian.TryGetValue(key, out english) ||
             Visual102EnglishByHebrew.TryGetValue(key, out english) ||
+            Targeting103EnglishByRussian.TryGetValue(key, out english) ||
+            Targeting103EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -235,6 +237,7 @@ internal static partial class UiLocale
             if (Preview97Russian.TryGetValue(key, out ru)) return ru;
             if (RepairResultsRussian.TryGetValue(key, out ru)) return ru;
             if (Visual102Russian.TryGetValue(key, out ru)) return ru;
+            if (Targeting103Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -248,6 +251,7 @@ internal static partial class UiLocale
             if (Preview97Hebrew.TryGetValue(key, out he)) return he;
             if (RepairResultsHebrew.TryGetValue(key, out he)) return he;
             if (Visual102Hebrew.TryGetValue(key, out he)) return he;
+            if (Targeting103Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -262,6 +266,7 @@ internal static partial class UiLocale
         foreach (string englishCaption in new[] {
             "AD Connection Wizard", "Select AD account",
             "Active Directory Deployment", "Campaign Wizard",
+            "Group assignments: Lock Screen / Screen Saver / Both",
             "Full GPO conflict report (read-only)",
             "Effective GPO candidates", "Winning Policy Analysis",
             "Campaign closure audit", "Repair history" })
@@ -394,7 +399,7 @@ internal static partial class UiLocale
                  "EffectiveGpoFilter" or
                  "WinningPolicyFilter" or "RepairHistorySource" or
                  "CampaignClosureFilter" or "DeviceRepairFilter" or
-                 "UpdaterReleaseChannel"))
+                 "UpdaterReleaseChannel" or "DeploymentGroupListMode"))
                 ApplyComboLocalization(combo, language);
         }
     }
