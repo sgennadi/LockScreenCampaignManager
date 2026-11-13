@@ -42,6 +42,8 @@ internal static class DomainPowerShellRunner
             return NativeGpoConflictScan.Execute(mode, request, credentials);
         if (operation == DomainOperation.ConflictScan && mode == "Effective")
             return NativeGpoEffectiveAudit.Execute(mode, request, credentials);
+        if (operation == DomainOperation.ConflictScan && mode == "ObservePower")
+            return NativeEndpointPowerObservation.Execute("Observe", request, credentials);
         if (operation == DomainOperation.ConflictScan &&
             mode is ("VerifyEndpoint" or "VerifyEvidence"))
             return NativeGpoEndpointAudit.Execute(mode, request, credentials);

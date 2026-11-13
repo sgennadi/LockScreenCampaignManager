@@ -759,7 +759,7 @@ class ClientManagementContracts(unittest.TestCase):
             'ImageFilenameMatcher.cs', 'SelfTests.cs',
             'UiLocale.Visual102.cs', 'UiLocale.Targeting103.cs',
             'UiLocale.Coverage104.cs', 'UiLocale.Activity105.cs',
-            'UiLocale.Coverage106.cs'
+            'UiLocale.Coverage106.cs', 'UiLocale.Power107.cs'
         }
         for source in APP.glob('*.cs'):
             if source.name in allowed_russian_ui:

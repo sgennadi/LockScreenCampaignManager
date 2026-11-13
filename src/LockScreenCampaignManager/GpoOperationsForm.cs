@@ -296,6 +296,10 @@ internal sealed partial class GpoOperationsForm : Form
         toolbar.Controls.Add(ActionButton("Scan OU + GPO", () => _ = ScanConflictsAsync(), 220, primary: true));
         toolbar.Controls.Add(ActionButton("Analyze effective (PC)",
             () => _ = AnalyzeEffectiveConflictsAsync(), 235));
+        var power = ActionButton("Verify Screen Saver power (PC)",
+            () => _ = VerifyScreenSaverPowerAsync(), 245);
+        power.Name = "GpoVerifyPowerButton";
+        toolbar.Controls.Add(power);
         layout.Controls.Add(toolbar, 0, 0);
         _conflicts.Dock = DockStyle.Fill;
         _conflicts.Multiline = true;
@@ -304,6 +308,7 @@ internal sealed partial class GpoOperationsForm : Form
         _conflicts.WordWrap = false;
         _conflicts.Font = new Font("Consolas", 9.2f);
         _conflicts.Text = "LockScreenImage, NoChangingLockScreen, NoLockScreen, Spotlight and related policies will appear here.\r\n"+
+            "Verify Screen Saver power (PC) reads active-plan WMI and HKLM after AD-scoped computer verification.\r\n"+
             "The scan considers Block Inheritance, disabled links, Enforced, and GPO computer settings.\r\n"+
             "For accurate RSoP, also run gpresult on the target computer.\r\n" +
             "Analyze effective (PC) requires a selected managed GPO and an AD computer in the OU + group.";

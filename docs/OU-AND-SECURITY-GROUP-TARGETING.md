@@ -1,3 +1,13 @@
+## Preview.107 — verify a computer's observed power timings
+
+In **GPO Operations → Lock Screen conflicts**, choose a Screen Saver or Both campaign, enter a domain **computer FQDN** belonging to the selected Computer OU, then click **Verify Screen Saver power (PC)**. This is an explicit diagnostic action: no PowerShell scripts, WinRM, remote process execution, tasks, policy edits or power-plan changes.
+
+The manager first verifies the computer account is uniquely present, enabled and inside the selected OU on the selected DC using **signed/sealed LDAP**. Only then does it read Windows active-plan **display and sleep AC/DC indices** via WMI (Win32_PowerPlan / Win32_PowerSettingDataIndex / Win32_PowerSetting relationships) and HKLM computer policy values via read-only Remote Registry. A separate static OU/ancestor GPO scan shows candidate source GPO names and links.
+
+The dialog compares **each evidence source individually** against the **campaign-configured** User Screen Saver idle interval. A timeout below that interval may block visibility; the same threshold is uncertain; zero in power timers means *Never*. Unknown/denied/ambiguous readings show **Not verified**. Remote HKLM values and active WMI plan values may disagree: neither is automatically promoted to the winning GPO. The report deliberately does not claim observed screen off, actual applied User HKCU, effective user/group targeting, live PC status or visual activation.
+
+For acceptance, manually verify **computer and user gpresult**, actual applied Screen Saver policy in the signed-in user's HKCU, active powercfg /query, AC/DC behavior, MDM and modern standby, on a lab Windows 10/11 device. These requirements cannot be satisfied by GitHub-hosted CI.
+
 ## Preview.106 — Screen Saver and device power conflicts
 
 A Screen Saver GPO targets **User OU + User Group**. A Computer OU can now additionally be selected on the Group assignments page for **device-side power GPO auditing only**; this does **not** create/link a Computer GPO, alter the User GPO scope, enable loopback or change group memberships. For **Both**, the existing Computer OU also supplies this audit context.

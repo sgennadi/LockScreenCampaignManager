@@ -65,6 +65,7 @@ internal static class SelfTests
         TestNativeComputerGroupAssignmentContracts();
         TestNativeGpoConflictScanContracts();
         TestScreenSaverPowerConflictAnalysis();
+        TestEndpointPowerObservation();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
@@ -1344,6 +1345,109 @@ StartExecutePSFirst=true
             catch (InvalidOperationException) { denied = true; }
             Check(denied, "Native lifecycle preview refuses unsafe link changes");
         }
+    }
+
+    private static void TestEndpointPowerObservation()
+    {
+        const string planGuid = "381b4222-f694-41f0-9685-ff5bb260df2e";
+        const string displayGuid = "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e";
+        const string sleepGuid = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da";
+        Check(NativeEndpointPowerObservation.TryPlanId(
+                "Microsoft:PowerPlan\\{" + planGuid + "}", out string active) &&
+            active == planGuid &&
+            !NativeEndpointPowerObservation.TryPlanId(
+                "PowerPlan:{" + planGuid + "}", out _),
+            "Power WMI active plan ID must be explicit Microsoft:PowerPlan GUID.");
+        Check(NativeEndpointPowerObservation.TryIndexSupply(
+                "Microsoft:PowerSettingDataIndex\\{" + planGuid +
+                "}\\AC\\{" + displayGuid + "}", active, out string supply) &&
+            supply == "AC" &&
+            NativeEndpointPowerObservation.TryIndexSupply(
+                "Microsoft:PowerSettingDataIndex\\{" + planGuid +
+                "}\\DC\\{" + sleepGuid + "}", active, out supply) &&
+            supply == "DC" &&
+            !NativeEndpointPowerObservation.TryIndexSupply(
+                "Microsoft:PowerSettingDataIndex\\{" + Guid.NewGuid() +
+                "}\\AC\\{" + displayGuid + "}", active, out _),
+            "Only active-plan AC/DC data indices may be interpreted.");
+        Check(NativeEndpointPowerObservation.TrySettingKind(
+                "Microsoft:PowerSetting\\{" + displayGuid + "}", out string kind) &&
+            kind == "Display" &&
+            NativeEndpointPowerObservation.TrySettingKind(
+                "Microsoft:PowerSetting\\{" + sleepGuid + "}", out kind) &&
+            kind == "Sleep" &&
+            !NativeEndpointPowerObservation.TrySettingKind(
+                "Microsoft:PowerSetting\\{" + Guid.NewGuid() + "}", out _),
+            "Related PowerSetting GUID, not data-index GUID, selects display/sleep type.");
+
+        var now = DateTimeOffset.UtcNow;
+        object Fixture(bool verified, int displayAc = 300) => new
+        {
+            domain = "example.com", dc = "dc01.example.com",
+            ouDn = "OU=Clients,DC=example,DC=com",
+            computer = "pc01.example.com", adScopeVerified = verified,
+            observedUtc = now, activePlanStatus = "Available",
+            activePlanGuid = planGuid, activePlanName = "Balanced",
+            policyRegistryStatus = "Readable",
+            values = new object[]
+            {
+                new { kind="Display", supply="AC", source="ActivePlanWmi",
+                    status="Present", seconds=(long?)displayAc },
+                new { kind="Display", supply="DC", source="ActivePlanWmi",
+                    status="Present", seconds=(long?)0 },
+                new { kind="Sleep", supply="AC", source="ActivePlanWmi",
+                    status="Present", seconds=(long?)900 },
+                new { kind="Sleep", supply="DC", source="ActivePlanWmi",
+                    status="Present", seconds=(long?)1800 },
+                new { kind="Display", supply="AC", source="PolicyRegistry",
+                    status="Present", seconds=(long?)240 },
+                new { kind="Display", supply="DC", source="PolicyRegistry",
+                    status="Absent", seconds=(long?)null },
+                new { kind="Sleep", supply="AC", source="PolicyRegistry",
+                    status="Present", seconds=(long?)600 },
+                new { kind="Sleep", supply="DC", source="PolicyRegistry",
+                    status="Absent", seconds=(long?)null },
+                new { kind="MachineLock", supply="Any", source="PolicyRegistry",
+                    status="Present", seconds=(long?)120 }
+            },
+            notes = new[] { "Read-only fixture", "Not effective RSoP" }
+        };
+        System.Text.Json.JsonElement payload = System.Text.Json.JsonSerializer.SerializeToElement(Fixture(true));
+        var report = EndpointPowerObservation.Parse(payload, "example.com",
+            "dc01.example.com", "OU=Clients,DC=example,DC=com",
+            "pc01.example.com", now);
+        var assessments = report.Assess(600);
+        Check(assessments.Count == 9 && report.PotentialEarly(600) == 2 &&
+            report.SourceDisagreements().Count == 2 &&
+            report.SourceDisagreements().Any(x => x.Kind == "Display" && x.Supply == "AC"
+                && x.Wmi == 300 && x.Policy == 240) &&
+            assessments.Any(x => x.Kind == "Display" &&
+                x.Source == "ActivePlanWmi" && x.Supply == "DC" &&
+                x.Interpretation.StartsWith("Never", StringComparison.Ordinal)) &&
+            assessments.Any(x => x.Kind == "MachineLock" &&
+                x.Interpretation.Contains("review", StringComparison.Ordinal)) &&
+            assessments.Any(x => x.Kind == "Display" &&
+                x.Source == "PolicyRegistry" && x.Supply == "DC" &&
+                x.Interpretation.Contains("Not configured", StringComparison.Ordinal)) &&
+            !report.HasFullyVerifiedVisibility,
+            "Endpoint power observations distinguish early, Never, absent, lock and unknown User RSoP.");
+        bool rejected = false;
+        try { EndpointPowerObservation.Parse(
+            System.Text.Json.JsonSerializer.SerializeToElement(Fixture(false)),
+            "example.com", "dc01.example.com",
+            "OU=Clients,DC=example,DC=com", "pc01.example.com", now); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Unverified AD FQDN scope is always rejected.");
+        rejected = false;
+        try { EndpointPowerObservation.Parse(payload, "example.com", "dc01.example.com",
+            "OU=Elsewhere,DC=example,DC=com", "pc01.example.com", now); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Out-of-OU endpoint observation is rejected.");
+        rejected = false;
+        try { EndpointPowerObservation.Parse(payload, "example.com", "dc01.example.com",
+            "OU=Clients,DC=example,DC=com", "pc01.example.com", now.AddMinutes(10)); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Expired endpoint readings are not reused as current.");
     }
 
     private static void TestScreenSaverPowerConflictAnalysis()
