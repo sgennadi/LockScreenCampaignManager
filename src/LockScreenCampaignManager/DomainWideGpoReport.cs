@@ -73,8 +73,6 @@ internal sealed class DomainWideGpoReport
         }
         var computers = ParseOus(data, "computerOus", expectedComputerOus);
         var users = ParseOus(data, "userOus", expectedUserOus);
-        if (computers.Length == 0 && users.Length == 0)
-            throw new InvalidDataException("No OU was verified for GPO relevance.");
         static int Count(JsonElement json, string name, int max)
         {
             int value = json.GetProperty(name).GetInt32();
@@ -113,7 +111,11 @@ internal sealed class DomainWideGpoReport
                     @"Microsoft\Windows NT\SecEdit\GptTmpl.inf") ||
                 row.Risk is not ("High" or "Warning" or "Info" or "Inactive/filtered") ||
                 row.LinkStatus is not ("Linked candidate" or "Outside selected OUs" or
-                    "Inactive/filtered" or "User OU not verified") ||
+                    "Inactive/filtered" or "User OU not verified" or
+                    "Computer OU not verified") ||
+                (row.LinkStatus == "Linked candidate" &&
+                    (row.Scope == "Computer" && computers.Length == 0 ||
+                     row.Scope == "User" && users.Length == 0)) ||
                 (row.Risk is "High" or "Warning") && row.LinkStatus != "Linked candidate")
                 throw new InvalidDataException("Invalid all-GPO source or applicability field.");
         }

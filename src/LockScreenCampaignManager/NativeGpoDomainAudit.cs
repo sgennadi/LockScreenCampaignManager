@@ -48,8 +48,6 @@ internal static class NativeGpoDomainAudit
             throw new InvalidDataException("Unexpected campaign type.");
         string[] computerOus = Ous(args, "computerOus");
         string[] userOus = Ous(args, "userOus");
-        if (computerOus.Length == 0 && userOus.Length == 0)
-            throw new InvalidDataException("Select at least one Computer or User OU for relevance analysis.");
 
         JsonElement Run()
         {
@@ -337,7 +335,8 @@ internal static class NativeGpoDomainAudit
         bool hasTargetOu)
     {
         if (disabledHalf) return ("Inactive/filtered", "GPO policy half disabled");
-        if (!hasTargetOu) return ("User OU not verified", "");
+        if (!hasTargetOu) return (scope == "Computer"
+            ? "Computer OU not verified" : "User OU not verified", "");
         var found = links.Where(x => x.Id == id && x.Scope == scope).ToArray();
         var active = found.Where(x => x.Active).ToArray();
         if (active.Length > 0)

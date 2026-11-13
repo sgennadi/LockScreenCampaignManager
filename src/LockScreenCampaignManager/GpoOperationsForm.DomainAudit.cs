@@ -23,12 +23,6 @@ internal sealed partial class GpoOperationsForm
                 .Where(x => x.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (computerOus.Length == 0 && userOus.Length == 0)
-            {
-                _status.Text = UiLocale.Display(
-                    "Choose a Computer or User OU before scanning all DC GPOs.");
-                return;
-            }
             string mode = _project.EffectiveCampaignMode.ToString();
             var data = await ExecuteAsync(DomainOperation.ConflictScan, "AllGpos",
                 new {
