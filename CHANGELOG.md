@@ -1,3 +1,10 @@
+## 0.4.0-preview.112 — named candidate GPO blockers in pilot readiness (2026-11-13)
+
+- Extend **Pilot readiness...** with **Review GPO blockers...**, presenting bounded per-setting records for recognized linked High/Warning candidate GPOs with name, GUID, Computer/User scope, key, value, Registry.pol/GPP source, risk and imported gpresult GUID flags.
+- Explicitly separate **Review first (GPO reported applied)**, **Reported filtered**, **Unverified applicability**, **Historical GPO source** and **Historical gpresult**; expired scans or XML can never be elevated into current blockers. Neither the GPO flags nor the source files prove effective setting precedence.
+- Search and filter the named candidate list, view complete read-only context, and explicitly export privacy-reviewed LOCAL CSV with formula-injection protection. Add Russian/Hebrew labels, 100–200% simulated DPI smoke and C# and Python safety tests to Windows x86/x64 and Offline AD Lab gates.
+- No AD/SYSVOL/client writes, automatic GPO edits, live HKCU collection, remote execution, or new runner. Real domain Windows 10/11 acceptance remains pending.
+
 ## 0.4.0-preview.111 — read-only Screen Saver pilot readiness (2026-11-13)
 
 - Add **Pilot readiness...** to **Scan all DC GPOs → Compare gpresult XML...**. Build a scoped, on-demand evidence checklist using the selected DC's known source GPO settings and independently imported Computer/User gpresult observations; distinguish **Observed concern / Source candidate / Not verified / Information** without declaring a winning GPO.
