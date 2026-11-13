@@ -17,7 +17,13 @@ internal static class CustomSaverPilotFile
     internal sealed record Observation(string Path, string Sha256,
         long Bytes, string Extension, bool TrustedSignature, string SignatureStatus);
 
-    internal static Observation Inspect(string input)
+    internal static Observation Inspect(string input) => InspectCore(input, inspectAuthenticode: true);
+
+    // CI must never make trust or revocation network calls.
+    internal static Observation InspectPeOnlyForSelfTest(string input) =>
+        InspectCore(input, inspectAuthenticode: false);
+
+    private static Observation InspectCore(string input, bool inspectAuthenticode)
     {
         string full = ValidatePath(input);
         FileInfo file = new(full);
@@ -44,7 +50,9 @@ internal static class CustomSaverPilotFile
         stream.Position = 0;
         string hash = Convert.ToHexString(SHA256.HashData(stream))
             .ToLowerInvariant();
-        var sign = WindowsAuthenticodeAudit.Inspect(full);
+        var sign = inspectAuthenticode
+            ? WindowsAuthenticodeAudit.Inspect(full, cacheOnly: true)
+            : new WindowsAuthenticodeAudit.Result(false, "NOT_CHECKED", "PE-only self-test; no signature check.");
         return new Observation(full, hash, file.Length,
             Path.GetExtension(full).ToLowerInvariant(), sign.Trusted,
             sign.Code);
