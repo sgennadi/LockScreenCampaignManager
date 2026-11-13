@@ -8,6 +8,7 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string, string> Power107Russian = new(StringComparer.Ordinal)
     {
+        ["Source disagreements (WMI vs HKLM): "] = "Расхождения WMI и HKLM: ",
         ["Verify Screen Saver power (PC)"] = "Проверить питание Screen Saver (ПК)",
         ["Screen Saver power audit"] = "Проверка питания Screen Saver",
         ["Screen Saver — observed endpoint power and static GPO candidates"] =
@@ -55,6 +56,7 @@ internal static partial class UiLocale
 
     private static readonly Dictionary<string, string> Power107Hebrew = new(StringComparer.Ordinal)
     {
+        ["Source disagreements (WMI vs HKLM): "] = "פערים בין WMI ו-HKLM: ",
         ["Verify Screen Saver power (PC)"] = "בדיקת חשמל לשומר מסך (מחשב)",
         ["Screen Saver power audit"] = "בדיקת מדיניות חשמל לשומר מסך",
         ["Screen Saver — observed endpoint power and static GPO candidates"] =
