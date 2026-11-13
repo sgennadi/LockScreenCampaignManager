@@ -139,12 +139,15 @@ internal sealed class ScreenSaverEndpointPowerDialog : Form
 
     private void Draw()
     {
+        var disagreements = _observation.SourceDisagreements();
         foreach (EndpointPowerAssessment value in _observation.Assess(_idle))
         {
             int row = _readings.Rows.Add(
                 value.Source, value.Kind, value.Supply, value.Status,
                 value.Seconds is long seconds ? seconds == 0 ? "0 (Never)" :
                     seconds.ToString() : "—", UiLocale.Display(value.Interpretation));
+            if (disagreements.Any(d => d.Kind == value.Kind && d.Supply == value.Supply))
+                _readings.Rows[row].DefaultCellStyle.BackColor = Color.FromArgb(255, 244, 217);
             if (value.Interpretation.Contains("potential blocker", StringComparison.Ordinal))
                 _readings.Rows[row].DefaultCellStyle.ForeColor = Color.Firebrick;
         }
@@ -186,6 +189,11 @@ internal sealed class ScreenSaverEndpointPowerDialog : Form
             UiLocale.Display("Client HKLM power policies: ") + _observation.RegistryStatus +
             " | " + UiLocale.Display("Observed short timeouts: ") +
             _observation.PotentialEarly(_idle) +
+            Environment.NewLine +
+            UiLocale.Display("Source disagreements (WMI vs HKLM): ") + disagreements.Count +
+            (disagreements.Count == 0 ? "" : " | " + string.Join("; ",
+                disagreements.Select(d => d.Kind + "/" + d.Supply +
+                    " WMI " + d.Wmi + "s / HKLM " + d.Policy + "s"))) +
             Environment.NewLine +
             UiLocale.Display("Static linked-GPO candidates: ") + rawCount +
             " (" + high + " high / " + warning + " warning). " + _scanStatus +
