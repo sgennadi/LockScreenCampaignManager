@@ -36,6 +36,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_ad_activity_coverage.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_client_health_power_conflicts.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_targeting103_locales.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_native_ui_visual_acceptance.py
