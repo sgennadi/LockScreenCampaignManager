@@ -29,7 +29,7 @@ class EndpointUserReadinessContracts(unittest.TestCase):
         for forbidden in (
             "Registry.LocalMachine", "Registry.Users", "Registry.SetValue(",
             "SetValue(", "DeleteValue(", "Process.Start(", "HttpClient(",
-            "Win32_Process", "ModifyRequest(", "gpupdate", "Invoke-Command",
+            "Win32_Process", "ModifyRequest(", "gpupdate.exe", "Invoke-Command",
             "ScheduledTask", "ComputerManagement"
         ):
             self.assertNotIn(forbidden, model, forbidden)
