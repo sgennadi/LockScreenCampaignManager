@@ -59,6 +59,7 @@ internal sealed class ScreenSaverEndpointPowerDialog : Form
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         head.Controls.Add(new Label {
+            Name = "EndpointPowerScopeLabel", RightToLeft = RightToLeft.No,
             Text = "PC: " + observation.Computer + "  |  DC: " + observation.Dc +
                 Environment.NewLine +
                 UiLocale.Display("Configured User Screen Saver: ") + configuredIdleSeconds +
@@ -122,6 +123,7 @@ internal sealed class ScreenSaverEndpointPowerDialog : Form
         IReadOnlyList<(string caption, int weight)> columns)
     {
         grid.Dock = DockStyle.Fill;
+        grid.RightToLeft = RightToLeft.No; // GUID/FQDN/AC/DC values remain invariant
         grid.ReadOnly = true;
         grid.MultiSelect = false;
         grid.AllowUserToAddRows = false;
@@ -142,7 +144,7 @@ internal sealed class ScreenSaverEndpointPowerDialog : Form
             int row = _readings.Rows.Add(
                 value.Source, value.Kind, value.Supply, value.Status,
                 value.Seconds is long seconds ? seconds == 0 ? "0 (Never)" :
-                    seconds.ToString() : "—", value.Interpretation);
+                    seconds.ToString() : "—", UiLocale.Display(value.Interpretation));
             if (value.Interpretation.Contains("potential blocker", StringComparison.Ordinal))
                 _readings.Rows[row].DefaultCellStyle.ForeColor = Color.Firebrick;
         }
