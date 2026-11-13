@@ -389,7 +389,7 @@ internal static class NativeGpoConflictScan
 
     // Only an actual not-found error is benign for an unconfigured half.
     // Access denied, broken network paths and reparse points are not.
-    private static bool PolicyFolderExistsSafe(string path)
+    internal static bool PolicyFolderExistsSafe(string path)
     {
         FileAttributes attributes;
         try { attributes = File.GetAttributes(path); }
@@ -401,7 +401,7 @@ internal static class NativeGpoConflictScan
         return true;
     }
 
-    private static void EnsureDirectory(string path)
+    internal static void EnsureDirectory(string path)
     {
         var directory = new DirectoryInfo(path);
         if (!directory.Exists || (directory.Attributes & FileAttributes.ReparsePoint) != 0)
@@ -410,7 +410,7 @@ internal static class NativeGpoConflictScan
         _ = directory.EnumerateFileSystemInfos().Take(1).ToArray();
     }
 
-    private static bool FileExistsSafe(string path)
+    internal static bool FileExistsSafe(string path)
     {
         FileAttributes attributes;
         try { attributes = File.GetAttributes(path); }

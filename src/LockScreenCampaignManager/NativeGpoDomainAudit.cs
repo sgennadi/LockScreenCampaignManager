@@ -48,8 +48,8 @@ internal static class NativeGpoDomainAudit
             throw new InvalidDataException("Unexpected campaign type.");
         string[] computerOus = Ous(args, "computerOus");
         string[] userOus = Ous(args, "userOus");
-        if (computerOus.Length == 0)
-            throw new InvalidDataException("Select at least one Computer OU for relevance analysis.");
+        if (computerOus.Length == 0 && userOus.Length == 0)
+            throw new InvalidDataException("Select at least one Computer or User OU for relevance analysis.");
 
         JsonElement Run()
         {
@@ -282,18 +282,13 @@ internal static class NativeGpoDomainAudit
             if (++depth > 40)
                 throw new InvalidDataException("OU ancestry exceeds safe depth.");
             var response = (SearchResponse)ldap.SendRequest(
-                new SearchRequest(node, "(objectClass=*)", SearchScope.Base,
-                    "gPLink", "gPOptions"));
+                new SearchRequest(node,
+                    node.Equals(target, StringComparison.OrdinalIgnoreCase)
+                        ? "(objectClass=organizationalUnit)" : "(objectClass=*)",
+                    SearchScope.Base, "gPLink", "gPOptions"));
             if (response.Entries.Count != 1)
                 throw new InvalidDataException("Selected OU ancestry is not readable.");
             var entry = response.Entries[0];
-            if (node.Equals(target, StringComparison.OrdinalIgnoreCase) &&
-                !entry.Attributes.AttributeNames.Cast<string>().Any(x =>
-                    x.Equals("objectClass", StringComparison.OrdinalIgnoreCase)))
-            {
-                // Base search itself verifies object presence; OU prefix is
-                // an explicit operator selection, never inferred from GPC data.
-            }
             string raw = NativeAdDiscovery.Attr(entry, "gPLink");
             var matches = GpLink.Matches(raw);
             if (GpLink.Replace(raw, "").Trim().Length != 0)
@@ -327,7 +322,7 @@ internal static class NativeGpoDomainAudit
             throw new InvalidDataException("OU ancestry did not reach selected domain.");
     }
 
-    internal static (string status, string linkedAt) Resolve(
+    private static (string status, string linkedAt) Resolve(
         Guid id, string scope, bool disabledHalf, IReadOnlyList<Link> links,
         bool hasTargetOu)
     {
