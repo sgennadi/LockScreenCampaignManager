@@ -166,6 +166,8 @@ internal static class UiLayoutSmokeTests
         ("Pilot readiness — offline simulated layout",
             CreateGpoPilotReadinessSmoke, new[] {
                 "Refresh review", "Verify power (PC)...", "Review GPO blockers...", "Close" }),
+        ("Named pilot GPO blockers — offline simulated layout",
+            CreateNamedGpoBlockersSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Domain GPO same-setting comparisons - offline simulated layout",
             CreateGpoOverlapSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),
