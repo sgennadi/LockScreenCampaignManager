@@ -138,6 +138,26 @@ internal sealed class EndpointPowerObservation
         }).OrderBy(x=>x.Kind).ThenBy(x=>x.Supply).ThenBy(x=>x.Source).ToArray();
     }
 
+    internal IReadOnlyList<(string Kind, string Supply, long Wmi, long Policy)>
+        SourceDisagreements()
+    {
+        var result = new List<(string Kind, string Supply, long Wmi, long Policy)>();
+        foreach (string kind in new[] { "Display", "Sleep" })
+            foreach (string supply in new[] { "AC", "DC" })
+            {
+                var wmi = Readings.SingleOrDefault(x =>
+                    x.Source == "ActivePlanWmi" && x.Kind == kind &&
+                    x.Supply == supply && x.Status == "Present");
+                var policy = Readings.SingleOrDefault(x =>
+                    x.Source == "PolicyRegistry" && x.Kind == kind &&
+                    x.Supply == supply && x.Status == "Present");
+                if (wmi?.Seconds is long plan && policy?.Seconds is long reg &&
+                    plan != reg)
+                    result.Add((kind, supply, plan, reg));
+            }
+        return result;
+    }
+
     internal int PotentialEarly(int saverSeconds) =>
         Assess(saverSeconds).Count(x=>x.Interpretation.Contains("potential blocker",
             StringComparison.Ordinal));
