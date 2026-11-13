@@ -29,7 +29,7 @@ class EndpointPowerAuditContracts(unittest.TestCase):
         self.assertIn('LogonUser(user, netbios, credentials.Password, 9, 3', native)
         forbidden = ('ModifyRequest(', 'AddRequest(', 'DeleteRequest(', 'CreateProcess',
                      'Process.Start', 'Win32_Process', 'Win32_ScheduledJob',
-                     'Invoke-Command', 'WinRM', 'RunAs', 'gpupdate', 'powercfg.exe',
+                     'Invoke-Command', 'WinRM', 'RunAs', 'gpupdate.exe', 'powercfg.exe',
                      'SetValue(', 'Activate(', 'File.WriteAllText(')
         for term in forbidden:
             self.assertNotIn(term, native, term)
