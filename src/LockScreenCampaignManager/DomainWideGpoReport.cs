@@ -20,6 +20,7 @@ internal sealed class DomainWideGpoReport
 {
     internal string Domain { get; private init; } = "";
     internal string Dc { get; private init; } = "";
+    internal DateTimeOffset ObservedUtc { get; private init; }
     internal int GpoCount { get; private init; }
     internal int InspectedHalves { get; private init; }
     internal int EmptyHalves { get; private init; }
@@ -43,6 +44,14 @@ internal sealed class DomainWideGpoReport
             !Read(data, "domain", 253).Equals(expectedDomain, StringComparison.OrdinalIgnoreCase) ||
             !NativeGpoLifecycleList.SameController(Read(data, "dc", 253), expectedDc))
             throw new InvalidDataException("Domain GPO evidence is not scoped to selected DC.");
+        var stamp = data.GetProperty("observedUtc");
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if (stamp.ValueKind != JsonValueKind.String ||
+            !stamp.TryGetDateTimeOffset(out DateTimeOffset observed) ||
+            observed.Year < 2020 ||
+            observed > now.AddMinutes(2) ||
+            now - observed > TimeSpan.FromMinutes(5))
+            throw new InvalidDataException("GPO scan evidence timestamp is not fresh.");
         static string[] ParseOus(JsonElement data, string name,
             IReadOnlyCollection<string> expected)
         {
@@ -133,6 +142,7 @@ internal sealed class DomainWideGpoReport
 
         return new DomainWideGpoReport {
             Domain = expectedDomain, Dc = Read(data, "dc", 253),
+            ObservedUtc = observed.ToUniversalTime(),
             GpoCount = gpos, InspectedHalves = inspected, EmptyHalves = empty,
             RecognizedSourcesReadable = complete,
             ComputerOus = computers, UserOus = users, Matches = rows,

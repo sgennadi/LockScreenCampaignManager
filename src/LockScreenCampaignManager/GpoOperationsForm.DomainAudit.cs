@@ -16,13 +16,13 @@ internal sealed partial class GpoOperationsForm
                 .Append(_ouDn)
                 .Where(x => x.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(25).ToArray();
+                .ToArray();
             var userOus = _project.TargetAssignments
                 .Where(x => x.UsesScreenSaver)
                 .Select(x => x.UserOuDn)
                 .Where(x => x.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(25).ToArray();
+                .ToArray();
             if (computerOus.Length == 0 && userOus.Length == 0)
             {
                 _status.Text = UiLocale.Display(

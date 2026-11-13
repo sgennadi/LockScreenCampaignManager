@@ -234,6 +234,8 @@ internal static partial class UiLocale
             Coverage106EnglishByHebrew.TryGetValue(key, out english) ||
             Power107EnglishByRussian.TryGetValue(key, out english) ||
             Power107EnglishByHebrew.TryGetValue(key, out english) ||
+            Power108EnglishByRussian.TryGetValue(key, out english) ||
+            Power108EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -250,6 +252,7 @@ internal static partial class UiLocale
             if (Activity105Russian.TryGetValue(key, out ru)) return ru;
             if (Coverage106Russian.TryGetValue(key, out ru)) return ru;
             if (Power107Russian.TryGetValue(key, out ru)) return ru;
+            if (Power108Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -268,6 +271,7 @@ internal static partial class UiLocale
             if (Activity105Hebrew.TryGetValue(key, out he)) return he;
             if (Coverage106Hebrew.TryGetValue(key, out he)) return he;
             if (Power107Hebrew.TryGetValue(key, out he)) return he;
+            if (Power108Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -285,7 +289,7 @@ internal static partial class UiLocale
             "Group assignments: Lock Screen / Screen Saver / Both",
             "Full GPO conflict report (read-only)",
             "Effective GPO candidates", "Winning Policy Analysis",
-            "Screen Saver power audit",
+            "Screen Saver power audit", "All DC GPO conflict audit",
             "Campaign closure audit", "Repair history" })
         {
             string destination = Translate(englishCaption, language);

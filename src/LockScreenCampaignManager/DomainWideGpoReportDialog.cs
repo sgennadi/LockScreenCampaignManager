@@ -20,12 +20,15 @@ internal sealed class DomainWideGpoReportDialog : Form
     private readonly ComboBox _link = new() { Name = "AllDcGpoLinkFilter" };
     private readonly Label _count = new() { Name = "AllDcGpoCount" };
     private DomainGpoMatch[] _visible = [];
+    private sealed record Choice(string Key) {
+        public override string ToString() => UiLocale.Display(Key);
+    }
 
     internal DomainWideGpoReportDialog(DomainWideGpoReport report)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
-            " - All DC GPO conflict audit";
+            " - " + UiLocale.Display("All DC GPO conflict audit");
         Name = "DomainWideGpoReportDialog";
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9.5f);
@@ -158,7 +161,7 @@ internal sealed class DomainWideGpoReportDialog : Form
         box.Dock = DockStyle.Fill;
         box.RightToLeft = RightToLeft.No;
         box.DropDownStyle = ComboBoxStyle.DropDownList;
-        box.Items.AddRange(items.ToArray());
+        box.Items.AddRange(items.Select(x => (object)new Choice(x)).ToArray());
         box.SelectedIndex = 0;
         box.SelectedIndexChanged += (_, _) => Draw();
     }
@@ -166,9 +169,9 @@ internal sealed class DomainWideGpoReportDialog : Form
     private void Draw()
     {
         string query = _search.Text.Trim();
-        string scope = _scope.SelectedItem as string ?? "All scopes";
-        string risk = _risk.SelectedItem as string ?? "All risks";
-        string link = _link.SelectedItem as string ?? "All links";
+        string scope = (_scope.SelectedItem as Choice)?.Key ?? "All scopes";
+        string risk = (_risk.SelectedItem as Choice)?.Key ?? "All risks";
+        string link = (_link.SelectedItem as Choice)?.Key ?? "All links";
         _visible = _report.Matches
             .Where(x => (scope == "All scopes" || x.Scope == scope) &&
                 (risk == "All risks" || x.Risk == risk) &&
