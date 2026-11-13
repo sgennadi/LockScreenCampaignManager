@@ -420,19 +420,26 @@ jobs:
           merge-multiple: true
 
       - name: Verify four ZIP files and create SHA-256 manifest
+        id: verify
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         run: |
           python - <<'PY'
           import hashlib
+          import os
           from pathlib import Path
+          import re
           import struct
           import xml.etree.ElementTree as ET
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.113':
-              raise SystemExit(f'Unexpected release version: {version}')
+          match = re.fullmatch(r'0\.4\.0-preview\.([1-9][0-9]*)', version or '')
+          if match is None:
+              raise SystemExit(f'Unexpected or non-preview release version: {version}')
+          notes = f'docs/RELEASE-PREVIEW{match.group(1)}.md'
+          if not Path(notes).is_file():
+              raise SystemExit('Missing release notes for tested version: ' + notes)
           root = Path('release-assets')
           expected = set()
           for arch, machine in [('win-x86', 0x014c), ('win-x64', 0x8664)]:
@@ -460,34 +467,41 @@ jobs:
                           raise SystemExit(f'Incorrect Windows PE architecture: {archive}')
           lines = [f'{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}' for f in sorted(root.glob('*.zip'))]
           (root / 'SHA256SUMS.txt').write_text(chr(10).join(lines) + chr(10), encoding='ascii')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('version=' + version + '\n')
+              output.write('notes=' + notes + '\n')
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.113 (no overwrite)
+      - name: Publish tested preview (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PREVIEW_VERSION: ${{ steps.verify.outputs.version }}
+          PREVIEW_NOTES: ${{ steps.verify.outputs.notes }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.113'
+          tag="v${PREVIEW_VERSION}"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.113' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW113.md
+            --title "LockScreen Campaign Manager ${PREVIEW_VERSION}" \
+            --prerelease --notes-file "$PREVIEW_NOTES"
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PREVIEW_VERSION: ${{ steps.verify.outputs.version }}
+          PREVIEW_NOTES: ${{ steps.verify.outputs.notes }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.113'
+          tag="v${PREVIEW_VERSION}"
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json
