@@ -1,3 +1,9 @@
+## Preview.112 — named GPO blocker review in pilot readiness
+
+After **Scan all DC GPOs → Compare gpresult XML... → Pilot readiness...**, select the verified Computer OU/FQDN and press **Review GPO blockers...**. Each row shows the GPO name and exact GUID, Computer/User scope, parameter, source file, registry key, configured value, source risk, OU-link candidate and imported gpresult observation. This view lists only recognized High/Warning settings that are linked candidates in the selected OU scope; unsupported CSEs, security/WMI/GPP item-level targeting, site links and effective per-setting precedence are not resolved.
+
+**Review first** means the manually imported unsigned gpresult XML reported the GPO GUID applied within the scope, not that its parameter won or caused a lock/saver failure. Expired scan or XML evidence is distinctly historical; unimported XML and incomplete flags remain unverified. This review does not automatically query endpoints. Optional **Verify power (PC)...** remains separate, read-only and operator-approved. CSV export warns about sensitive GPO names and values, requires an explicit choice of regular local folder, and escapes spreadsheet formulas. Never upload the raw report publicly.
+
 ## Preview.111 — Pilot readiness (read-only)
 
 After using **Scan all DC GPOs → Compare gpresult XML...**, type the full FQDN of the selected Windows test computer and optionally import separate Computer/User gpresult XMLs. Click **Pilot readiness...** to open a read-only checklist that combines the previously scanned DC GPO source candidates with the imported GPO GUID-and-scope observations. It does not verify interactive User HKCU, effective setting precedence, or the actual display.

@@ -22,6 +22,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     private readonly Label _summary = new() { Name = "PilotReadinessSummary" };
     private readonly Button _verifyPower;
     private readonly Button _review;
+    private readonly Button _reviewNamedGpos;
     private EndpointPowerObservation? _observation;
     private bool _reading;
     private DomainGpoPilotReadiness? _assessment;
@@ -53,7 +54,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -135,10 +136,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.Controls.Add(_details, 0, 3);
 
         var footer = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
         };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 480));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.TextAlign = ContentAlignment.MiddleLeft;
         _summary.ForeColor = UiStyle.Muted;
@@ -159,7 +160,17 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _review.Name = "PilotRefreshReview";
         _review.Click += (_, _) => Review();
         actions.Controls.Add(_review);
-        footer.Controls.Add(actions, 1, 0);
+        _reviewNamedGpos = Button("Review GPO blockers...", 225);
+        _reviewNamedGpos.Name = "PilotReviewNamedGpoBlockers";
+        _reviewNamedGpos.Enabled = false;
+        _reviewNamedGpos.Click += (_, _) => {
+            if (_reading || _assessment is null ||
+                _assessment.NamedBlockers.Count == 0) return;
+            using var window = new DomainPilotBlockersDialog(_assessment.NamedBlockers);
+            window.ShowDialog(this);
+        };
+        actions.Controls.Add(_reviewNamedGpos);
+        footer.Controls.Add(actions, 0, 1);
         root.Controls.Add(footer, 0, 4);
 
         FormClosing += (_, e) => {
@@ -207,6 +218,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
                 "Enter a full domain computer FQDN and a configured Screen Saver idle time.");
             _summary.Text = UiLocale.Display("Not verified — invalid pilot input");
             _verifyPower.Enabled = false;
+            _reviewNamedGpos.Enabled = false;
             return;
         }
         if (_report.ComputerOus.Count == 0 || ou.Length == 0)
@@ -217,6 +229,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
                 "No scanned Computer OU. Select a Computer OU in the campaign and rescan DC GPOs.");
             _summary.Text = UiLocale.Display("Not verified — Computer OU missing");
             _verifyPower.Enabled = false;
+            _reviewNamedGpos.Enabled = false;
             return;
         }
         _verifyPower.Enabled = _readPower is not null;
@@ -233,6 +246,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _summary.Text = UiLocale.Display("Not verified — evidence mismatch");
             _details.Text = ex.Message;
             _verifyPower.Enabled = false;
+            _reviewNamedGpos.Enabled = false;
             return;
         }
         _findings.SuspendLayout();
@@ -261,7 +275,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _findings.CurrentCell = _findings.Rows[0].Cells[0];
         }
         Details();
-        _summary.Text = _assessment.Concerns +
+        _reviewNamedGpos.Enabled = _assessment.NamedBlockers.Count > 0;
+        _summary.Text = _assessment.NamedBlockers.Count +
+            UiLocale.Display(" named GPO candidates | ") +
+            _assessment.Concerns +
             UiLocale.Display(" observed concerns | ") +
             _assessment.Potential + UiLocale.Display(" source candidates | ") +
             _assessment.NotVerified + UiLocale.Display(" not verified");
@@ -304,6 +321,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _reading = true;
         _verifyPower.Enabled = false;
         _review.Enabled = false;
+        _reviewNamedGpos.Enabled = false;
         _computer.Enabled = false;
         _ou.Enabled = false;
         _summary.Text = UiLocale.Display("Reading endpoint power (read-only)...");

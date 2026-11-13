@@ -20,6 +20,7 @@ internal sealed class DomainGpoPilotReadiness
     internal bool ComputerXmlImported { get; private init; }
     internal bool UserXmlImported { get; private init; }
     internal IReadOnlyList<DomainPilotFinding> Findings { get; private init; } = [];
+    internal IReadOnlyList<DomainPilotBlocker> NamedBlockers { get; private init; } = [];
     internal int Concerns => Findings.Count(x => x.State == "Observed concern");
     internal int Potential => Findings.Count(x => x.State == "Source candidate");
     internal int NotVerified => Findings.Count(x => x.State == "Not verified");
@@ -97,6 +98,8 @@ internal sealed class DomainGpoPilotReadiness
         // A GPO being "Reported applied" only raises the priority for review.
         // This is NOT a per-setting winner and is never a confirmed policy block.
         var correlated = DomainGpoRsopCorrelation.Compare(report, computerXml, userXml);
+        var namedBlockers = DomainPilotBlockerEvidence.Analyze(
+            correlated, report.ObservedUtc, now, computerXml, userXml);
         foreach (string scope in new[] { "Computer", "User" })
         {
             var blockers = correlated.Where(x => x.Scope == scope &&
@@ -203,7 +206,8 @@ internal sealed class DomainGpoPilotReadiness
             SaverIdleSeconds = saverIdleSeconds, BuiltUtc = now.ToUniversalTime(),
             PowerObserved = power is not null,
             ComputerXmlImported = computerXml is not null,
-            UserXmlImported = userXml is not null, Findings = findings
+            UserXmlImported = userXml is not null, Findings = findings,
+            NamedBlockers = namedBlockers
         };
     }
 

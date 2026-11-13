@@ -1576,6 +1576,11 @@ StartExecutePSFirst=true
         var withoutPower = DomainGpoPilotReadiness.Build(
             report, pc, ou, 600, null, computerXml, null, now);
         Check(withoutPower.Potential > 0 && withoutPower.NotVerified >= 3 &&
+            withoutPower.NamedBlockers.Count == 1 &&
+            withoutPower.NamedBlockers[0].GpoId == gpo &&
+            withoutPower.NamedBlockers[0].Setting == "ACSettingIndex" &&
+            withoutPower.NamedBlockers[0].ReviewState ==
+                "Review first (GPO reported applied)" &&
             withoutPower.ComputerXmlImported && !withoutPower.UserXmlImported &&
             !withoutPower.PowerObserved && !withoutPower.ProvesScreenSaverDisplayed &&
             !withoutPower.ProvesWinningGpo &&
@@ -1624,6 +1629,21 @@ StartExecutePSFirst=true
             "Current endpoint observations flag early display, machine lock and source mismatch.");
         var stale = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
             power, computerXml, null, now.AddMinutes(16));
+        Check(stale.NamedBlockers.Count == 1 &&
+            stale.NamedBlockers[0].ReviewState == "Historical GPO source",
+            "Expired GPO source cannot be presented as a current applied blocker.");
+        var pastXml = RsopEvidence.ParseXml(xml.Replace(now.ToString("o"),
+            now.AddDays(-4).ToString("o"), StringComparison.Ordinal), pc, domain, now);
+        var past = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, pastXml, null, now);
+        Check(past.NamedBlockers.Count == 1 &&
+            past.NamedBlockers[0].ReviewState == "Historical gpresult",
+            "Stale imported gpresult can never increase current blocker priority.");
+        string protectedCsv = DomainPilotBlockerEvidence.BuildCsv([
+            withoutPower.NamedBlockers[0] with { Gpo = "=SUM(1,2)" }
+        ]);
+        Check(protectedCsv.Contains("\"'=SUM(1,2)\"", StringComparison.Ordinal),
+            "GPO names cannot inject spreadsheet formulas through local CSV.");
         Check(stale.Concerns == 0 && stale.NotVerified > observed.NotVerified &&
             stale.Findings.Any(x => x.Area == "DC inventory" &&
                 x.State == "Not verified") &&
