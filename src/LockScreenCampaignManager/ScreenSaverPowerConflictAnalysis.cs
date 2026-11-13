@@ -78,7 +78,7 @@ internal static class ScreenSaverPowerConflictAnalysis
 
     private static GroupConflictFinding Candidate(GroupConflictFinding source,
         string target, string risk, string label, string value) =>
-        new(target, "Computer/User", source.Gpo, source.GpoId,
+        new(target, "Computer", source.Gpo, source.GpoId,
             risk, label, value, source.Source, source.Key, source.LinkedAt,
             source.Applicability +
             " | PRELIMINARY: Computer OU GPO vs configured User Screen Saver. " +
