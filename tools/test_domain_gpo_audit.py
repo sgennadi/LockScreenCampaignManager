@@ -53,6 +53,7 @@ class AllDcGpoAuditContracts(unittest.TestCase):
         self.assertIn("FileExistsSafe(file)", native)
         for marker in ('"Linked candidate"', '"Outside selected OUs"',
                        '"Inactive/filtered"', '"User OU not verified"',
+                       '"Computer OU not verified"',
                        'hasWmi ? "WMI filter present; "', '"No GPO"'):
             if marker != '"No GPO"':
                 self.assertIn(marker, native)

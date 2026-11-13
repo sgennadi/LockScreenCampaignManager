@@ -35,7 +35,7 @@ internal static class UiLayoutSmokeTests
         var input = System.Text.Json.JsonSerializer.SerializeToElement(new {
             domain = "example.com", dc = "dc01.example.com",
             observedUtc = DateTimeOffset.UtcNow,
-            computerOus = new[] { "OU=Computers,DC=example,DC=com" },
+            computerOus = Array.Empty<string>(),
             userOus = Array.Empty<string>(),
             gpoCount = 1, inspectedHalves = 1, emptyHalves = 1,
             issueCount = 0, complete = true,
@@ -45,7 +45,7 @@ internal static class UiLayoutSmokeTests
         });
         var report = DomainWideGpoReport.Parse(
             input, "example.com", "dc01.example.com",
-            ["OU=Computers,DC=example,DC=com"], []);
+            [], []);
         return new DomainWideGpoReportDialog(report);
     }
 
