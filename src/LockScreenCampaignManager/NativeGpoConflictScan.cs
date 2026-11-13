@@ -389,7 +389,7 @@ internal static class NativeGpoConflictScan
 
     // Only an actual not-found error is benign for an unconfigured half.
     // Access denied, broken network paths and reparse points are not.
-    private static bool PolicyFolderExistsSafe(string path)
+    internal static bool PolicyFolderExistsSafe(string path)
     {
         FileAttributes attributes;
         try { attributes = File.GetAttributes(path); }
@@ -401,7 +401,7 @@ internal static class NativeGpoConflictScan
         return true;
     }
 
-    private static void EnsureDirectory(string path)
+    internal static void EnsureDirectory(string path)
     {
         var directory = new DirectoryInfo(path);
         if (!directory.Exists || (directory.Attributes & FileAttributes.ReparsePoint) != 0)
@@ -410,7 +410,7 @@ internal static class NativeGpoConflictScan
         _ = directory.EnumerateFileSystemInfos().Take(1).ToArray();
     }
 
-    private static bool FileExistsSafe(string path)
+    internal static bool FileExistsSafe(string path)
     {
         FileAttributes attributes;
         try { attributes = File.GetAttributes(path); }
@@ -449,6 +449,14 @@ internal static class NativeGpoConflictScan
                     "does not itself prevent a screen saver from running.");
             return null;
         }
+        // Loopback Replace can suppress the intended User OU Screen Saver policy
+        // when a different Computer OU wins. Never claim applicability without
+        // device/user RSoP, but surface Merge and Replace as domain candidates.
+        if (k == @"software\policies\microsoft\windows\system" &&
+            n == "userpolicymode")
+            return new Hit(key, name, value, "Warning",
+                "User Group Policy loopback processing. Replace may bypass User OU " +
+                "Screen Saver GPO; verify Computer + User gpresult and security filters.");
         // Microsoft Power.admx: VIDEOIDLE under Computer Configuration. AC
         // and DC are seconds; 0 means Never, NOT an immediate screen-off.
         // A linked GPO here is only a candidate, never proof that the client
@@ -638,11 +646,12 @@ internal static class NativeGpoConflictScan
         foreach (XmlNode entry in entries)
         {
             if (entry is not XmlElement element ||
-                element.GetAttribute("disabled") == "1")
+                element.GetAttribute("disabled") is "1" or "true" or "True")
                 continue;
             foreach (XmlNode child in element.SelectNodes("./Properties")!)
             {
-                if (child is not XmlElement p) continue;
+                if (child is not XmlElement p ||
+                    p.GetAttribute("disabled") is "1" or "true" or "True") continue;
                 string hive = p.GetAttribute("hive");
                 bool correctHive = userScope
                     ? hive.Equals("HKCU", StringComparison.OrdinalIgnoreCase) ||
@@ -652,7 +661,19 @@ internal static class NativeGpoConflictScan
                 if (!correctHive) continue;
                 var hit = TargetValue(p.GetAttribute("key"),
                     p.GetAttribute("name"), p.GetAttribute("value"), userScope);
-                if (hit is not null) hits.Add(hit);
+                if (hit is not null)
+                {
+                    // A GPP Registry "D" (Delete) action is NOT a registry value
+                    // assignment. Surface the possible removal as uncertainty,
+                    // never as if its displayed value had been applied.
+                    bool delete = p.GetAttribute("action").Equals("D",
+                        StringComparison.OrdinalIgnoreCase);
+                    hits.Add(delete ? hit with {
+                        value = "[GPP DELETE operation]", risk = "Warning",
+                        reason = "GPP Delete may remove this setting; " +
+                            "actual item-level targeting and RSoP not verified."
+                    } : hit);
+                }
                 if (hits.Count > 120)
                     throw new InvalidDataException("Too many relevant GPP registry settings.");
             }

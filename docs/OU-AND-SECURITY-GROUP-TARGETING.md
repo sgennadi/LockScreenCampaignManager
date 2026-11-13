@@ -1,3 +1,11 @@
+## Preview.108 — scan all GPO objects on the selected DC
+
+GPO Operations → Lock Screen conflicts → **Scan all DC GPOs** is an explicit read-only domain inventory, independent of the ordinary **Scan OU + GPO**. It uses the verified connected DC for signed/sealed, paged LDAP groupPolicyContainer enumeration (up to 2,000 GPCs), then inspects known source files in User and Computer policy halves under that *same* DC's SYSVOL. It does not launch scripts, write policies or run remote processes.
+
+OU selections are optional for the full inventory; without a selected User/Computer OU, no policy is promoted to a linked candidate. The result separates: **Linked candidate** (selected OU or ancestor link, not proof of application), **Outside selected OUs**, **Inactive/filtered** (disabled link/half or blocked inheritance), and **User OU not verified** (when no User OU was selected). It flags missing GPC links, missing advertised Registry.pol, mismatched AD/SYSVOL halves, source access or parse failure as issues. It detects known Screen Saver HKCU values, desktop lock-screen policies, VIDEOIDLE/sleep AC/DC, machine inactivity and loopback UserPolicyMode, plus relevant GPP registry/power options.
+
+This is a **domain-wide inventory of GPO objects**, **not** a complete semantic index of all possible GPO settings/extensions. Unsupported CSEs, scripts, security templates, sites, GPP item-level targeting, ACL/WMI filtering, user-device membership and winning GPO must be checked independently. A policy that exists outside a selected OU is only a domain inventory hit; none of the static rows proves that it applied to a client. No clean result is asserted from incomplete reads. Offline CI only verifies the parser, scope and read-only contracts; domain Windows acceptance is a separate gate.
+
 ## Preview.107 — verify a computer's observed power timings
 
 In **GPO Operations → Lock Screen conflicts**, choose a Screen Saver or Both campaign, enter a domain **computer FQDN** belonging to the selected Computer OU, then click **Verify Screen Saver power (PC)**. This is an explicit diagnostic action: no PowerShell scripts, WinRM, remote process execution, tasks, policy edits or power-plan changes.

@@ -30,6 +30,25 @@ internal static class UiLayoutSmokeTests
             "Not verified: offline simulated UI.");
     }
 
+    private static Form CreateAllDcGpoSmoke()
+    {
+        var input = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain = "example.com", dc = "dc01.example.com",
+            observedUtc = DateTimeOffset.UtcNow,
+            computerOus = Array.Empty<string>(),
+            userOus = Array.Empty<string>(),
+            gpoCount = 1, inspectedHalves = 1, emptyHalves = 1,
+            issueCount = 0, complete = true,
+            issues = Array.Empty<object>(), notes = Array.Empty<string>(),
+            matches = Array.Empty<object>(),
+            count = 0, linkedCandidates = 0, highRisk = 0, warningsCount = 0
+        });
+        var report = DomainWideGpoReport.Parse(
+            input, "example.com", "dc01.example.com",
+            [], []);
+        return new DomainWideGpoReportDialog(report);
+    }
+
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
     {
         ("100%", new UiPreferences { Density = "Auto", UiScalePercent = 100, FontScalePercent = 100 }),
@@ -79,7 +98,8 @@ internal static class UiLayoutSmokeTests
                 }),
             new[] { "Computers from OU + group", "Check RPC reachability",
                 "Select reachable (max 25)", "Open Client Health", "Preview",
-                "Run on selected", "Verify Screen Saver power (PC)" }),
+                "Run on selected", "Verify Screen Saver power (PC)",
+                "Scan all DC GPOs" }),
         ("AD / GPO deployment - offline Wizard", () => new DomainDeploymentForm(
             new CampaignProject {
                 Name = "layout-only", TimeZoneId = "UTC",
@@ -119,6 +139,8 @@ internal static class UiLayoutSmokeTests
             new[] { "Import SMB canary JSON...", "Import cleanup JSON..." }),
         ("Screen Saver endpoint power - no-network simulated layout",
             CreateEndpointPowerSmoke, new[] { "Close" }),
+        ("Domain-wide GPO audit - offline simulated layout",
+            CreateAllDcGpoSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),
             new[] { "Apply" }),
         ("Visual DPI / language acceptance", () => new UiVisualAcceptanceDialog(),
