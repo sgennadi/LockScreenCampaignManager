@@ -222,7 +222,7 @@ internal static class SelfTests
         TestProductionReadiness();
         TestGmsaWorkerHeartbeat();
         TestUniversalUpdaterAdapter();
-        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();
         TestAlertsAndHistory();
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
     }
@@ -863,7 +863,7 @@ internal static class SelfTests
     internal static void RunUpdaterOnly()
     {
         TestUniversalUpdaterAdapter();
-        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();
         Console.WriteLine("UniversalUpdater private and public release verification passed.");
     }
 
