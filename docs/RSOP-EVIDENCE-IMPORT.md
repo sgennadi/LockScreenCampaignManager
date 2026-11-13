@@ -1,3 +1,15 @@
+## Preview.110 — independently compare Computer and User gpresult XML with all DC GPOs
+
+From **GPO Operations → Conflicts → Scan all DC GPOs**, open **Compare gpresult XML...**. This is a separate window from the existing **Analyze effective (PC)** XML importer. The former covers **both** Computer/Lock Screen/power and User/Screen Saver sources; the latter remains computer-only and is unchanged.
+
+1. On a representative Windows 10/11 endpoint, run `gpresult /scope computer /x "C:\Reports\gpresult-computer.xml" /f` from an authorized elevated command prompt. For a representative **signed-in user**, run `gpresult /scope user /x "C:\Reports\gpresult-user.xml" /f` in that user's suitable session. Access privileges and XML completeness may vary.
+2. Transfer XML files securely to the operator computer; **do not upload them publicly**. Select the exact Computer FQDN and/or `DOMAIN\username` or `user@dns.domain` that the report actually contains. The dialog cannot independently verify the typed account against AD.
+3. Use **Import Computer XML...** and **Import User XML...** independently. Each local import asks for privacy confirmation, validates the XML's expected identity, scope, log timestamp, GPO GUIDs and application flags, then keeps only bounded parsed evidence and SHA-256 in memory. The original XML is never copied or uploaded.
+4. A snapshot older than 24 hours requires separate confirmation; imported times and hashes appear in the detail pane. Changing either typed identity automatically clears only the corresponding imported snapshot. The other scope remains independent.
+5. Filter by **Computer/User** or XML observation, then select a row. **Reported applied** and **Reported filtered** are unsigned XML observations about the *GPO GUID in that scope*, **not** proof that the **configured parameter** won. **Not listed (unknown)** and **Insufficient flags** cannot be treated as policy exclusion; missing User/Computer imports are **Not imported**.
+
+The selected DC's scanned SYSVOL sources and imported client files may be from different replication versions and different times. User XML and Computer XML can reflect **different endpoints/sessions**; no client association or winner is inferred. Security filters, loopback, WMI, MDM, session type, active power plan, actual screen-off and physical lock display require a real endpoint pilot. The scanned GPO set remains a subset of relevant registry/GPP/CSE settings, not a complete semantic index of every Group Policy extension.
+
 # RSoP Evidence Import — 0.4.0-preview.24
 
 **Status:** Preview, offline XML import only. No changes to AD, GPO, SYSVOL, Windows clients or configured user credentials. There is no background polling, remote PowerShell, gpupdate, automatic collection or Git upload.
