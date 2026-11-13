@@ -232,6 +232,8 @@ internal static partial class UiLocale
             Activity105EnglishByHebrew.TryGetValue(key, out english) ||
             Coverage106EnglishByRussian.TryGetValue(key, out english) ||
             Coverage106EnglishByHebrew.TryGetValue(key, out english) ||
+            Power107EnglishByRussian.TryGetValue(key, out english) ||
+            Power107EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -247,6 +249,7 @@ internal static partial class UiLocale
             if (Coverage104Russian.TryGetValue(key, out ru)) return ru;
             if (Activity105Russian.TryGetValue(key, out ru)) return ru;
             if (Coverage106Russian.TryGetValue(key, out ru)) return ru;
+            if (Power107Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -264,6 +267,7 @@ internal static partial class UiLocale
             if (Coverage104Hebrew.TryGetValue(key, out he)) return he;
             if (Activity105Hebrew.TryGetValue(key, out he)) return he;
             if (Coverage106Hebrew.TryGetValue(key, out he)) return he;
+            if (Power107Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -281,6 +285,7 @@ internal static partial class UiLocale
             "Group assignments: Lock Screen / Screen Saver / Both",
             "Full GPO conflict report (read-only)",
             "Effective GPO candidates", "Winning Policy Analysis",
+            "Screen Saver power audit",
             "Campaign closure audit", "Repair history" })
         {
             string destination = Translate(englishCaption, language);
@@ -381,7 +386,8 @@ internal static partial class UiLocale
                     "CampaignScheduleGrid" or "EffectiveGpoGrid" or
                     "WinningPolicyGrid" or "CampaignHistoryGrid" or
                     "RepairHistoryGrid" or "CampaignClosureGrid" or
-                    "ImageFolderMappingGrid" or "GmsaReadinessGrid" or
+                    "ImageFolderMappingGrid" or "EndpointPowerReadingsGrid" or
+                    "EndpointPowerCandidateGrid" or "GmsaReadinessGrid" or
                     "DeviceRepairGrid"))
             {
                 foreach (DataGridViewColumn column in healthGrid.Columns)
