@@ -115,7 +115,9 @@ internal static class SelfTests
         Console.Error.WriteLine("SELF-TEST checkpoint: before updater EXE tests");
         TestNativeExePreviewPackage();
         Console.Error.WriteLine("SELF-TEST checkpoint: after updater EXE tests");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestAdConnectionScope");
         TestAdConnectionScope();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDiagnosticsLogging");
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
         var simulated = new InvalidOperationException(@"Unable to access \\dc01.corp.example.com\SYSVOL from 198.51.100.42");
@@ -186,9 +188,12 @@ internal static class SelfTests
             Environment.SetEnvironmentVariable("UDX_STATE_DIR", original);
             try { if (Directory.Exists(temp)) Directory.Delete(temp, true); } catch { }
         }
+        Console.Error.WriteLine("SELF-TEST checkpoint: diagnostics capture complete");
         Check(new UiPreferences { Density = "Unknown", UiScalePercent = 999,
             FontScalePercent = 1 }.Validate().Density == "Auto", "UI preferences sanity");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestUiWindowPlacement");
         TestUiWindowPlacement();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestCompanyProfiles");
         TestCompanyProfiles();
         Check(FeedbackPath.ValidateRoot(@"\\fileserver\LockScreenReports$") ==
               @"\\fileserver\LockScreenReports$", "SMB share path validation");
@@ -196,33 +201,60 @@ internal static class SelfTests
         try { FeedbackPath.ValidateRoot(@"\\dc01\SYSVOL"); }
         catch (ArgumentException) { dangerous = true; }
         Check(dangerous, "SYSVOL rejected as telemetry destination");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestClientFeedback");
         TestClientFeedback();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestClientHealthAdCoverage");
         TestClientHealthAdCoverage();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDeviceRepairDashboard");
         TestDeviceRepairDashboard();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestCampaignClosureAudit");
         TestCampaignClosureAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDcConsistencyAudit");
         TestDcConsistencyAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEffectiveGpoCandidates");
         TestEffectiveGpoCandidates();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestWinningPolicyAnalysis");
         TestWinningPolicyAnalysis();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEndpointLockScreenObservation");
         TestEndpointLockScreenObservation();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEndpointSourceEvidence");
         TestEndpointSourceEvidence();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestRsopEvidenceImport");
         TestRsopEvidenceImport();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDomainRsopCorrelation");
         TestDomainRsopCorrelation();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestPostCleanupVerification");
         TestPostCleanupVerification();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaManualDuplicateGuard");
         TestGmsaManualDuplicateGuard();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDeferredRepairQueue");
         TestDeferredRepairQueue();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestRepairHistoryJournal");
         TestRepairHistoryJournal();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestInitialRepairTracking");
         TestInitialRepairTracking();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestBackgroundApproval");
         TestBackgroundApproval();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaQueue");
         TestGmsaQueue();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaDisabledQueueAudit");
         TestGmsaDisabledQueueAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaQueueHealthAudit");
         TestGmsaQueueHealthAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaRebootRecovery");
         TestGmsaRebootRecovery();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaWorkerSchedule");
         TestGmsaWorkerSchedule();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaReadOnlyDiagnostic");
         TestGmsaReadOnlyDiagnostic();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestProductionReadiness");
         TestProductionReadiness();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaWorkerHeartbeat");
         TestGmsaWorkerHeartbeat();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestUniversalUpdaterAdapter");
         TestUniversalUpdaterAdapter();
         Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestAlertsAndHistory");
         TestAlertsAndHistory();
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
     }
