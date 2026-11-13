@@ -58,6 +58,9 @@ internal static class UiLayoutSmokeTests
     private static Form CreateGpoRsopSmoke() =>
         new DomainGpoRsopDialog(CreateAllDcGpoFixture());
 
+    private static Form CreateNamedGpoBlockersSmoke() =>
+        new DomainPilotBlockersDialog([]);
+
     private static Form CreateGpoPilotReadinessSmoke() =>
         new DomainGpoPilotReadinessDialog(CreateAllDcGpoFixture(),
             null, null, "pilot.example.com", 600, null);
@@ -162,7 +165,7 @@ internal static class UiLayoutSmokeTests
                 "Pilot readiness...", "Close" }),
         ("Pilot readiness — offline simulated layout",
             CreateGpoPilotReadinessSmoke, new[] {
-                "Refresh review", "Verify power (PC)...", "Close" }),
+                "Refresh review", "Verify power (PC)...", "Review GPO blockers...", "Close" }),
         ("Domain GPO same-setting comparisons - offline simulated layout",
             CreateGpoOverlapSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 
 namespace LockScreenCampaignManager;
@@ -39,11 +38,12 @@ internal static class DomainPilotBlockerEvidence
                     readUtc.Value <= now.AddMinutes(5) &&
                     now - readUtc.Value <= TimeSpan.FromHours(24);
                 string review = !currentScan ? "Historical GPO source" :
-                    row.ReportedRsop == "Reported filtered" ? "Reported filtered" :
+                    hasXml && !currentXml ? "Historical gpresult" :
+                    row.ReportedRsop == "Reported filtered" && currentXml
+                        ? "Reported filtered" :
                     row.ReportedRsop == "Reported applied" && currentXml
                         ? "Review first (GPO reported applied)" :
-                    row.ReportedRsop == "Reported applied"
-                        ? "Historical gpresult" : "Unverified applicability";
+                    "Unverified applicability";
                 // Even "Review first" must NOT be described as proven blocker.
                 return new DomainPilotBlocker(
                     row.Scope, row.Gpo, row.GpoId, row.RegistryKey,
