@@ -133,7 +133,9 @@ internal sealed class DomainGpoPilotReadiness
                 "With authorization, select the verified Computer OU and run Verify power (PC).");
         else
         {
-            if (now - power.ObservedUtc > TimeSpan.FromMinutes(5))
+            bool recent = power.ObservedUtc <= now.AddMinutes(2) &&
+                now - power.ObservedUtc <= TimeSpan.FromMinutes(5);
+            if (!recent)
                 Add(findings, "Endpoint power", "Not verified",
                     "Power observation is more than five minutes old.",
                     "Repeat the read-only power observation on the same approved PC.");
@@ -144,7 +146,10 @@ internal sealed class DomainGpoPilotReadiness
                     "Incomplete or unavailable sources are not proof of normal power behavior.");
             var disputes = power.SourceDisagreements();
             foreach (var mismatch in disputes)
-                Add(findings, "Endpoint power", "Observed concern",
+                Add(findings, "Endpoint power",
+                    recent && power.PlanStatus == "Available" &&
+                        power.RegistryStatus == "Readable"
+                        ? "Observed concern" : "Not verified",
                     mismatch.Kind + " " + mismatch.Supply +
                     ": active plan " + mismatch.Wmi + " s vs policy HKLM " +
                     mismatch.Policy + " s (source values disagree).",
@@ -165,8 +170,11 @@ internal sealed class DomainGpoPilotReadiness
                     continue; // zero means Never for this individual timer
                 string area = value.Kind == "Display" ? "Display off" :
                     value.Kind == "Sleep" ? "Sleep" : "Machine inactivity lock";
+                bool sourceComplete = value.Source == "ActivePlanWmi"
+                    ? power.PlanStatus == "Available" : power.RegistryStatus == "Readable";
                 if (seconds < saverIdleSeconds)
-                    Add(findings, area, "Observed concern",
+                    Add(findings, area,
+                        recent && sourceComplete ? "Observed concern" : "Not verified",
                         value.Source + " / " + value.Supply + " = " + seconds +
                         " s, earlier than configured Screen Saver " +
                         saverIdleSeconds + " s.",
