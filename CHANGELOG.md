@@ -1,3 +1,11 @@
+## 0.4.0-preview.108 — read-only all-domain GPO inventory and blocker candidates (2026-11-13)
+
+- Enumerate all GPCs via bounded signed/sealed paged LDAP from the explicitly selected DC; read the same DC's SYSVOL User/Computer halves and recognized Registry.pol / GPP Registry.xml / GPP PowerOptions.xml source policies.
+- Classify relevant Lock Screen, Screen Saver, display-off AC/DC, sleep, machine inactivity and loopback GPO candidates. Compare candidate thresholds to campaign Screen Saver idle time. Scope results by selected Computer/User OU ancestry, disabled links, Block Inheritance and Enforced.
+- Show separate **linked candidate / outside selected OUs / inactive / User OU not verified** labels, unreadable/mismatched GPC/SYSVOL issues, and a searchable high-DPI read-only report with CSV formula-safe *local* export.
+- Add RU/HE captions and offline safety, scope/integrity/CSV, Windows C# regression and 100–200% simulated UI checks; x64/x86 Windows builds and Offline AD Lab are release gates.
+- The scan inventories **all GPO objects**, but only recognizes selected blocker settings; it is **not** comprehensive arbitrary CSE settings, winning RSoP, proven security/WMI/GPP targeting, Site/loopback effects, interactive HKCU or live client behavior. No changes to AD, SYSVOL, clients or power settings. A domain Windows 10/11 pilot with gpresult/powercfg remains required.
+
 ## 0.4.0-preview.107 — Windows client power observation for Screen Saver (2026-11-13)
 
 - Add explicit per-PC read-only power check in GPO Operations / Conflicts, after verifying the supplied FQDN, domain controller and exact Computer OU via signed/sealed LDAP.
