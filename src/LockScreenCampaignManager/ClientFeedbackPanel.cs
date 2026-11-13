@@ -23,12 +23,16 @@ internal sealed class ClientFeedbackPanel : UserControl
     private readonly TextBox _root = new();
     private readonly TextBox _campaignId = new();
     private readonly Label _totals = new();
+    private readonly Label _coverage = new() { Name = "ClientHealthAdReportCoverage" };
     private readonly Label _message = new();
+    // Display-only AD age filter, never a change to GPO, group or Repair targets.
+    private readonly ComboBox _activityWindow = new() { Name = "ClientHealthAdActivityWindow" };
     private readonly DataGridView _grid = new();
     private readonly CheckBox _auto = new();
     private Button _repairButton = new();
     private readonly System.Windows.Forms.Timer _timer = new();
     private List<string> _expected = new();
+    private ClientHealthAdInventory? _adInventory;
     private ClientHealthSnapshot? _snapshot;
     private bool _busy;
 
@@ -99,7 +103,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
         Controls.Add(layout);
         var config = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true };
         _root.Name = "ClientHealthSmbPath";
@@ -129,6 +133,16 @@ internal sealed class ClientFeedbackPanel : UserControl
         _auto.Checked = true;
         _auto.Margin = new Padding(10, 14, 3, 0);
         config.Controls.Add(_auto);
+        _activityWindow.DropDownStyle = ComboBoxStyle.DropDownList;
+        _activityWindow.Width = 155;
+        _activityWindow.DropDownWidth = 260;
+        _activityWindow.Items.AddRange(
+            ["Last 30 days", "Last 90 days", "Last 180 days", "Last 365 days"]);
+        _activityWindow.SelectedIndex = 1;
+        _activityWindow.SelectedIndexChanged += (_, _) => UpdateAdReportCoverage();
+        new ToolTip().SetToolTip(_activityWindow, UiLocale.Display(
+            "AD lastLogonTimestamp is approximate; activity window never filters deployment or Repair."));
+        config.Controls.Add(_activityWindow);
         layout.Controls.Add(config, 0, 0);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = false };
         buttons.Controls.Add(Action("Load PCs from AD", () => _ = LoadExpectedAsync(), 225));
@@ -168,8 +182,10 @@ internal sealed class ClientFeedbackPanel : UserControl
         foreach (DataGridViewColumn column in _grid.Columns)
             column.MinimumWidth = Math.Max(94, (int)column.FillWeight);
         layout.Controls.Add(_grid, 0, 2);
-        var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
+            RowCount = 3, AutoScroll = true };
         foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         foot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _totals.Name = "ClientHealthTotals";
         _totals.Dock = DockStyle.Fill;
@@ -177,6 +193,11 @@ internal sealed class ClientFeedbackPanel : UserControl
         _totals.Padding = new Padding(4, 7, 4, 7);
         _totals.Font = new Font("Segoe UI Semibold", 10f);
         _totals.Text = "Load computers from OU + Security Group to calculate fleet totals.";
+        _coverage.Dock = DockStyle.Fill;
+        _coverage.AutoEllipsis = false;
+        _coverage.ForeColor = UiStyle.Navy;
+        _coverage.Padding = new Padding(4, 4, 4, 4);
+        _coverage.Text = UiLocale.Display("AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status.");
         _message.Name = "ClientHealthStatus";
         _message.Dock = DockStyle.Fill;
         _message.AutoEllipsis = false;
@@ -184,7 +205,8 @@ internal sealed class ClientFeedbackPanel : UserControl
         _message.ForeColor = UiStyle.Muted;
         _message.Text = "No data. Reports are diagnostic; Healthy does not prove the image is visible.";
         foot.Controls.Add(_totals, 0, 0);
-        foot.Controls.Add(_message, 0, 1);
+        foot.Controls.Add(_coverage, 0, 1);
+        foot.Controls.Add(_message, 0, 2);
         layout.Controls.Add(foot, 0, 3);
     }
 
@@ -216,22 +238,38 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         if (_busy) return;
         _busy = true;
+        _expected.Clear();
+        _adInventory = null;
+        _snapshot = null;
+        _grid.Rows.Clear();
+        _totals.Text = UiLocale.Display("Expected (AD): not loaded");
+        UpdateAdReportCoverage();
         _message.Text = UiLocale.Display("Reading computer objects in OU and Security Group...");
         try
         {
             var result = await Task.Run(() => DomainPowerShellRunner.Execute(
-                DomainOperation.Immediate, "List",
+                DomainOperation.Immediate, "Inventory",
                 new { domain = _domain, dc = _dc, ouDn = _ouDn, groupDn = _groupDn },
                 _credentials, 240_000));
             if (IsDisposed) return;
-            var data = result.GetProperty("data");
-            var hosts = data.EnumerateArray().Select(x => (x.GetProperty("name").GetString() ?? "").Split('.')[0])
-                .Where(FeedbackPath.IsValidHost).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            _expected = hosts;
-            _message.Text = UiLocale.Display("Found ") + hosts.Count +
-                UiLocale.Display(" computers in the OU + Security Group intersection.");
+            var inventory = ClientHealthAdInventory.Parse(result.GetProperty("data"),
+                _domain, DateTimeOffset.UtcNow);
+            _adInventory = inventory;
+            _expected = inventory.ExpectedHosts.OrderBy(x => x,
+                StringComparer.OrdinalIgnoreCase).ToList();
+            _message.Text = string.Format(UiLocale.Display(
+                "AD inventory verified: OU {0} computer objects; scoped group {1}. Read-only; not effective GPO targeting."),
+                inventory.OuTotal, inventory.GroupTotal);
         }
-        catch (Exception ex) { if (!IsDisposed) UiErrorDialog.Show(FindForm(), "Load eligible computers", ex); }
+        catch (Exception ex)
+        {
+            if (!IsDisposed)
+            {
+                _message.Text = UiLocale.Display(
+                    "AD inventory not verified. Refresh AD before Repair or coverage comparisons.");
+                UiErrorDialog.Show(FindForm(), "Load eligible computers", ex);
+            }
+        }
         finally { _busy = false; }
         if (!IsDisposed) await RefreshAsync();
     }
@@ -245,9 +283,10 @@ internal sealed class ClientFeedbackPanel : UserControl
             string root = FeedbackPath.ValidateRoot(_root.Text);
             string id = _campaignId.Text.Trim();
             string[] names = _expected.ToArray();
+            bool verified = _adInventory is not null && _adInventory.IsFresh(DateTimeOffset.UtcNow);
             int maxAge = Math.Clamp(_project.FeedbackIntervalMinutes * 3, 45, 180);
             var snapshot = await Task.Run(() => ClientFeedbackReader.Read(root, id, names,
-                DateTimeOffset.UtcNow, maxAge));
+                DateTimeOffset.UtcNow, maxAge, expectedScopeVerified: verified));
             if (IsDisposed) return;
             _snapshot = snapshot;
             _grid.SuspendLayout();
@@ -270,13 +309,14 @@ internal sealed class ClientFeedbackPanel : UserControl
             }
             finally { _grid.ResumeLayout(); }
             _totals.Text = UiLocale.Display("Expected (AD): ") +
-                (snapshot.Expected == 0 ? UiLocale.Display("not loaded") : snapshot.Expected.ToString()) + " | " +
+                (_adInventory is null ? UiLocale.Display("not loaded") : snapshot.Expected.ToString()) + " | " +
                 UiLocale.Display("Healthy: ") + snapshot.Healthy + " | " +
                 UiLocale.Display("Ready: ") + snapshot.Ready + " | " +
                 UiLocale.Display("Error: ") + snapshot.Errors + " | " +
                 UiLocale.Display("Stale: ") + snapshot.Stale + " | " +
                 UiLocale.Display("No report: ") + snapshot.NoReport + " | " +
                 UiLocale.Display("Completed: ") + snapshot.Completed;
+            UpdateAdReportCoverage();
             _message.Text = UiLocale.Display("Updated ") +
                 DateTime.Now.ToString("HH:mm:ss") +
                 UiLocale.Display("; invalid/foreign JSON: ") + snapshot.InvalidReports +
@@ -290,6 +330,35 @@ internal sealed class ClientFeedbackPanel : UserControl
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 240);
         }
         finally { _busy = false; }
+    }
+
+    private void UpdateAdReportCoverage()
+    {
+        if (_adInventory is null)
+        {
+            _coverage.Text = UiLocale.Display(
+                "AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status.");
+            return;
+        }
+        int days = _activityWindow.SelectedIndex switch
+        {
+            0 => 30, 1 => 90, 2 => 180, 3 => 365, _ => 90
+        };
+        int maxAge = Math.Clamp(_project.FeedbackIntervalMinutes * 3, 45, 180);
+        var report = _adInventory.Summarize(_snapshot, _campaignId.Text.Trim(),
+            days, DateTimeOffset.UtcNow, maxAge);
+        string ad = string.Format(UiLocale.Display(
+            "AD OU: {0} | OU + group: {1} | Enabled: {2} | Disabled: {3} | State unknown: {4} | AD last-seen <= {5} days: {6} | No timestamp: {7}"),
+            report.OuTotal, report.GroupTotal, report.Enabled, report.Disabled,
+            report.UnknownAccountState, report.Days, report.RecentlySeenAd, report.UnknownLogon);
+        string smb = report.ReportsVerified
+            ? string.Format(UiLocale.Display(
+                "Agent JSON received: {0}/{1} | Fresh: {2} | Stale reports: {3} | No report: {4}. Reports are untrusted hints, not online proof."),
+                report.Reported, report.GroupTotal, report.FreshReports,
+                report.StaleReports, report.NoReport)
+            : UiLocale.Display(
+                "Agent comparison not verified (reload AD, campaign and SMB reports). No zero coverage claimed.");
+        _coverage.Text = ad + Environment.NewLine + smb;
     }
 
     private void ShowLocalAlert(string message)
@@ -317,7 +386,8 @@ internal sealed class ClientFeedbackPanel : UserControl
     private async Task RepairSelectedAsync()
     {
         if (_busy || _requestRepair is null) return;
-        if (_expected.Count == 0)
+        if (_adInventory is null || !_adInventory.IsFresh(DateTimeOffset.UtcNow) ||
+            _expected.Count == 0)
         {
             MessageBox.Show(FindForm(), UiLocale.Display("Click Load PCs from AD first. " +
                 "Repair requires a verified OU + Security Group scope."),
