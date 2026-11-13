@@ -178,7 +178,12 @@ internal static class UiLayoutSmokeTests
                 "Pilot readiness...", "Close" }),
         ("Pilot readiness — offline simulated layout",
             CreateGpoPilotReadinessSmoke, new[] {
-                "Refresh review", "Verify power (PC)...", "Review GPO blockers...", "Close" }),
+                "Refresh review", "Verify power (PC)...", "Review GPO blockers...",
+                "Import user HKCU JSON...", "Clear HKCU evidence",
+                "Capture this PC's user HKCU...", "Close" }),
+        ("Current user HKCU probe — offline simulated layout",
+            () => new EndpointUserProbeDialog(), new[] {
+                "Capture this Windows user", "Save local HKCU JSON...", "Close" }),
         ("Modern updater warning — offline simulated layout",
             CreateModernWarningSmoke, new[] { "Yes", "No" }),
         ("Modern updater information — offline simulated layout",
