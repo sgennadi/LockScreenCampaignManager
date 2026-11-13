@@ -18,11 +18,16 @@ class ModernTests(unittest.TestCase):
     def test_custom_pilot_gpo_fail_closed(self):
         x=read("CustomSaverPilotFile.cs")
         for t in ("SHA256.HashData(stream)", "ReadExactly(dos)", "ReadExactly(pe)",
-            "WindowsAuthenticodeAudit.Inspect(full)", "FileAttributes.ReparsePoint",
+            "WindowsAuthenticodeAudit.Inspect(full, cacheOnly: true)", "FileAttributes.ReparsePoint",
             "ValidateStored(", "160L * 1024 * 1024"):
             self.assertIn(t,x)
         for t in ("Process.Start(", "ModifyRequest(", "File.Copy(", "File.WriteAllText("):
             self.assertNotIn(t,x)
+        self.assertIn("InspectPeOnlyForSelfTest(Application.ExecutablePath)", read("SelfTests.cs"))
+        sign=read("WindowsAuthenticodeAudit.cs")
+        self.assertIn("WTD_CACHE_ONLY_URL_RETRIEVAL", sign)
+        self.assertIn("0x00001000u", sign)
+        self.assertIn("bool cacheOnly = false", sign)
         wizard=read("MainForm.CampaignWizard.Mode.cs")
         self.assertIn("WizardScreenSaverBrowseCustom",wizard)
         self.assertIn("CustomSaverPilotFile.Inspect(picker.FileName)",wizard)
