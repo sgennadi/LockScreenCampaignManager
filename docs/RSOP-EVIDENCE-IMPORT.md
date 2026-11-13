@@ -1,3 +1,11 @@
+## Preview.111 — Pilot readiness (read-only)
+
+After using **Scan all DC GPOs → Compare gpresult XML...**, type the full FQDN of the selected Windows test computer and optionally import separate Computer/User gpresult XMLs. Click **Pilot readiness...** to open a read-only checklist that combines the previously scanned DC GPO source candidates with the imported GPO GUID-and-scope observations. It does not verify interactive User HKCU, effective setting precedence, or the actual display.
+
+Choose the correct Computer OU from the scanned OU selector. If **Verify power (PC)...** is available, approve its separate prompt to read the **exact** computer's current active plan and policy registry from a freshly verified DC/OU/FQDN. It uses existing remote read-only WMI/HKLM, **not** a startup script, gpupdate, agent command, scheduled task, or GPO write. Display-off AC/DC, Sleep AC/DC and machine inactivity lock are compared to the *configured* User Screen Saver idle interval; equal timeouts are potential ordering concerns and zero ("Never") is not an early timeout. WMI/registry disagreements and fresh shorter timers are shown as **Observed concern**, but this is not proof that Screen Saver actually failed. Stale/partial observations remain **Not verified**. Without an OU selection or valid Screen Saver interval, pilot assessment and power verification are disabled.
+
+The checklist always retains **Not verified** rows for signed-in User HKCU/interactive session and visual Windows 10/11 lock-screen and Screen Saver acceptance, even if source files and imported GPO IDs match. This is a manual pilot aid, **not** a pass/fail deployment certification. Imported XMLs remain unsigned, local and separately sourced; no automatic upload or repair is performed.
+
 ## Preview.110 — independently compare Computer and User gpresult XML with all DC GPOs
 
 From **GPO Operations → Conflicts → Scan all DC GPOs**, open **Compare gpresult XML...**. This is a separate window from the existing **Analyze effective (PC)** XML importer. The former covers **both** Computer/Lock Screen/power and User/Screen Saver sources; the latter remains computer-only and is unchanged.

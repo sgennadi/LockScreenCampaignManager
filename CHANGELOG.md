@@ -1,3 +1,11 @@
+## 0.4.0-preview.111 — read-only Screen Saver pilot readiness (2026-11-13)
+
+- Add **Pilot readiness...** to **Scan all DC GPOs → Compare gpresult XML...**. Build a scoped, on-demand evidence checklist using the selected DC's known source GPO settings and independently imported Computer/User gpresult observations; distinguish **Observed concern / Source candidate / Not verified / Information** without declaring a winning GPO.
+- Optional **Verify power (PC)...** checks the selected Computer OU/FQDN again on the selected DC, requires explicit operator confirmation, and uses the existing remote read-only WMI/HKLM endpoint power collector. No remote collection occurs when only opening/reviewing the GPO report.
+- Compare Screen Saver idle time with Display Off, Sleep and machine inactivity lock for AC/DC; record conflicting WMI active-plan vs policy HKLM values, equality boundaries, never (0), incomplete and stale data. Stale/partial evidence is downgraded to **Not verified**, never promoted to current observations or a successful campaign.
+- Preserve explicit **not tested** rows for active signed-in User HKCU, RDS/console session type, actual visual display, resume/password, wake and multi-monitor acceptance on Windows 10/11. Imported gpresult snapshots are unsigned and may be from different machines/times, so no effective per-setting result or automatic repair is claimed.
+- RU/HE captions, simulated 100–200% DPI smoke, C# scoped/stale/time-out regressions, Python read-only/privacy contracts, Windows x64/x86 and Offline AD Lab CI; no changes to deployment/agent methods.
+
 ## 0.4.0-preview.110 — independent User/Computer gpresult XML correlation (2026-11-13)
 
 - Add **Compare gpresult XML...** to the read-only all-domain GPO scan. It correlates a selected-DC source snapshot with two independent, manually selected local gpresult XML files by **GPO GUID + Computer/User scope**. Names alone never establish policy identity.

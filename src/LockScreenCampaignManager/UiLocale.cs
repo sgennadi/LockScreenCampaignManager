@@ -240,6 +240,8 @@ internal static partial class UiLocale
             Power109EnglishByHebrew.TryGetValue(key, out english) ||
             Power110EnglishByRussian.TryGetValue(key, out english) ||
             Power110EnglishByHebrew.TryGetValue(key, out english) ||
+            Power111EnglishByRussian.TryGetValue(key, out english) ||
+            Power111EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
@@ -259,6 +261,7 @@ internal static partial class UiLocale
             if (Power108Russian.TryGetValue(key, out ru)) return ru;
             if (Power109Russian.TryGetValue(key, out ru)) return ru;
             if (Power110Russian.TryGetValue(key, out ru)) return ru;
+            if (Power111Russian.TryGetValue(key, out ru)) return ru;
         }
         if (IsHebrew(language))
         {
@@ -280,6 +283,7 @@ internal static partial class UiLocale
             if (Power108Hebrew.TryGetValue(key, out he)) return he;
             if (Power109Hebrew.TryGetValue(key, out he)) return he;
             if (Power110Hebrew.TryGetValue(key, out he)) return he;
+            if (Power111Hebrew.TryGetValue(key, out he)) return he;
         }
         return key;
     }
@@ -298,7 +302,7 @@ internal static partial class UiLocale
             "Full GPO conflict report (read-only)",
             "Effective GPO candidates", "Winning Policy Analysis",
             "Screen Saver power audit", "All DC GPO conflict audit",
-            "Compare GPO settings", "Compare gpresult XML",
+            "Compare GPO settings", "Compare gpresult XML", "Pilot readiness review",
             "Campaign closure audit", "Repair history" })
         {
             string destination = Translate(englishCaption, language);

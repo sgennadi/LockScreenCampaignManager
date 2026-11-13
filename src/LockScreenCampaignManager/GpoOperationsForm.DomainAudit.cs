@@ -51,7 +51,28 @@ internal sealed partial class GpoOperationsForm
                 "RDS session limits are remote-session-only candidates.";
             _status.Text = UiLocale.Display(
                 "Domain GPO inventory finished (read-only). Review source and scope.");
-            using var dialog = new DomainWideGpoReportDialog(report);
+            int pilotIdle = CampaignTargetAssignments.NeedsScreenSaver(
+                    _project.EffectiveCampaignMode) &&
+                _project.ScreenSaver.IdleSeconds is >= 60 and <= 86400
+                    ? _project.ScreenSaver.IdleSeconds : 0;
+            // Optional read-only on-demand power source; no machine is ever
+            // contacted while scanning domain GPOs or importing gpresult XML.
+            using var dialog = new DomainWideGpoReportDialog(report, pilotIdle,
+                async (computer, computerOu) => {
+                    if (!NativeGpoConflictScan.SafeComputerName(computer, report.Domain) ||
+                        !report.ComputerOus.Contains(computerOu,
+                            StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException(
+                            "Pilot computer/OU was not included in the selected-DC scan.");
+                    var observation = await ExecuteAsync(DomainOperation.ConflictScan,
+                        "ObservePower", new {
+                            domain = report.Domain, dc = report.Dc,
+                            ouDn = computerOu, computer
+                        });
+                    return EndpointPowerObservation.Parse(observation,
+                        report.Domain, report.Dc, computerOu, computer,
+                        DateTimeOffset.UtcNow);
+                });
             dialog.ShowDialog(this);
         }
         catch (Exception ex) { Fail(ex, "Scan all DC GPOs"); }

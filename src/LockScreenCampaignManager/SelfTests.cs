@@ -67,6 +67,7 @@ internal static class SelfTests
         TestScreenSaverPowerConflictAnalysis();
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
+        TestDomainPilotReadiness();
         TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
@@ -1533,6 +1534,117 @@ StartExecutePSFirst=true
                     "=malicious", "+test", "RSoP unknown")
             ]).Contains("\"'=malicious\"", StringComparison.Ordinal),
             "Duplicate values inside one GPO remain ambiguous, CSV export escapes formulas.");
+    }
+
+    private static void TestDomainPilotReadiness()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        const string domain = "example.com";
+        const string dc = "dc01.example.com";
+        const string pc = "pc01.example.com";
+        const string ou = "OU=Computers,DC=example,DC=com";
+        const string userOu = "OU=Users,DC=example,DC=com";
+        const string gpo = "01234567-89ab-cdef-0123-456789abcdef";
+        var scan = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain, dc, observedUtc = now, computerOus = new[] { ou },
+            userOus = new[] { userOu }, gpoCount = 1,
+            inspectedHalves = 1, emptyHalves = 1,
+            issueCount = 0, complete = true, issues = Array.Empty<object>(),
+            notes = Array.Empty<string>(),
+            matches = new[] {
+                new { gpo = "Pilot Power", gpoId = gpo, scope = "Computer",
+                    source = "Registry.pol", key =
+                        @"Software\Policies\Microsoft\Power\PowerSettings\3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e",
+                    setting = "ACSettingIndex", value = "240", risk = "High",
+                    reason = "Potential early display off",
+                    linkStatus = "Linked candidate", linkedAt = ou,
+                    applicability = "Potential only" }
+            },
+            count = 1, linkedCandidates = 1, highRisk = 1, warningsCount = 0
+        });
+        var report = DomainWideGpoReport.Parse(scan, domain, dc, [ou], [userOu]);
+        string xml =
+            "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.ToString("o") + "</ReadTime>" +
+            "<DataType>LoggedData</DataType><ComputerResults>" +
+            "<Name>" + pc + "</Name><Domain>" + domain +
+            "</Domain><GPO><Identifier>{" + gpo + "}</Identifier>" +
+            "<Name>Pilot Power</Name><Enabled>true</Enabled><IsValid>true</IsValid>" +
+            "<FilterAllowed>true</FilterAllowed><AccessDenied>false</AccessDenied>" +
+            "</GPO></ComputerResults></Rsop>";
+        var computerXml = RsopEvidence.ParseXml(xml, pc, domain, now);
+        var withoutPower = DomainGpoPilotReadiness.Build(
+            report, pc, ou, 600, null, computerXml, null, now);
+        Check(withoutPower.Potential > 0 && withoutPower.NotVerified >= 3 &&
+            withoutPower.ComputerXmlImported && !withoutPower.UserXmlImported &&
+            !withoutPower.PowerObserved && !withoutPower.ProvesScreenSaverDisplayed &&
+            !withoutPower.ProvesWinningGpo &&
+            !withoutPower.PermitsAutomaticRemediation,
+            "Pilot with applied Computer XML remains a source candidate, never ready/verified.");
+
+        var endpoint = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain, dc, ouDn = ou, computer = pc, observedUtc = now,
+            adScopeVerified = true, activePlanStatus = "Available",
+            activePlanGuid = "381b4222-f694-41f0-9685-ff5bb260df2e",
+            activePlanName = "Balanced", policyRegistryStatus = "Readable",
+            values = new object[] {
+                new { kind = "Display", supply = "AC", source = "ActivePlanWmi",
+                    status = "Present", seconds = (long?)300 },
+                new { kind = "Display", supply = "DC", source = "ActivePlanWmi",
+                    status = "Present", seconds = (long?)0 },
+                new { kind = "Sleep", supply = "AC", source = "ActivePlanWmi",
+                    status = "Present", seconds = (long?)900 },
+                new { kind = "Sleep", supply = "DC", source = "ActivePlanWmi",
+                    status = "Present", seconds = (long?)1800 },
+                new { kind = "Display", supply = "AC", source = "PolicyRegistry",
+                    status = "Present", seconds = (long?)240 },
+                new { kind = "Display", supply = "DC", source = "PolicyRegistry",
+                    status = "Absent", seconds = (long?)null },
+                new { kind = "Sleep", supply = "AC", source = "PolicyRegistry",
+                    status = "Present", seconds = (long?)900 },
+                new { kind = "Sleep", supply = "DC", source = "PolicyRegistry",
+                    status = "Absent", seconds = (long?)null },
+                new { kind = "MachineLock", supply = "Any", source = "PolicyRegistry",
+                    status = "Present", seconds = (long?)120 }
+            },
+            notes = Array.Empty<string>()
+        });
+        var power = EndpointPowerObservation.Parse(endpoint,
+            domain, dc, ou, pc, now);
+        var observed = DomainGpoPilotReadiness.Build(
+            report, pc, ou, 600, power, computerXml, null, now);
+        Check(observed.PowerObserved && observed.Concerns >= 3 &&
+            observed.Findings.Any(x => x.Area == "Display off" &&
+                x.State == "Observed concern") &&
+            observed.Findings.Any(x => x.Area == "Machine inactivity lock" &&
+                x.State == "Observed concern") &&
+            observed.Findings.Any(x => x.Area == "Endpoint power" &&
+                x.Observation.Contains("source values disagree", StringComparison.Ordinal)) &&
+            observed.NotVerified >= 2 && !observed.ProvesScreenSaverDisplayed,
+            "Current endpoint observations flag early display, machine lock and source mismatch.");
+        var stale = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            power, computerXml, null, now.AddMinutes(16));
+        Check(stale.Concerns == 0 && stale.NotVerified > observed.NotVerified &&
+            stale.Findings.Any(x => x.Area == "DC inventory" &&
+                x.State == "Not verified") &&
+            stale.Findings.Any(x => x.Area == "Endpoint power" &&
+                x.Observation.Contains("more than five minutes", StringComparison.Ordinal)),
+            "Stale endpoint/DC observations never count as current concerns or a clean result.");
+        bool rejected = false;
+        try { _ = DomainGpoPilotReadiness.Build(report,
+            "foreign.example.com", ou, 600, power, computerXml, null, now); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Pilot refuses to reuse another computer's XML or endpoint readings.");
+        rejected = false;
+        try { _ = DomainGpoPilotReadiness.Build(report, pc,
+            "OU=Other,DC=example,DC=com", 600, null, computerXml, null, now); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Pilot refuses OU outside the complete selected-DC scan.");
+        rejected = false;
+        try { _ = DomainGpoPilotReadiness.Build(report, pc,
+            ou, 30, null, computerXml, null, now); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Pilot requires the configured Screen Saver idle timeout.");
     }
 
     private static void TestDomainWideGpoAudit()

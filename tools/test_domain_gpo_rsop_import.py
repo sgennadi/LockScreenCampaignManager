@@ -71,7 +71,7 @@ class DomainGpresultContracts(unittest.TestCase):
                 self.assertIn(marker, dlg, marker)
         self.assertIn("_computer = null", dlg)
         self.assertIn("_user = null", dlg)
-        self.assertIn("new DomainGpoRsopDialog(_report)", source("DomainWideGpoReportDialog.cs"))
+        self.assertIn("new DomainGpoRsopDialog(", source("DomainWideGpoReportDialog.cs"))
         self.assertIn("AllDcGpoRsopButton", source("DomainWideGpoReportDialog.cs"))
         self.assertIn("CreateGpoRsopSmoke()", source("UiLayoutSmokeTests.cs"))
         self.assertIn('"Compare gpresult XML..."', source("UiLayoutSmokeTests.cs"))
@@ -83,9 +83,10 @@ class DomainGpresultContracts(unittest.TestCase):
                     "Power110EnglishByRussian", "Power110EnglishByHebrew"):
             self.assertIn(key, locale)
             self.assertIn(key, host)
-        self.assertIn("0.4.0-preview.110",
+        self.assertIn("<Version>0.4.0-preview.",
                       source("LockScreenCampaignManager.csproj"))
         release = (ROOT / "docs" / "RELEASE-PREVIEW110.md").read_text(encoding="utf-8")
+        self.assertIn("0.4.0-preview.110", release)
         self.assertIn("User", release)
         self.assertIn("Computer", release)
         self.assertIn("not", release.lower())
