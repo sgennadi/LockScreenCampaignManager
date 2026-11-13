@@ -246,6 +246,8 @@ internal static partial class UiLocale
             Power112EnglishByHebrew.TryGetValue(key, out english) ||
             Power113EnglishByRussian.TryGetValue(key, out english) ||
             Power113EnglishByHebrew.TryGetValue(key, out english) ||
+            Power114EnglishByRussian.TryGetValue(key, out english) ||
+            Power114EnglishByHebrew.TryGetValue(key, out english) ||
             EnglishByRussian.TryGetValue(key, out english))
             key = english;
 
