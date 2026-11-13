@@ -163,39 +163,6 @@ public sealed partial class MainForm
                 Dock = DockStyle.Fill, AutoEllipsis = true,
                 Margin = new Padding(6, 2, 2, 2)
             };
-            customBrowse.Click += (_, _) =>
-            {
-                using var picker = new OpenFileDialog {
-                    Title = T("Choose local Screen Saver executable (pilot only)"),
-                    Filter = "Screen Saver or executable (*.scr;*.exe)|*.scr;*.exe|Screen Savers (*.scr)|*.scr|Executables (*.exe)|*.exe",
-                    CheckFileExists = true, CheckPathExists = true,
-                    Multiselect = false, RestoreDirectory = true
-                };
-                if (picker.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    var observation = CustomSaverPilotFile.Inspect(picker.FileName);
-                    // Toggle controls first: their events clear any previous
-                    // custom selection before committing the newly inspected PE.
-                    photo.Checked = false;
-                    saver.SelectedItem = customOption;
-                    _owner._project.ScreenSaver.CustomExecutablePath = observation.Path;
-                    _owner._project.ScreenSaver.CustomExecutableSha256 = observation.Sha256;
-                    RefreshDescription(true);
-                    MessageBox.Show(this,
-                        T("Selected local custom Screen Saver for manual pilot testing only.") +
-                        Environment.NewLine + observation.Path +
-                        Environment.NewLine + "SHA-256: " + observation.Sha256 +
-                        Environment.NewLine + T("Windows Authenticode: ") +
-                        T(observation.TrustedSignature ? "TRUSTED" : "NOT VERIFIED") +
-                        " (" + observation.SignatureStatus + ")" +
-                        Environment.NewLine + Environment.NewLine +
-                        T("A .scr is an executable. An .exe must explicitly implement /s, /p, /c to work as a Windows Screen Saver. This selection does not execute, convert or deploy the file. GPO delivery is blocked."),
-                        T("Custom Screen Saver — pilot only"),
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                catch (Exception ex) { UiErrorDialog.Show(this, "Select custom Screen Saver", ex); }
-            };
             saverRow.Controls.Add(customBrowse, 2, 0);
             details.Controls.Add(saverRow, 0, 3);
 
@@ -352,6 +319,40 @@ public sealed partial class MainForm
                 _owner._projectDirty = true;
                 _saved = false;
             }
+
+            customBrowse.Click += (_, _) =>
+            {
+                using var picker = new OpenFileDialog {
+                    Title = T("Choose local Screen Saver executable (pilot only)"),
+                    Filter = "Screen Saver or executable (*.scr;*.exe)|*.scr;*.exe|Screen Savers (*.scr)|*.scr|Executables (*.exe)|*.exe",
+                    CheckFileExists = true, CheckPathExists = true,
+                    Multiselect = false, RestoreDirectory = true
+                };
+                if (picker.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    var observation = CustomSaverPilotFile.Inspect(picker.FileName);
+                    // Toggle controls first: their events clear any previous
+                    // custom selection before committing the newly inspected PE.
+                    photo.Checked = false;
+                    saver.SelectedItem = customOption;
+                    _owner._project.ScreenSaver.CustomExecutablePath = observation.Path;
+                    _owner._project.ScreenSaver.CustomExecutableSha256 = observation.Sha256;
+                    RefreshDescription(true);
+                    MessageBox.Show(this,
+                        T("Selected local custom Screen Saver for manual pilot testing only.") +
+                        Environment.NewLine + observation.Path +
+                        Environment.NewLine + "SHA-256: " + observation.Sha256 +
+                        Environment.NewLine + T("Windows Authenticode: ") +
+                        T(observation.TrustedSignature ? "TRUSTED" : "NOT VERIFIED") +
+                        " (" + observation.SignatureStatus + ")" +
+                        Environment.NewLine + Environment.NewLine +
+                        T("A .scr is an executable. An .exe must explicitly implement /s, /p, /c to work as a Windows Screen Saver. This selection does not execute, convert or deploy the file. GPO delivery is blocked."),
+                        T("Custom Screen Saver — pilot only"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (Exception ex) { UiErrorDialog.Show(this, "Select custom Screen Saver", ex); }
+            };
 
             mode.SelectedIndexChanged += (_, _) => RefreshDescription(true);
             saver.SelectedIndexChanged += (_, _) => RefreshDescription(true);
