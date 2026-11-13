@@ -1418,6 +1418,9 @@ StartExecutePSFirst=true
             "pc01.example.com", now);
         var assessments = report.Assess(600);
         Check(assessments.Count == 9 && report.PotentialEarly(600) == 2 &&
+            report.SourceDisagreements().Count == 2 &&
+            report.SourceDisagreements().Any(x => x.Kind == "Display" && x.Supply == "AC"
+                && x.Wmi == 300 && x.Policy == 240) &&
             assessments.Any(x => x.Kind == "Display" &&
                 x.Source == "ActivePlanWmi" && x.Supply == "DC" &&
                 x.Interpretation.StartsWith("Never", StringComparison.Ordinal)) &&
