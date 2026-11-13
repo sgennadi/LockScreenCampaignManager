@@ -66,6 +66,7 @@ internal static class SelfTests
         TestNativeGpoConflictScanContracts();
         TestScreenSaverPowerConflictAnalysis();
         TestEndpointPowerObservation();
+        TestDomainWideGpoAudit();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
@@ -1448,6 +1449,89 @@ StartExecutePSFirst=true
             "OU=Clients,DC=example,DC=com", "pc01.example.com", now.AddMinutes(10)); }
         catch (InvalidDataException) { rejected = true; }
         Check(rejected, "Expired endpoint readings are not reused as current.");
+    }
+
+    private static void TestDomainWideGpoAudit()
+    {
+        const string power = @"software\policies\microsoft\power\powersettings\3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e";
+        const string loopback = @"software\policies\microsoft\windows\system";
+        const string desktop = @"software\policies\microsoft\windows\control panel\desktop";
+        var early = NativeGpoConflictScan.TargetValue(power, "ACSettingIndex", "120")!;
+        var never = NativeGpoConflictScan.TargetValue(power, "ACSettingIndex", "0")!;
+        var replace = NativeGpoConflictScan.TargetValue(loopback, "UserPolicyMode", "2")!;
+        var merge = NativeGpoConflictScan.TargetValue(loopback, "UserPolicyMode", "1")!;
+        var disabled = NativeGpoConflictScan.TargetValue(desktop,
+            "ScreenSaveActive", "0", userScope: true)!;
+        Check(NativeGpoDomainAudit.AssessRisk(early, false, "Both", 600,
+                "scrnsave.scr", "Linked candidate") == "High" &&
+            NativeGpoDomainAudit.AssessRisk(never, false, "Both", 600,
+                "scrnsave.scr", "Linked candidate") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(replace, false, "Both", 600,
+                "scrnsave.scr", "Linked candidate") == "High" &&
+            NativeGpoDomainAudit.AssessRisk(merge, false, "Both", 600,
+                "scrnsave.scr", "Linked candidate") == "Warning" &&
+            NativeGpoDomainAudit.AssessRisk(disabled, true, "ScreenSaver", 600,
+                "scrnsave.scr", "Linked candidate") == "High" &&
+            NativeGpoDomainAudit.AssessRisk(disabled, true, "ScreenSaver", 600,
+                "scrnsave.scr", "Outside selected OUs") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(disabled, true, "ScreenSaver", 600,
+                "scrnsave.scr", "Inactive/filtered") == "Inactive/filtered",
+            "All-DC scanner distinguishes linked blockers, Never, loopback and out-of-OU GPOs.");
+        var now = DateTimeOffset.UtcNow;
+        const string dc = "dc01.example.com";
+        const string computer = "OU=Computers,DC=example,DC=com";
+        const string user = "OU=Users,DC=example,DC=com";
+        const string guid = "01234567-89ab-cdef-0123-456789abcdef";
+        object Fixture(bool complete = true, DateTimeOffset? timestamp = null) => new {
+            domain = "example.com", dc, observedUtc = timestamp ?? now,
+            computerOus = new[] { computer }, userOus = new[] { user },
+            gpoCount = 2, inspectedHalves = 3, emptyHalves = 1,
+            issueCount = complete ? 0 : 1, complete,
+            issues = complete ? Array.Empty<object>() : new object[] {
+                new { gpo = "Other", gpoId = guid, scope = "User",
+                    reason = "Unavailable source" }
+            },
+            notes = Array.Empty<string>(),
+            matches = new[] {
+                new { gpo = "Computer Power", gpoId = guid, scope = "Computer",
+                    source = "Registry.pol", key = power,
+                    setting = "ACSettingIndex", value = "=1+2", risk = "High",
+                    reason = "Potential blocker", linkStatus = "Linked candidate",
+                    linkedAt = computer, applicability = "Not winning RSoP" }
+            },
+            count = 1, linkedCandidates = 1, highRisk = 1, warningsCount = 0
+        };
+        var payload = System.Text.Json.JsonSerializer.SerializeToElement(Fixture());
+        var report = DomainWideGpoReport.Parse(
+            payload, "example.com", dc, [computer], [user]);
+        Check(report.GpoCount == 2 && report.Count == 1 &&
+            report.HighRisk == 1 && report.LinkedCandidates == 1 &&
+            report.RecognizedSourcesReadable && report.Issues.Count == 0 &&
+            DomainWideGpoReport.BuildCsv(report.Matches).Contains(
+                "\"'=1+2\"", StringComparison.Ordinal),
+            "Bounded all-GPO report validates scope/counts and escapes CSV formulas.");
+        var incomplete = DomainWideGpoReport.Parse(
+            System.Text.Json.JsonSerializer.SerializeToElement(Fixture(false)),
+            "example.com", dc, [computer], [user]);
+        Check(!incomplete.RecognizedSourcesReadable && incomplete.Issues.Count == 1,
+            "Missing source files never appear as fully readable.");
+        bool rejected = false;
+        try { _ = DomainWideGpoReport.Parse(payload,
+            "other.example.com", dc, [computer], [user]); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "All-domain report rejects mismatched AD domain.");
+        rejected = false;
+        try { _ = DomainWideGpoReport.Parse(payload,
+            "example.com", dc, [computer], ["OU=Elsewhere,DC=example,DC=com"]); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "All-domain report rejects different user OU scope.");
+        rejected = false;
+        try { _ = DomainWideGpoReport.Parse(
+            System.Text.Json.JsonSerializer.SerializeToElement(
+                Fixture(true, now.AddMinutes(-12))),
+            "example.com", dc, [computer], [user]); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Expired domain GPO inventory is not fresh evidence.");
     }
 
     private static void TestScreenSaverPowerConflictAnalysis()
