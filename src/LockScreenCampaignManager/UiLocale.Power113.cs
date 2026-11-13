@@ -6,6 +6,8 @@ internal static partial class UiLocale
     private static readonly Dictionary<string,string> Power113Russian = new(StringComparer.Ordinal)
     {
         ["Notification"] = "Уведомление",
+        ["Pilot file: "] = "Файл теста: ",
+        ["Choose a local .scr/.exe with Browse."] = "Выберите локальный .scr/.exe кнопкой «Обзор».",
         ["Custom .scr / .exe (local pilot only)"] = "Свой .scr / .exe (локальный тест)",
         ["Browse .scr / .exe..."] = "Обзор .scr / .exe...",
         ["Choose local Screen Saver executable (pilot only)"] = "Выберите файл Screen Saver для локального теста",
@@ -35,6 +37,8 @@ internal static partial class UiLocale
     private static readonly Dictionary<string,string> Power113Hebrew = new(StringComparer.Ordinal)
     {
         ["Notification"] = "הודעה",
+        ["Pilot file: "] = "קובץ בדיקה: ",
+        ["Choose a local .scr/.exe with Browse."] = "יש לבחור קובץ .scr/.exe מקומי באמצעות בחירה.",
         ["Custom .scr / .exe (local pilot only)"] = "שומר מסך אישי .scr / .exe (בדיקה מקומית)",
         ["Browse .scr / .exe..."] = "בחירת .scr / .exe...",
         ["Choose local Screen Saver executable (pilot only)"] =

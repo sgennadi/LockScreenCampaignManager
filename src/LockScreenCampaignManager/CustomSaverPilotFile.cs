@@ -75,6 +75,8 @@ internal static class CustomSaverPilotFile
         if (string.IsNullOrWhiteSpace(path) || path.Length > 2048 ||
             path.Any(char.IsControl))
             throw new InvalidDataException("Choose a local .scr or .exe file.");
+        if (!Path.IsPathFullyQualified(path))
+            throw new InvalidDataException("Use an absolute local Screen Saver filename.");
         string full = Path.GetFullPath(path);
         if (!Path.IsPathFullyQualified(full) ||
             full.StartsWith(@"\\", StringComparison.Ordinal) ||
