@@ -261,6 +261,16 @@ internal sealed class ModernMessageDialog : Form
         if (_actions.FirstOrDefault(x => x.DialogResult == SafeDismissal)
             is Button dismiss)
             CancelButton = dismiss;
+        // A dialog with no explicit Cancel button must still treat Esc
+        // as the safe negative answer instead of accidental approval.
+        KeyDown += (_, e) =>
+        {
+            if (e.KeyCode != Keys.Escape) return;
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            DialogResult = SafeDismissal;
+            Close();
+        };
         footer.Controls.Add(actions, 1, 0);
         outer.Controls.Add(footer, 0, 3);
         UiStyle.Apply(this);

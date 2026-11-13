@@ -68,6 +68,7 @@ internal static class SelfTests
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
+        TestModernMessageDialogs();
         TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
@@ -1534,6 +1535,40 @@ StartExecutePSFirst=true
                     "=malicious", "+test", "RSoP unknown")
             ]).Contains("\"'=malicious\"", StringComparison.Ordinal),
             "Duplicate values inside one GPO remain ambiguous, CSV export escapes formulas.");
+    }
+
+    private static void TestModernMessageDialogs()
+    {
+        static string Values(MessageBoxButtons kind) =>
+            string.Join(",", ModernMessageDialog.ActionValues(kind)
+                .Select(x => x.Result.ToString()));
+        Check(Values(MessageBoxButtons.OK) == "OK" &&
+            Values(MessageBoxButtons.OKCancel) == "OK,Cancel" &&
+            Values(MessageBoxButtons.YesNo) == "Yes,No" &&
+            Values(MessageBoxButtons.YesNoCancel) == "Yes,No,Cancel" &&
+            Values(MessageBoxButtons.RetryCancel) == "Retry,Cancel" &&
+            Values(MessageBoxButtons.AbortRetryIgnore) == "Abort,Retry,Ignore" &&
+            Values(MessageBoxButtons.CancelTryContinue) == "Cancel,TryAgain,Continue",
+            "Modern dialog preserves native MessageBox button/results semantics.");
+        using var update = new ModernMessageDialog(
+            "Unsigned EXE. SHA-256 does not prove publisher identity.",
+            "Install verified portable update?", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        Check(update.SafeDismissal == DialogResult.No &&
+            update.DefaultAction == DialogResult.No &&
+            update.AcceptButton is Button { DialogResult: DialogResult.No } &&
+            update.CancelButton is Button { DialogResult: DialogResult.No } &&
+            update.Controls.Find("ModernDialogBody", true)
+                .OfType<TextBox>().Single() is {
+                    ReadOnly: true, Multiline: true },
+            "Update warning defaults to No; Esc/X never approves installation.");
+        using var discard = new ModernMessageDialog(
+            "Discard changes?", "Unsaved campaign", MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        Check(discard.SafeDismissal == DialogResult.Cancel &&
+            discard.DefaultAction == DialogResult.No &&
+            discard.AcceptButton is Button { DialogResult: DialogResult.No },
+            "Cancel-capable destructive dialog retains separate cancel on Esc.");
     }
 
     private static void TestDomainPilotReadiness()
