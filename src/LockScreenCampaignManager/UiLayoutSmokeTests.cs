@@ -58,6 +58,19 @@ internal static class UiLayoutSmokeTests
     private static Form CreateGpoRsopSmoke() =>
         new DomainGpoRsopDialog(CreateAllDcGpoFixture());
 
+    private static Form CreateModernWarningSmoke() =>
+        new ModernMessageDialog(
+            "Install this update?\r\n\r\nSHA-256 verifies integrity, not publisher identity." +
+            "\r\n\r\nThe backup will be restored if the offline self-test fails.",
+            "Install verified portable update?", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+
+    private static Form CreateModernInfoSmoke() =>
+        new ModernMessageDialog(
+            "No newer compatible release.\r\nUpdate was not installed.",
+            "Update was not installed", MessageBoxButtons.OK,
+            MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+
     private static Form CreateNamedGpoBlockersSmoke() =>
         new DomainPilotBlockersDialog([]);
 
@@ -166,6 +179,10 @@ internal static class UiLayoutSmokeTests
         ("Pilot readiness — offline simulated layout",
             CreateGpoPilotReadinessSmoke, new[] {
                 "Refresh review", "Verify power (PC)...", "Review GPO blockers...", "Close" }),
+        ("Modern updater warning — offline simulated layout",
+            CreateModernWarningSmoke, new[] { "Yes", "No" }),
+        ("Modern updater information — offline simulated layout",
+            CreateModernInfoSmoke, new[] { "OK" }),
         ("Named pilot GPO blockers — offline simulated layout",
             CreateNamedGpoBlockersSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Domain GPO same-setting comparisons - offline simulated layout",

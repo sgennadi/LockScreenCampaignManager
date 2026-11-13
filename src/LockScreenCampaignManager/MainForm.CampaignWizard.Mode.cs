@@ -98,11 +98,11 @@ public sealed partial class MainForm
             var details = new TableLayoutPanel
             {
                 Name = "WizardCampaignTypeDetails",
-                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 9,
+                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 10,
                 AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Height = 650, Padding = new Padding(14, 12, 14, 14)
+                Height = 715, Padding = new Padding(14, 12, 14, 14)
             };
-            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115 })
+            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115, 62 })
                 details.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
             details.Controls.Add(heading, 0, 0);
 
@@ -135,27 +135,37 @@ public sealed partial class MainForm
                 Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList,
                 AccessibleName = "Built-in Windows screen saver"
             };
+            string customOption = T("Custom .scr / .exe (local pilot only)");
             saver.Items.AddRange(CampaignTargetAssignments.BuiltInScreenSavers
-                .Cast<object>().ToArray());
-            saver.SelectedItem = _owner._project.ScreenSaver.Executable;
+                .Cast<object>().Concat([customOption]).ToArray());
+            saver.SelectedItem = _owner._project.ScreenSaver.CustomExecutablePath.Length > 0
+                ? customOption : _owner._project.ScreenSaver.Executable;
             if (saver.SelectedIndex < 0) saver.SelectedIndex = 0;
             var saverRow = new TableLayoutPanel {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1
+                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
             };
             saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
             saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
             saverRow.Controls.Add(new Label {
                 Text = "Screen Saver (.scr)", Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
             }, 0, 0);
             saverRow.Controls.Add(saver, 1, 0);
-            details.Controls.Add(saverRow, 0, 3);
-
             var photo = new CheckBox {
                 Name = "WizardScreenSaverJpegMode", Dock = DockStyle.Fill,
                 Text = "JPG photo slideshow (use selected campaign images)",
                 Checked = _owner._project.ScreenSaver.UseJpegSlideshow
             };
+            var customBrowse = new Button {
+                Name = "WizardScreenSaverBrowseCustom",
+                Text = T("Browse .scr / .exe..."),
+                Dock = DockStyle.Fill, AutoEllipsis = true,
+                Margin = new Padding(6, 2, 2, 2)
+            };
+            saverRow.Controls.Add(customBrowse, 2, 0);
+            details.Controls.Add(saverRow, 0, 3);
+
             details.Controls.Add(photo, 0, 4);
             var slide = new NumericUpDown {
                 Name = "WizardScreenSaverSlideSeconds",
@@ -202,15 +212,24 @@ public sealed partial class MainForm
             details.Controls.Add(password, 0, 7);
             var note = new Label
             {
-                Text = "Screen Saver can use a Windows built-in .scr OR a local " +
-                    "JPG slideshow package exported for pilot testing. " +
-                    "JPG mode uses selected campaign images and restores image pages. " +
-                    "Automatic GPO delivery for JPG is blocked until client pilot verification.",
+                Text = "Built-in Windows .scr is GPO-ready. Choose Browse to select a " +
+                    "custom .scr or compatible .exe for LOCAL PILOT ONLY; a regular EXE " +
+                    "is not automatically a Windows Screen Saver. JPG slideshow can be " +
+                    "exported as PhotoScreenSaver.scr from selected images. " +
+                    "GPO delivery of custom/JPG executables is blocked.",
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false,
                 ForeColor = UiStyle.Muted, Padding = new Padding(8, 8, 8, 8)
             };
             details.Controls.Add(note, 0, 8);
+            var customInfo = new Label {
+                Name = "WizardCustomScreenSaverStatus",
+                Dock = DockStyle.Fill, AutoEllipsis = false,
+                ForeColor = UiStyle.Navy,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 2, 8, 2)
+            };
+            details.Controls.Add(customInfo, 0, 9);
 
             void RefreshDescription(bool persist)
             {
@@ -218,6 +237,8 @@ public sealed partial class MainForm
                 {
                     saver.Enabled = idle.Enabled = password.Enabled = false;
                     photo.Enabled = slide.Enabled = false;
+                    customBrowse.Enabled = false;
+                    customInfo.Text = "";
                     message.Text = T("Choose a campaign type to continue. No images or schedule steps are skipped yet.");
                     status.Text = T("No campaign type selected. Choose Lock Screen, Screen Saver or Both.");
                     _next.Enabled = false;
@@ -226,6 +247,7 @@ public sealed partial class MainForm
                 bool saverEnabled = selected != CampaignTargetMode.LockScreen;
                 saver.Enabled = saverEnabled && !photo.Checked;
                 photo.Enabled = saverEnabled;
+                customBrowse.Enabled = saverEnabled && !photo.Checked;
                 slide.Enabled = saverEnabled && photo.Checked;
                 idle.Enabled = password.Enabled = saverEnabled;
                 message.Text = T(selected switch
@@ -236,6 +258,10 @@ public sealed partial class MainForm
                     CampaignTargetMode.ScreenSaver when photo.Checked =>
                         "JPG SCREEN SAVER: select photos on the next page, arrange " +
                         "their order and set the slide interval. Local pilot package first.",
+                    CampaignTargetMode.ScreenSaver when
+                        saver.SelectedItem is string value && value == customOption =>
+                        "CUSTOM SCREEN SAVER: selected local .scr/.exe is for manual pilot only. " +
+                        "Automatic User GPO delivery is blocked; image stages are skipped.",
                     CampaignTargetMode.ScreenSaver =>
                         "SCREEN SAVER: built-in .scr; image/arrange/schedule " +
                         "pages are skipped. Applies to selected user group.",
@@ -245,7 +271,21 @@ public sealed partial class MainForm
                 status.Text = T("Selected type: ") + T(selected.ToString()) +
                     (saverEnabled ? T(" | idle ") + idle.Value + T(" s") : "") +
                     T(" | no AD changes made.");
-                _next.Enabled = true;
+                bool missingCustom = saverEnabled && !photo.Checked &&
+                    saver.SelectedItem is string option && option == customOption &&
+                    string.IsNullOrWhiteSpace(_owner._project.ScreenSaver.CustomExecutablePath);
+                _next.Enabled = !missingCustom;
+                customInfo.Text = saverEnabled && !photo.Checked &&
+                    saver.SelectedItem is string name && name == customOption
+                    ? string.IsNullOrWhiteSpace(_owner._project.ScreenSaver.CustomExecutablePath)
+                        ? T("Choose a local .scr/.exe with Browse.")
+                        : T("Pilot file: ") +
+                          Path.GetFileName(_owner._project.ScreenSaver.CustomExecutablePath) +
+                          Environment.NewLine + "SHA-256: " +
+                          _owner._project.ScreenSaver.CustomExecutableSha256
+                    : "";
+                if (missingCustom)
+                    status.Text = T("Select a custom .scr/.exe using Browse before continuing.");
                 if (!persist) return;
                 // Repaint the rail as soon as the operator changes the type.
                 // JPG Screen Saver needs images; only built-in Screen Saver
@@ -262,7 +302,15 @@ public sealed partial class MainForm
                 SuggestCampaignName(selected);
                 _owner._project.CampaignMode = selected;
                 _owner._project.CampaignModeExplicit = true;
+                bool customSelected = saver.SelectedItem is string chosen &&
+                    chosen == customOption && !photo.Checked;
+                if (!customSelected)
+                {
+                    _owner._project.ScreenSaver.CustomExecutablePath = "";
+                    _owner._project.ScreenSaver.CustomExecutableSha256 = "";
+                }
                 _owner._project.ScreenSaver.Executable =
+                    customSelected ? "scrnsave.scr" :
                     saver.SelectedItem as string ?? "scrnsave.scr";
                 _owner._project.ScreenSaver.UseJpegSlideshow = photo.Checked;
                 _owner._project.ScreenSaver.SlideSeconds = (int)slide.Value;
@@ -271,6 +319,40 @@ public sealed partial class MainForm
                 _owner._projectDirty = true;
                 _saved = false;
             }
+
+            customBrowse.Click += (_, _) =>
+            {
+                using var picker = new OpenFileDialog {
+                    Title = T("Choose local Screen Saver executable (pilot only)"),
+                    Filter = "Screen Saver or executable (*.scr;*.exe)|*.scr;*.exe|Screen Savers (*.scr)|*.scr|Executables (*.exe)|*.exe",
+                    CheckFileExists = true, CheckPathExists = true,
+                    Multiselect = false, RestoreDirectory = true
+                };
+                if (picker.ShowDialog(this) != DialogResult.OK) return;
+                try
+                {
+                    var observation = CustomSaverPilotFile.Inspect(picker.FileName);
+                    // Toggle controls first: their events clear any previous
+                    // custom selection before committing the newly inspected PE.
+                    photo.Checked = false;
+                    saver.SelectedItem = customOption;
+                    _owner._project.ScreenSaver.CustomExecutablePath = observation.Path;
+                    _owner._project.ScreenSaver.CustomExecutableSha256 = observation.Sha256;
+                    RefreshDescription(true);
+                    MessageBox.Show(this,
+                        T("Selected local custom Screen Saver for manual pilot testing only.") +
+                        Environment.NewLine + observation.Path +
+                        Environment.NewLine + "SHA-256: " + observation.Sha256 +
+                        Environment.NewLine + T("Windows Authenticode: ") +
+                        T(observation.TrustedSignature ? "TRUSTED" : "NOT VERIFIED") +
+                        " (" + observation.SignatureStatus + ")" +
+                        Environment.NewLine + Environment.NewLine +
+                        T("A .scr is an executable. An .exe must explicitly implement /s, /p, /c to work as a Windows Screen Saver. This selection does not execute, convert or deploy the file. GPO delivery is blocked."),
+                        T("Custom Screen Saver — pilot only"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (Exception ex) { UiErrorDialog.Show(this, "Select custom Screen Saver", ex); }
+            };
 
             mode.SelectedIndexChanged += (_, _) => RefreshDescription(true);
             saver.SelectedIndexChanged += (_, _) => RefreshDescription(true);

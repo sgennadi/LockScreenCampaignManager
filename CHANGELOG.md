@@ -1,3 +1,10 @@
+## 0.4.0-preview.113 - modern confirmation dialogs and custom SCR/EXE pilot (2026-11-13)
+
+- Unified scrollable modern in-app dialogs for updates, unsaved changes and deployment confirmation; preserve safe negative defaults, Esc/X and native service/UAC prompts.
+- Add wizard Custom .scr / .exe Browse for read-only local PE, SHA-256 and Authenticode inspection; never execute selected EXE or assume .exe rename is a valid screensaver.
+- Explicitly block automatic User GPO rollout of custom and JPG pilot executables until distribution, signature, ACL and /s /p /c checks are completed.
+- Translate RU/HE captions and add C# and Python safety regression gates in Windows x86/x64 and Offline AD lab.
+
 ## 0.4.0-preview.112 — named candidate GPO blockers in pilot readiness (2026-11-13)
 
 - Extend **Pilot readiness...** with **Review GPO blockers...**, presenting bounded per-setting records for recognized linked High/Warning candidate GPOs with name, GUID, Computer/User scope, key, value, Registry.pol/GPP source, risk and imported gpresult GUID flags.

@@ -1,3 +1,9 @@
+## Preview.113 - choose local custom SCR/EXE, or create from JPG
+
+In Wizard -> Campaign Type -> Screen Saver/Both, select **Custom .scr / .exe (local pilot only)** and click **Browse .scr / .exe...**. Only regular local PE files are accepted; UNC and symbolic links are rejected. SHA-256 and Authenticode status are shown. This never executes, installs or distributes the file. A generic EXE requires genuine Windows Screen Saver /s, /p and /c support. Changing extension alone is insufficient.
+
+To create a Photo Screen Saver from images, enable JPG photo slideshow, select images and click Export JPG .scr pilot on Save. Verify on a separate Windows machine before rollout. GPO deployment for custom and JPG executable pilots remains intentionally blocked until a signed, verified and reversible client distribution mechanism exists.
+
 # Target modes: Lock Screen, Screen Saver and Both
 
 The campaign can have up to 20 independent **group assignments**. Open **AD / GPO Deployment → Group assignments...** after reading the selected AD controller's OUs and security groups. Add one row per assignment, name it, choose a mode, select target OUs/groups from verified lists, and save the local project.

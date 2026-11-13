@@ -75,6 +75,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_pilot_named_gpo_blockers.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_modern_message_dialogs.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_targeting103_locales.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_native_ui_visual_acceptance.py
@@ -282,10 +284,17 @@ jobs:
           $exe = (Resolve-Path "dist/${{ matrix.rid }}/LockScreenCampaignManager.exe").Path
           $out = Join-Path $env:RUNNER_TEMP 'all-tests-stdout.txt'
           $err = Join-Path $env:RUNNER_TEMP 'all-tests-stderr.txt'
-          $test = Start-Process -FilePath $exe -ArgumentList '--self-test' -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
-          if (Test-Path $out) { Get-Content $out | Write-Host }
-          if (Test-Path $err) { Get-Content $err | Write-Host }
-          if ($test.ExitCode -ne 0) { throw "Full self-test failed with exit code $($test.ExitCode)" }
+          $test = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+          try {
+            if (-not $test.WaitForExit(120000)) {
+              Stop-Process -Id $test.Id -Force -ErrorAction SilentlyContinue
+              throw 'Full self-test exceeded 120 seconds. Check the last SELF-TEST checkpoint.'
+            }
+            if ($test.ExitCode -ne 0) { throw "Full self-test failed with exit code $($test.ExitCode)" }
+          } finally {
+            if (Test-Path $out) { Get-Content $out | Write-Host }
+            if (Test-Path $err) { Get-Content $err | Write-Host }
+          }
 
       - name: Reject invalid native EXE client modes without launching the GUI
         shell: pwsh
@@ -420,7 +429,7 @@ jobs:
           import zipfile
 
           version = ET.parse('src/LockScreenCampaignManager/LockScreenCampaignManager.csproj').getroot().findtext('./PropertyGroup/Version')
-          if version != '0.4.0-preview.112':
+          if version != '0.4.0-preview.113':
               raise SystemExit(f'Unexpected release version: {version}')
           root = Path('release-assets')
           expected = set()
@@ -452,22 +461,22 @@ jobs:
           print('PASS: x86/x64 standalone and updater ZIPs verified; SHA-256 manifest written')
           PY
 
-      - name: Publish 0.4.0-preview.112 (no overwrite)
+      - name: Publish 0.4.0-preview.113 (no overwrite)
         if: steps.latest.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.112'
+          tag='v0.4.0-preview.113'
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; no assets overwritten."
             exit 0
           fi
           gh release create "$tag" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title 'LockScreen Campaign Manager 0.4.0-preview.112' \
-            --prerelease --notes-file docs/RELEASE-PREVIEW112.md
+            --title 'LockScreen Campaign Manager 0.4.0-preview.113' \
+            --prerelease --notes-file docs/RELEASE-PREVIEW113.md
 
       - name: Verify public release digest metadata for UniversalUpdater
         if: steps.latest.outputs.publish == 'true'
@@ -476,7 +485,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='v0.4.0-preview.112'
+          tag='v0.4.0-preview.113'
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-meta.json
           python - <<'PY'
           import json

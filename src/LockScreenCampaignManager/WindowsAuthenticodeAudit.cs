@@ -47,7 +47,7 @@ internal static class WindowsAuthenticodeAudit
 
     internal sealed record Result(bool Trusted, string Code, string Explanation);
 
-    internal static Result Inspect(string executablePath)
+    internal static Result Inspect(string executablePath, bool cacheOnly = false)
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Windows Authenticode is Windows-only.");
@@ -75,14 +75,14 @@ internal static class WindowsAuthenticodeAudit
                 UnionChoice = 1,           // WTD_CHOICE_FILE
                 FileInfo = fileInfoPointer,
                 StateAction = 0,           // WTD_STATEACTION_IGNORE
-                ProviderFlags = 0x00000080 // WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
+                ProviderFlags = 0x00000080u | (cacheOnly ? 0x00001000u : 0u) // WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT | WTD_CACHE_ONLY_URL_RETRIEVAL
             };
             Guid action = GenericVerifyV2;
             int code = WinVerifyTrust(IntPtr.Zero, ref action, ref data);
             bool trusted = code == 0;
             return new Result(trusted, "0x" + unchecked((uint)code).ToString("X8"),
                 trusted
-                    ? "Windows verified the PE signature and trust chain. " +
+                    ? (cacheOnly ? "Windows verified the PE using cached revocation evidence only. " : "Windows verified the PE signature and trust chain. ") +
                       "Administrator publisher pinning is still required before unattended installation."
                     : "Windows could not verify a trusted Authenticode signature. " +
                       "Do not treat the GitHub SHA-256 digest as publisher authenticity.");

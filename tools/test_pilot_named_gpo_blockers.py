@@ -68,7 +68,7 @@ class NamedPilotGpoBlockerContracts(unittest.TestCase):
             self.assertIn(marker, get("UiLocale.Power112.cs"))
             self.assertIn(marker, get("UiLocale.cs"))
         self.assertIn("DomainPilotBlockerEvidence.BuildCsv", get("SelfTests.cs"))
-        self.assertIn("0.4.0-preview.112", get("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.113", get("LockScreenCampaignManager.csproj"))
         self.assertIn("NOT winning", (ROOT / "docs" / "RELEASE-PREVIEW112.md")
                       .read_text(encoding="utf-8"))
 

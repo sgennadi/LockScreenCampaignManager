@@ -4,6 +4,7 @@ internal static class SelfTests
 {
     public static void Run()
     {
+        Console.Error.WriteLine("SELF-TEST checkpoint: start");
         var p = new CampaignProject {
             Name = "Test campaign",
             StartLocal = new DateTime(2026, 11, 8, 14, 0, 0),
@@ -68,6 +69,11 @@ internal static class SelfTests
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
+        Console.Error.WriteLine("SELF-TEST checkpoint: before modern dialogs");
+        TestModernMessageDialogs();
+        Console.Error.WriteLine("SELF-TEST checkpoint: before custom saver");
+        TestCustomSaverPilotSelection();
+        Console.Error.WriteLine("SELF-TEST checkpoint: after custom saver");
         TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
@@ -106,8 +112,12 @@ internal static class SelfTests
         Check(boundedNotes.Split(Environment.NewLine).Length == 5 &&
             boundedNotes.Split(Environment.NewLine).All(s => s.Length <= 94),
             "What’s New bounds item count and length");
+        Console.Error.WriteLine("SELF-TEST checkpoint: before updater EXE tests");
         TestNativeExePreviewPackage();
+        Console.Error.WriteLine("SELF-TEST checkpoint: after updater EXE tests");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestAdConnectionScope");
         TestAdConnectionScope();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDiagnosticsLogging");
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
         var simulated = new InvalidOperationException(@"Unable to access \\dc01.corp.example.com\SYSVOL from 198.51.100.42");
@@ -178,9 +188,12 @@ internal static class SelfTests
             Environment.SetEnvironmentVariable("UDX_STATE_DIR", original);
             try { if (Directory.Exists(temp)) Directory.Delete(temp, true); } catch { }
         }
+        Console.Error.WriteLine("SELF-TEST checkpoint: diagnostics capture complete");
         Check(new UiPreferences { Density = "Unknown", UiScalePercent = 999,
             FontScalePercent = 1 }.Validate().Density == "Auto", "UI preferences sanity");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestUiWindowPlacement");
         TestUiWindowPlacement();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestCompanyProfiles");
         TestCompanyProfiles();
         Check(FeedbackPath.ValidateRoot(@"\\fileserver\LockScreenReports$") ==
               @"\\fileserver\LockScreenReports$", "SMB share path validation");
@@ -188,33 +201,60 @@ internal static class SelfTests
         try { FeedbackPath.ValidateRoot(@"\\dc01\SYSVOL"); }
         catch (ArgumentException) { dangerous = true; }
         Check(dangerous, "SYSVOL rejected as telemetry destination");
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestClientFeedback");
         TestClientFeedback();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestClientHealthAdCoverage");
         TestClientHealthAdCoverage();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDeviceRepairDashboard");
         TestDeviceRepairDashboard();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestCampaignClosureAudit");
         TestCampaignClosureAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDcConsistencyAudit");
         TestDcConsistencyAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEffectiveGpoCandidates");
         TestEffectiveGpoCandidates();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestWinningPolicyAnalysis");
         TestWinningPolicyAnalysis();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEndpointLockScreenObservation");
         TestEndpointLockScreenObservation();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestEndpointSourceEvidence");
         TestEndpointSourceEvidence();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestRsopEvidenceImport");
         TestRsopEvidenceImport();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDomainRsopCorrelation");
         TestDomainRsopCorrelation();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestPostCleanupVerification");
         TestPostCleanupVerification();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaManualDuplicateGuard");
         TestGmsaManualDuplicateGuard();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestDeferredRepairQueue");
         TestDeferredRepairQueue();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestRepairHistoryJournal");
         TestRepairHistoryJournal();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestInitialRepairTracking");
         TestInitialRepairTracking();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestBackgroundApproval");
         TestBackgroundApproval();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaQueue");
         TestGmsaQueue();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaDisabledQueueAudit");
         TestGmsaDisabledQueueAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaQueueHealthAudit");
         TestGmsaQueueHealthAudit();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaRebootRecovery");
         TestGmsaRebootRecovery();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaWorkerSchedule");
         TestGmsaWorkerSchedule();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaReadOnlyDiagnostic");
         TestGmsaReadOnlyDiagnostic();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestProductionReadiness");
         TestProductionReadiness();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestGmsaWorkerHeartbeat");
         TestGmsaWorkerHeartbeat();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestUniversalUpdaterAdapter");
         TestUniversalUpdaterAdapter();
-        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();
+        Console.Error.WriteLine("SELF-TEST checkpoint: TestAlertsAndHistory");
         TestAlertsAndHistory();
         Console.WriteLine("Schedule, privacy, client feedback, repair alerts and history tests passed.");
     }
@@ -855,7 +895,7 @@ internal static class SelfTests
     internal static void RunUpdaterOnly()
     {
         TestUniversalUpdaterAdapter();
-        TestPrivateGitHubReleaseDownload().GetAwaiter().GetResult();
+        Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();
         Console.WriteLine("UniversalUpdater private and public release verification passed.");
     }
 
@@ -1534,6 +1574,61 @@ StartExecutePSFirst=true
                     "=malicious", "+test", "RSoP unknown")
             ]).Contains("\"'=malicious\"", StringComparison.Ordinal),
             "Duplicate values inside one GPO remain ambiguous, CSV export escapes formulas.");
+    }
+
+    private static void TestCustomSaverPilotSelection()
+    {
+        var settings = new CampaignScreenSaverSettings();
+        CustomSaverPilotFile.ValidateStored(settings.CustomExecutablePath,
+            settings.CustomExecutableSha256);
+        bool rejected = false;
+        try { CustomSaverPilotFile.ValidateStored(@"\\server\share\saver.scr",
+            new string('a', 64)); }
+        catch (CampaignValidationException) { rejected = true; }
+        Check(rejected, "Custom saver pilot rejects UNC paths.");
+        rejected = false;
+        try { CustomSaverPilotFile.ValidateStored(@"C:\pilot\saver.scr", "invalid"); }
+        catch (CampaignValidationException) { rejected = true; }
+        Check(rejected, "Custom saver pilot rejects unverified SHA-256.");
+        var self = CustomSaverPilotFile.InspectPeOnlyForSelfTest(Application.ExecutablePath);
+        Check(self.Extension == ".exe" && self.Sha256.Length == 64 &&
+            self.Bytes > 1024,
+            "Custom saver pilot reads a PE image without launching it.");
+        CustomSaverPilotFile.ValidateStored(self.Path, self.Sha256);
+    }
+
+    private static void TestModernMessageDialogs()
+    {
+        static string Values(MessageBoxButtons kind) =>
+            string.Join(",", ModernMessageDialog.ActionValues(kind)
+                .Select(x => x.Result.ToString()));
+        Check(Values(MessageBoxButtons.OK) == "OK" &&
+            Values(MessageBoxButtons.OKCancel) == "OK,Cancel" &&
+            Values(MessageBoxButtons.YesNo) == "Yes,No" &&
+            Values(MessageBoxButtons.YesNoCancel) == "Yes,No,Cancel" &&
+            Values(MessageBoxButtons.RetryCancel) == "Retry,Cancel" &&
+            Values(MessageBoxButtons.AbortRetryIgnore) == "Abort,Retry,Ignore" &&
+            Values(MessageBoxButtons.CancelTryContinue) == "Cancel,TryAgain,Continue",
+            "Modern dialog preserves native MessageBox button/results semantics.");
+        using var update = new ModernMessageDialog(
+            "Unsigned EXE. SHA-256 does not prove publisher identity.",
+            "Install verified portable update?", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        Check(update.SafeDismissal == DialogResult.No &&
+            update.DefaultAction == DialogResult.No &&
+            update.AcceptButton is Button { DialogResult: DialogResult.No } &&
+            update.CancelButton is Button { DialogResult: DialogResult.No } &&
+            update.Controls.Find("ModernDialogBody", true)
+                .OfType<TextBox>().Single() is {
+                    ReadOnly: true, Multiline: true },
+            "Update warning defaults to No; Esc/X never approves installation.");
+        using var discard = new ModernMessageDialog(
+            "Discard changes?", "Unsaved campaign", MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        Check(discard.SafeDismissal == DialogResult.Cancel &&
+            discard.DefaultAction == DialogResult.No &&
+            discard.AcceptButton is Button { DialogResult: DialogResult.No },
+            "Cancel-capable destructive dialog retains separate cancel on Esc.");
     }
 
     private static void TestDomainPilotReadiness()
@@ -5207,7 +5302,7 @@ StartExecutePSFirst=true
                 Check(stableOnly is null,
                     "Stable-only channel returns no release when only preview builds exist");
             }
-            var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!);
+            var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!, cacheOnly: true);
             Check(!signer.Trusted && signer.Code.StartsWith("0x", StringComparison.Ordinal),
                 "Unsigned mock EXE must not pass native WinVerifyTrust under either Windows architecture");
             Check(!UniversalUpdater.UpdatePolicy.CanAutomaticallyInstall(

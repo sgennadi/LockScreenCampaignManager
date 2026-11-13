@@ -157,6 +157,11 @@ internal sealed partial class DomainDeploymentForm
         try
         {
             CampaignTargetAssignments.Validate(_project);
+            if (_project.ScreenSaver.CustomExecutablePath.Length > 0 &&
+                _project.TargetAssignments.Any(x => x.UsesScreenSaver))
+                throw new CampaignValidationException(
+                    "Custom .scr/.exe is a LOCAL PILOT only. GPO distribution " +
+                    "requires a separate trusted client-installation and runtime validation.");
             if (_project.ScreenSaver.UseJpegSlideshow &&
                 _project.TargetAssignments.Any(x => x.UsesScreenSaver))
                 throw new CampaignValidationException(
