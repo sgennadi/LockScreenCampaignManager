@@ -126,11 +126,13 @@ internal static class NativeGpoDomainAudit
                         inspectedHalves++;
                         foreach (string source in new[] {
                             "Registry.pol", @"Preferences\Registry\Registry.xml",
-                            @"Preferences\PowerOptions\PowerOptions.xml"
+                            @"Preferences\PowerOptions\PowerOptions.xml",
+                            @"Microsoft\Windows NT\SecEdit\GptTmpl.inf"
                         })
                         {
-                            if (user && source.EndsWith("PowerOptions.xml",
-                                    StringComparison.Ordinal)) continue;
+                            if (user && (source.EndsWith("PowerOptions.xml",
+                                    StringComparison.Ordinal) ||
+                                source.EndsWith("GptTmpl.inf", StringComparison.Ordinal))) continue;
                             string file = Path.Combine(path, source);
                             try
                             {
@@ -155,7 +157,9 @@ internal static class NativeGpoDomainAudit
                                         ? NativeGpoConflictScan.ParseRegistryPol(bytes, user)
                                         : source.EndsWith("PowerOptions.xml", StringComparison.Ordinal)
                                             ? ScreenSaverPowerConflictAnalysis.ParseGppPowerOptions(bytes)
-                                            : NativeGpoConflictScan.ParseGppRegistry(bytes, user);
+                                            : source.EndsWith("GptTmpl.inf", StringComparison.Ordinal)
+                                                ? DomainSecurityTemplateBlockers.Parse(bytes)
+                                                : NativeGpoConflictScan.ParseGppRegistry(bytes, user);
                                 foreach (var hit in hits)
                                 {
                                     if (rows.Count >= 6000)

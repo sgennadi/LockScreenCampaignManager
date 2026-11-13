@@ -1453,6 +1453,24 @@ StartExecutePSFirst=true
 
     private static void TestDomainWideGpoAudit()
     {
+        // SecEdit INF is a separate source for the machine inactivity limit:
+        // this setting is not necessarily present in Registry.pol.
+        string securityInf = "[Unicode]\r\nUnicode=yes\r\n[Registry Values]\r\n" +
+            @"MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\InactivityTimeoutSecs=4,120" +
+            "\r\n";
+        byte[] infBytes = System.Text.Encoding.Unicode.GetPreamble()
+            .Concat(System.Text.Encoding.Unicode.GetBytes(securityInf)).ToArray();
+        var securityHits = DomainSecurityTemplateBlockers.Parse(infBytes);
+        Check(securityHits.Count == 1 &&
+            securityHits[0].name == "InactivityTimeoutSecs" &&
+            securityHits[0].value == "120",
+            "Security template GptTmpl.inf machine inactivity is recognized read-only.");
+        bool duplicateInfRejected = false;
+        try { _ = DomainSecurityTemplateBlockers.Parse(
+            System.Text.Encoding.UTF8.GetBytes(securityInf + securityInf)); }
+        catch (InvalidDataException) { duplicateInfRejected = true; }
+        Check(duplicateInfRejected,
+            "Duplicate security-template lock policy cannot be interpreted as one value.");
         const string power = @"software\policies\microsoft\power\powersettings\3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e";
         const string loopback = @"software\policies\microsoft\windows\system";
         const string desktop = @"software\policies\microsoft\windows\control panel\desktop";

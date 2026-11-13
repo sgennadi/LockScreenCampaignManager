@@ -1,6 +1,6 @@
 ## 0.4.0-preview.108 — read-only all-domain GPO inventory and blocker candidates (2026-11-13)
 
-- Enumerate all GPCs via bounded signed/sealed paged LDAP from the explicitly selected DC; read the same DC's SYSVOL User/Computer halves and recognized Registry.pol / GPP Registry.xml / GPP PowerOptions.xml source policies.
+- Enumerate all GPCs via bounded signed/sealed paged LDAP from the explicitly selected DC; read the same DC's SYSVOL User/Computer halves and recognized Registry.pol / GPP Registry.xml / GPP PowerOptions.xml / Security Template GptTmpl.inf machine-inactivity source policies.
 - Classify relevant Lock Screen, Screen Saver, display-off AC/DC, sleep, machine inactivity and loopback GPO candidates. Compare candidate thresholds to campaign Screen Saver idle time. Scope results by selected Computer/User OU ancestry, disabled links, Block Inheritance and Enforced.
 - Show separate **linked candidate / outside selected OUs / inactive / User OU not verified** labels, unreadable/mismatched GPC/SYSVOL issues, and a searchable high-DPI read-only report with CSV formula-safe *local* export.
 - Add RU/HE captions and offline safety, scope/integrity/CSV, Windows C# regression and 100–200% simulated UI checks; x64/x86 Windows builds and Offline AD Lab are release gates.

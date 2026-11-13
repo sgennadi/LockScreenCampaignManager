@@ -109,7 +109,8 @@ internal sealed class DomainWideGpoReport
                 row.Scope is not ("Computer" or "User") ||
                 row.Source is not ("Registry.pol" or
                     @"Preferences\Registry\Registry.xml" or
-                    @"Preferences\PowerOptions\PowerOptions.xml") ||
+                    @"Preferences\PowerOptions\PowerOptions.xml" or
+                    @"Microsoft\Windows NT\SecEdit\GptTmpl.inf") ||
                 row.Risk is not ("High" or "Warning" or "Info" or "Inactive/filtered") ||
                 row.LinkStatus is not ("Linked candidate" or "Outside selected OUs" or
                     "Inactive/filtered" or "User OU not verified") ||

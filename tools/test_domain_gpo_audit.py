@@ -41,6 +41,12 @@ class AllDcGpoAuditContracts(unittest.TestCase):
                        "ParseGppRegistry(bytes, user)",
                        "ParseGppPowerOptions(bytes)"):
             self.assertIn(parser, native, parser)
+        self.assertIn("DomainSecurityTemplateBlockers.Parse(bytes)", native)
+        inf = read("DomainSecurityTemplateBlockers.cs")
+        self.assertIn('"Registry Values"', inf)
+        self.assertIn("InactivityTimeoutSecs", inf)
+        self.assertIn("DecoderFallbackException", inf)
+        self.assertIn("MaxLines", inf)
         self.assertIn("RegistryCseAdvertised(cse)", native)
         self.assertIn("PolicyHalfHasConfiguredSettings(", native)
         self.assertIn("PolicyFolderExistsSafe(path)", native)
