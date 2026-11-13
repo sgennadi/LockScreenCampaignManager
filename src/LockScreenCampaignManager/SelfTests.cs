@@ -4,6 +4,7 @@ internal static class SelfTests
 {
     public static void Run()
     {
+        Console.Error.WriteLine("SELF-TEST checkpoint: start");
         var p = new CampaignProject {
             Name = "Test campaign",
             StartLocal = new DateTime(2026, 11, 8, 14, 0, 0),
@@ -68,8 +69,11 @@ internal static class SelfTests
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
+        Console.Error.WriteLine("SELF-TEST checkpoint: before modern dialogs");
         TestModernMessageDialogs();
+        Console.Error.WriteLine("SELF-TEST checkpoint: before custom saver");
         TestCustomSaverPilotSelection();
+        Console.Error.WriteLine("SELF-TEST checkpoint: after custom saver");
         TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
@@ -108,7 +112,9 @@ internal static class SelfTests
         Check(boundedNotes.Split(Environment.NewLine).Length == 5 &&
             boundedNotes.Split(Environment.NewLine).All(s => s.Length <= 94),
             "What’s New bounds item count and length");
+        Console.Error.WriteLine("SELF-TEST checkpoint: before updater EXE tests");
         TestNativeExePreviewPackage();
+        Console.Error.WriteLine("SELF-TEST checkpoint: after updater EXE tests");
         TestAdConnectionScope();
         TestDiagnosticsLogging();
         // Shared UniversalDiagnostics v1: sanitized preview and opt-in local capture.
