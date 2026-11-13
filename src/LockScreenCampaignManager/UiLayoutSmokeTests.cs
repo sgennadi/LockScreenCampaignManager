@@ -11,6 +11,25 @@ namespace LockScreenCampaignManager;
 /// </summary>
 internal static class UiLayoutSmokeTests
 {
+    private static Form CreateEndpointPowerSmoke()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain = "example.com", dc = "dc01.example.com",
+            ouDn = "OU=Computers,DC=example,DC=com",
+            computer = "pc01.example.com", adScopeVerified = true,
+            observedUtc = now, activePlanStatus = "Unavailable",
+            activePlanGuid = "", activePlanName = "",
+            policyRegistryStatus = "Unavailable", values = Array.Empty<object>(),
+            notes = new[] { "UI-only fixture; no network or endpoints contacted" }
+        });
+        var observation = EndpointPowerObservation.Parse(
+            json, "example.com", "dc01.example.com",
+            "OU=Computers,DC=example,DC=com", "pc01.example.com", now);
+        return new ScreenSaverEndpointPowerDialog(observation, 600, [],
+            "Not verified: offline simulated UI.");
+    }
+
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
     {
         ("100%", new UiPreferences { Density = "Auto", UiScalePercent = 100, FontScalePercent = 100 }),
@@ -60,7 +79,7 @@ internal static class UiLayoutSmokeTests
                 }),
             new[] { "Computers from OU + group", "Check RPC reachability",
                 "Select reachable (max 25)", "Open Client Health", "Preview",
-                "Run on selected" }),
+                "Run on selected", "Verify Screen Saver power (PC)" }),
         ("AD / GPO deployment - offline Wizard", () => new DomainDeploymentForm(
             new CampaignProject {
                 Name = "layout-only", TimeZoneId = "UTC",
@@ -98,6 +117,8 @@ internal static class UiLayoutSmokeTests
             new[] { "1  Check", "2  Install", "Backup status" }),
         ("Local lab JSON evidence viewer", () => new LocalLabEvidenceDialog(),
             new[] { "Import SMB canary JSON...", "Import cleanup JSON..." }),
+        ("Screen Saver endpoint power - no-network simulated layout",
+            CreateEndpointPowerSmoke, new[] { "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),
             new[] { "Apply" }),
         ("Visual DPI / language acceptance", () => new UiVisualAcceptanceDialog(),
