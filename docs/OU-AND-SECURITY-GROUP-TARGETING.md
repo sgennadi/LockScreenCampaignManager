@@ -1,3 +1,17 @@
+## Preview.106 — Screen Saver and device power conflicts
+
+A Screen Saver GPO targets **User OU + User Group**. A Computer OU can now additionally be selected on the Group assignments page for **device-side power GPO auditing only**; this does **not** create/link a Computer GPO, alter the User GPO scope, enable loopback or change group memberships. For **Both**, the existing Computer OU also supplies this audit context.
+
+The Preview scans candidate *linked Computer GPOs* under that device OU and its ancestors, looking for **Turn off the display (AC/DC)** (`VIDEOIDLE`), **Sleep (AC/DC)**, **Machine inactivity limit**, and Group Policy Preferences Power Options. It separately scans the User OU's screen-saver settings. An earlier positive display/sleep timeout than the chosen User Screen Saver timeout is flagged as **high-risk candidate**; an equal value is a **warning**. `0` means Never for these power timers. The full report exposes the GPO name, key, configured timeout and source. If a Computer OU was not selected, the report explicitly says **Not verified** instead of claiming no conflict.
+
+Supported static sources are linked GPO `Machine/Registry.pol`, `Machine/Preferences/Registry/Registry.xml` and `Machine/Preferences/PowerOptions/PowerOptions.xml`, plus User policy overlap. The GPP `GlobalPowerOptionsV2` numeric timers are seconds; legacy `PowerScheme` monitor timers are minutes. All GPP power settings are **candidate-only** because the active power scheme, item-level targeting, newer power states and client context have not been resolved.
+
+Actual user-to-device association, winning GPOs, local/site/MDM policies, nested group ACLs and active power state require an endpoint **User + Computer gpresult and powercfg /query**. A selected Computer OU may not match where affected users actually sign in, so a static clean result never proves the Screen Saver will be displayed. No GPO is modified by these scans.
+
+## Preview.106 — Client Health group coverage versus agent reports
+
+Client Health uses the native read-only **Inventory** operation to verify the exact OU + nested Computer security-group intersection and selected DC time. The dashboard counts all computer accounts in the OU, the group intersection, enabled/disabled/unknown states and the enabled computers with approximate `lastLogonTimestamp` within a selected 30/90/180/365-day window. In a separate line it compares that group against actual received, fresh, stale or missing SMB agent JSON. A verified empty group remains **0**, not a collection of unrelated SMB reports; an incomplete/stale AD inventory or mismatched campaign is **Not verified**. Agent JSON is untrusted diagnostic telemetry, not online proof or authenticated identity. Changing the window is display-only and never filters deployment or Repair authorization.
+
 ## Preview.105 — approximate computer account activity (read-only)
 
 For **Computer OU + Computer Group** only, use the **Last 30 / 90 / 180 / 365 days** selector in AD Deployment or Group assignments. The total count stays unchanged; a separate activity line shows **enabled**, **disabled**, **unknown account status**, **no valid logon timestamp**, and the number of **enabled** computers with a recent replicated `lastLogonTimestamp`. If a computer security group is selected, its **direct** member count within the same age window is also shown.
