@@ -86,7 +86,7 @@ internal sealed class DomainWideGpoReportDialog : Form
         Configure(_scope, ["All scopes", "Computer", "User"]);
         Configure(_risk, ["All risks", "High", "Warning", "Info", "Inactive/filtered"]);
         Configure(_link, ["All links", "Linked candidate", "Outside selected OUs",
-            "Inactive/filtered", "User OU not verified"]);
+            "Inactive/filtered", "User OU not verified", "Computer OU not verified"]);
         filters.Controls.Add(_scope, 1, 0);
         filters.Controls.Add(_risk, 2, 0);
         filters.Controls.Add(_link, 3, 0);
