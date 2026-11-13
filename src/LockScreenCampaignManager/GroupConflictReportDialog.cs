@@ -35,7 +35,7 @@ internal sealed class GroupConflictReportDialog : Form
     internal GroupConflictReportDialog(IReadOnlyList<GroupConflictTarget> targets)
     {
         _targets = targets ?? throw new ArgumentNullException(nameof(targets));
-        if (targets.Count is < 1 or > 40 ||
+        if (targets.Count is < 1 or > 60 ||
             targets.Sum(t => t.Findings.Count) > 20000)
             throw new InvalidDataException("Unexpected group GPO report size.");
         _all = targets.SelectMany(t => t.Findings).ToArray();
