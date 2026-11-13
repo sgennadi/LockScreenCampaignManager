@@ -197,6 +197,7 @@ internal static class SelfTests
         TestEndpointLockScreenObservation();
         TestEndpointSourceEvidence();
         TestRsopEvidenceImport();
+        TestDomainRsopCorrelation();
         TestPostCleanupVerification();
         TestGmsaManualDuplicateGuard();
         TestDeferredRepairQueue();
@@ -2652,6 +2653,131 @@ StartExecutePSFirst=true
         }
         catch (InvalidDataException) { wrongCampaignRejected = true; }
         Check(wrongCampaignRejected, "Dashboard refuses feedback from a different managed campaign");
+    }
+
+    private static void TestDomainRsopCorrelation()
+    {
+        const string dns = "example.com";
+        const string pc = "pc01.example.com";
+        const string principal = @"DOMAIN\pilot";
+        const string ouComputer = "OU=Devices,DC=example,DC=com";
+        const string ouUser = "OU=Users,DC=example,DC=com";
+        const string g1 = "01234567-89ab-cdef-0123-456789abcdef";
+        const string g2 = "12345678-89ab-cdef-0123-456789abcdef";
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        string header =
+            "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.ToString("o") +
+            "</ReadTime><DataType>LoggedData</DataType>";
+        string all = "<Enabled>true</Enabled><IsValid>true</IsValid>" +
+            "<FilterAllowed>true</FilterAllowed><AccessDenied>false</AccessDenied>";
+        string blocked = "<Enabled>true</Enabled><IsValid>true</IsValid>" +
+            "<FilterAllowed>false</FilterAllowed><AccessDenied>false</AccessDenied>";
+        string computerXml = header +
+            "<ComputerResults><Name>" + pc + "</Name><Domain>" + dns +
+            "</Domain><GPO><Identifier>{" + g1 + "}</Identifier><Name>Lock Screen</Name>" +
+            all + "</GPO></ComputerResults></Rsop>";
+        string userXml = header +
+            "<ComputerResults><Name>unverified.example.com</Name></ComputerResults>" +
+            "<UserResults><Name>" + principal + "</Name><Domain>DOMAIN</Domain>" +
+            "<GPO><Identifier>{" + g1 + "}</Identifier><Name>Screen Saver</Name>" +
+            blocked + "</GPO><GPO><Name>Local Group Policy</Name>" +
+            "<Enabled>true</Enabled></GPO></UserResults></Rsop>";
+        var computer = RsopEvidence.ParseXml(computerXml, pc, dns, now);
+        var user = UserRsopEvidence.ParseXml(userXml, principal, dns, now);
+        Check(computer.ObservationFor(g1) == "Reported applied" &&
+            user.ObservationFor(g1) == "Reported filtered" &&
+            user.UnidentifiedEntries == 1 &&
+            user.ObservationFor(g2) == "Not listed (unknown)" &&
+            !user.IsSignedEndpointAttestation &&
+            !user.ProvesActualSettingPrecedence,
+            "User and Computer gpresult are separate, unsigned scope-specific GUID lists.");
+
+        object Row(string scope, string gpo, string id,
+            string setting, string risk) => new {
+                gpo, gpoId = id, scope,
+                source = "Registry.pol", key = @"Software\Policies\Microsoft\Windows\Personalization",
+                setting, value = "120", risk, reason = "Configured GPO candidate",
+                linkStatus = "Linked candidate",
+                linkedAt = scope == "User" ? ouUser : ouComputer,
+                applicability = "Source only; winner unknown"
+            };
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain = dns, dc = "dc01.example.com", observedUtc = now,
+            computerOus = new[] { ouComputer }, userOus = new[] { ouUser },
+            gpoCount = 2, inspectedHalves = 3, emptyHalves = 1,
+            issues = Array.Empty<object>(), issueCount = 0,
+            notes = Array.Empty<string>(), complete = true,
+            matches = new[] {
+                Row("Computer", "Lock Screen", g1, "LockScreenImage", "High"),
+                Row("User", "Screen Saver", g1, "ScreenSaveActive", "High"),
+                Row("Computer", "Other GPO", g2, "NoLockScreen", "Warning")
+            },
+            count = 3, linkedCandidates = 3, highRisk = 2, warningsCount = 1
+        });
+        var report = DomainWideGpoReport.Parse(json, dns, "dc01.example.com",
+            [ouComputer], [ouUser]);
+        var comparison = DomainGpoRsopCorrelation.Compare(report, computer, user);
+        Check(comparison.Count == 3 &&
+            comparison.Any(x => x.Scope == "Computer" && x.GpoId == g1 &&
+                x.ReportedRsop == "Reported applied") &&
+            comparison.Any(x => x.Scope == "User" && x.GpoId == g1 &&
+                x.ReportedRsop == "Reported filtered") &&
+            comparison.Any(x => x.Scope == "Computer" && x.GpoId == g2 &&
+                x.ReportedRsop == "Not listed (unknown)") &&
+            comparison.All(x => x.Interpretation.Contains("not", StringComparison.OrdinalIgnoreCase) ||
+                x.Interpretation.Contains("proof", StringComparison.OrdinalIgnoreCase)) &&
+            DomainGpoRsopCorrelation.Compare(report, computer, null)
+                .Any(x => x.Scope == "User" && x.ReportedRsop == "Not imported"),
+            "Domain-wide correlation does not conflate User/Computer or missing GUIDs.");
+
+        bool rejected = false;
+        try {
+            UserRsopEvidence.ParseXml(userXml.Replace(principal,
+                @"DOMAIN\someoneelse", StringComparison.Ordinal), principal, dns, now);
+        } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Import rejects gpresult for a different UserResults principal.");
+        rejected = false;
+        try {
+            UserRsopEvidence.ParseXml(userXml.Replace("<Domain>DOMAIN</Domain>",
+                "<Domain>OTHER</Domain>", StringComparison.Ordinal),
+                principal, dns, now);
+        } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "UserResults foreign domain fails closed.");
+        rejected = false;
+        try {
+            UserRsopEvidence.ParseXml(userXml.Replace("<GPO><Name>Local Group Policy",
+                "<GPO><Identifier>{" + g1 + "}</Identifier><Name>Duplicated",
+                StringComparison.Ordinal), principal, dns, now);
+        } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "Duplicate UserResults GUIDs are rejected.");
+        rejected = false;
+        try {
+            UserRsopEvidence.ParseXml(userXml.Replace(
+                "<Rsop xmlns=", "<!DOCTYPE Rsop [<!ENTITY file SYSTEM " +
+                "\"file:///C:/Windows/win.ini\">]><Rsop xmlns=")
+                .Replace("Screen Saver", "&file;", StringComparison.Ordinal),
+                principal, dns, now);
+        } catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "User gpresult DTD/external entities are rejected.");
+        var incomplete = UserRsopEvidence.ParseXml(userXml.Replace(
+            blocked, "<Enabled>true</Enabled>", StringComparison.Ordinal),
+            principal, dns, now);
+        Check(incomplete.ObservationFor(g1) == "Insufficient flags",
+            "Partial UserResults flags cannot claim a GPO is applied.");
+        var older = UserRsopEvidence.ParseXml(userXml.Replace(
+            now.ToString("o"), now.AddDays(-4).ToString("o"), StringComparison.Ordinal),
+            principal, dns, now);
+        Check(older.ReadUtc < now.AddDays(-3) &&
+            !DomainGpoRsopCorrelation.EvidenceWarning(computer, older)
+                .Contains("same device verified", StringComparison.OrdinalIgnoreCase),
+            "Historical imports never establish an endpoint session or common client.");
+
+        var foreign = UserRsopEvidence.ParseXml(userXml, principal, "foreign.example.com", now);
+        rejected = false;
+        try { _ = DomainGpoRsopCorrelation.Compare(report, computer, foreign); }
+        catch (InvalidDataException) { rejected = true; }
+        Check(rejected, "User RSoP from a different selected DNS domain cannot be correlated.");
     }
 
     private static void TestRsopEvidenceImport()
