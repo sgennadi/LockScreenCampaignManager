@@ -526,6 +526,7 @@ public sealed partial class MainForm : Form
             ("Diagnostics...", OpenDiagnostics, null),
             ("Review local lab evidence...", OpenLocalLabEvidence, null),
             ("Visual DPI / language check...", OpenVisualDpiCheck, null),
+            ("Endpoint user Screen Saver probe...", OpenEndpointUserProbe, null),
             ("Check updates...", OpenUniversalUpdater, null)
         });
         _status.Text = "Ready — add images or open a project";
@@ -548,6 +549,7 @@ public sealed partial class MainForm : Form
             ("Settings...", OpenUiSettings, null),
             ("Diagnostics...", OpenDiagnostics, null),
             ("Visual DPI / language check...", OpenVisualDpiCheck, null),
+            ("Endpoint user Screen Saver probe...", OpenEndpointUserProbe, null),
             ("Check updates...", OpenUniversalUpdater, null),
             ("History...", OpenCampaignHistory, null)
         });
@@ -1526,6 +1528,12 @@ public sealed partial class MainForm : Form
     private void OpenVisualDpiCheck()
     {
         using var form = new UiVisualAcceptanceDialog();
+        form.ShowDialog(this);
+    }
+
+    private void OpenEndpointUserProbe()
+    {
+        using var form = new EndpointUserProbeDialog();
         form.ShowDialog(this);
     }
 
