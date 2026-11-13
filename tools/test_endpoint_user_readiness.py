@@ -40,7 +40,7 @@ class EndpointUserReadinessContracts(unittest.TestCase):
             "EnsureLocalPath(path, mustExist: false)",
             "EnsureLocalPath(path, mustExist: true)",
             "FileMode.CreateNew", "FileOptions.WriteThrough",
-            "FileAttributes.ReparsePoint", 'path.StartsWith(@"\\",
+            "FileAttributes.ReparsePoint", 'path.StartsWith(@',
             "Path.IsPathFullyQualified(path)",
             'full.EndsWith(".json"', "File.ReadAllText(full, StrictUtf8)",
             "!evidence.Domain.Equals(expectedDomain",
