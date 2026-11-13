@@ -147,7 +147,8 @@ internal static class NativeGpoConflictScan
                     }
                     foreach (string source in new[]
                     {
-                        "Registry.pol", @"Preferences\Registry\Registry.xml"
+                        "Registry.pol", @"Preferences\Registry\Registry.xml",
+                        @"Preferences\PowerOptions\PowerOptions.xml"
                     })
                     {
                         string file = Path.Combine(policyRoot, source);
@@ -174,7 +175,10 @@ internal static class NativeGpoConflictScan
                         {
                             byte[] bytes = File.ReadAllBytes(file);
                             hits = source == "Registry.pol"
-                                ? ParseRegistryPol(bytes, userScope) : ParseGppRegistry(bytes, userScope);
+                                ? ParseRegistryPol(bytes, userScope)
+                                : source.EndsWith("PowerOptions.xml", StringComparison.Ordinal)
+                                    ? userScope ? [] : ScreenSaverPowerConflictAnalysis.ParseGppPowerOptions(bytes)
+                                    : ParseGppRegistry(bytes, userScope);
                         }
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                             or InvalidDataException or XmlException or ArgumentException)
@@ -445,6 +449,24 @@ internal static class NativeGpoConflictScan
                     "does not itself prevent a screen saver from running.");
             return null;
         }
+        // Microsoft Power.admx: VIDEOIDLE under Computer Configuration. AC
+        // and DC are seconds; 0 means Never, NOT an immediate screen-off.
+        // A linked GPO here is only a candidate, never proof that the client
+        // received the setting. The campaign idle comparison is separate.
+        if (k == @"software\policies\microsoft\power\powersettings\3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e"
+            && n is ("acsettingindex" or "dcsettingindex"))
+            return new Hit(key, name, value, "Warning",
+                "Computer display-off policy (" + (n.StartsWith("ac") ? "AC / plugged in" : "DC / battery") +
+                "); compare with User Screen Saver idle timeout and confirm effective powercfg/RSoP.");
+        if (k == @"software\policies\microsoft\power\powersettings\29f6c1db-86da-48c5-9fdb-f2b67b1f44da"
+            && n is ("acsettingindex" or "dcsettingindex"))
+            return new Hit(key, name, value, "Warning",
+                "Computer sleep timeout (" + (n.StartsWith("ac") ? "AC" : "DC") +
+                "); may occur before User Screen Saver. Confirm active power plan.");
+        if (k == @"software\microsoft\windows\currentversion\policies\system" &&
+            n == "inactivitytimeoutsecs")
+            return new Hit(key, name, value, "Warning",
+                "Machine inactivity lock timeout may change Screen Saver visibility; not proof of disabling .scr.");
         if ((n == "lockscreenimage" || n == "nochanginglockscreen" || n == "nolockscreen")
             && k.EndsWith(@"\policies\microsoft\windows\personalization", StringComparison.Ordinal))
         {
