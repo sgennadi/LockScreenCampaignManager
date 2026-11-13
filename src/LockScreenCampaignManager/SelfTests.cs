@@ -5264,7 +5264,7 @@ StartExecutePSFirst=true
                 Check(stableOnly is null,
                     "Stable-only channel returns no release when only preview builds exist");
             }
-            var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!);
+            var signer = WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!, cacheOnly: true);
             Check(!signer.Trusted && signer.Code.StartsWith("0x", StringComparison.Ordinal),
                 "Unsigned mock EXE must not pass native WinVerifyTrust under either Windows architecture");
             Check(!UniversalUpdater.UpdatePolicy.CanAutomaticallyInstall(
