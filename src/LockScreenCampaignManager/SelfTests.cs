@@ -1552,7 +1552,7 @@ StartExecutePSFirst=true
         try { CustomSaverPilotFile.ValidateStored(@"C:\pilot\saver.scr", "invalid"); }
         catch (CampaignValidationException) { rejected = true; }
         Check(rejected, "Custom saver pilot rejects unverified SHA-256.");
-        var self = CustomSaverPilotFile.Inspect(Application.ExecutablePath);
+        var self = CustomSaverPilotFile.InspectPeOnlyForSelfTest(Application.ExecutablePath);
         Check(self.Extension == ".exe" && self.Sha256.Length == 64 &&
             self.Bytes > 1024,
             "Custom saver pilot reads a PE image without launching it.");
