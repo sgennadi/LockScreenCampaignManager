@@ -1412,7 +1412,7 @@ StartExecutePSFirst=true
             },
             notes = new[] { "Read-only fixture", "Not effective RSoP" }
         };
-        JsonElement payload = System.Text.Json.JsonSerializer.SerializeToElement(Fixture(true));
+        System.Text.Json.JsonElement payload = System.Text.Json.JsonSerializer.SerializeToElement(Fixture(true));
         var report = EndpointPowerObservation.Parse(payload, "example.com",
             "dc01.example.com", "OU=Clients,DC=example,DC=com",
             "pc01.example.com", now);
