@@ -762,7 +762,8 @@ class ClientManagementContracts(unittest.TestCase):
             'UiLocale.Coverage106.cs', 'UiLocale.Power107.cs',
             'UiLocale.Power108.cs', 'UiLocale.Power109.cs',
             'UiLocale.Power110.cs', 'UiLocale.Power111.cs',
-            'UiLocale.Power112.cs', 'UiLocale.Power113.cs'
+            'UiLocale.Power112.cs', 'UiLocale.Power113.cs',
+            'UiLocale.Power114.cs'
         }
         for source in APP.glob('*.cs'):
             if source.name in allowed_russian_ui:
