@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace LockScreenCampaignManager;
 
 /// <summary>
@@ -12,6 +14,34 @@ internal sealed record DomainGpoOverlap(
 
 internal static class DomainGpoOverlapAnalysis
 {
+
+    internal static string BuildCsv(IEnumerable<DomainGpoOverlap> overlaps)
+    {
+        static string Escape(string? input)
+        {
+            string value = (input ?? "").Replace("\r", " ", StringComparison.Ordinal)
+                .Replace("\n", " ", StringComparison.Ordinal);
+            // Protect spreadsheet users when privately exporting untrusted
+            // domain policy names and values (CSV formula injection).
+            if (value.Length > 0 && "=+-@".Contains(value[0]))
+                value = "'" + value;
+            return "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+        }
+        var output = new StringBuilder(
+            "Scope,Registry key,Setting,Kind,GPO count,Linked candidates,GPOs,Values,Applicability\r\n");
+        foreach (var item in overlaps)
+        {
+            string[] values = [
+                item.Scope, item.Key, item.Setting, item.Kind,
+                item.GpoCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                item.LinkedCandidates.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                item.Gpos, item.ConfiguredValues, item.Applicability
+            ];
+            output.Append(string.Join(",", values.Select(Escape))).Append("\r\n");
+        }
+        return output.ToString();
+    }
+
     internal static IReadOnlyList<DomainGpoOverlap> Analyze(
         IReadOnlyList<DomainGpoMatch> matches)
     {

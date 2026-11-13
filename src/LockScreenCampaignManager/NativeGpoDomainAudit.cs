@@ -357,6 +357,12 @@ internal static class NativeGpoDomainAudit
         string name = hit.name.ToLowerInvariant();
         bool includesSaver = campaignMode is "ScreenSaver" or "Both";
         bool includesLock = campaignMode is "LockScreen" or "Both";
+        // RDS session policies affect remote interactive sessions only;
+        // record a conditional warning, NEVER a confirmed blocker for
+        // the console desktop or winning user/computer policy.
+        if (RdsSessionPolicyBlockers.Recognize(hit.key, hit.name, hit.value) is not null)
+            return RdsSessionPolicyBlockers.AssessRisk(
+                hit.name, hit.value, idle, includesSaver, linkStatus);
         if (user)
         {
             if (!includesSaver) return "Info";

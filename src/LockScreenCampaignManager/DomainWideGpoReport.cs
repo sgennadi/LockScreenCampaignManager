@@ -34,6 +34,8 @@ internal sealed class DomainWideGpoReport
     internal int Warnings => Matches.Count(x => x.Risk == "Warning");
     internal int LinkedCandidates => Matches.Count(x => x.LinkStatus == "Linked candidate");
     internal int Count => Matches.Count;
+    internal IReadOnlyList<DomainGpoOverlap> Overlaps =>
+        DomainGpoOverlapAnalysis.Analyze(Matches);
 
     internal static DomainWideGpoReport Parse(
         JsonElement data, string expectedDomain, string expectedDc,
