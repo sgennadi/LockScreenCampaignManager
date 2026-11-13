@@ -69,6 +69,7 @@ internal static class SelfTests
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
         TestModernMessageDialogs();
+        TestCustomSaverPilotSelection();
         TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
@@ -1535,6 +1536,27 @@ StartExecutePSFirst=true
                     "=malicious", "+test", "RSoP unknown")
             ]).Contains("\"'=malicious\"", StringComparison.Ordinal),
             "Duplicate values inside one GPO remain ambiguous, CSV export escapes formulas.");
+    }
+
+    private static void TestCustomSaverPilotSelection()
+    {
+        var settings = new CampaignScreenSaverSettings();
+        CustomSaverPilotFile.ValidateStored(settings.CustomExecutablePath,
+            settings.CustomExecutableSha256);
+        bool rejected = false;
+        try { CustomSaverPilotFile.ValidateStored(@"\\server\share\saver.scr",
+            new string('a', 64)); }
+        catch (CampaignValidationException) { rejected = true; }
+        Check(rejected, "Custom saver pilot rejects UNC paths.");
+        rejected = false;
+        try { CustomSaverPilotFile.ValidateStored(@"C:\pilot\saver.scr", "invalid"); }
+        catch (CampaignValidationException) { rejected = true; }
+        Check(rejected, "Custom saver pilot rejects unverified SHA-256.");
+        var self = CustomSaverPilotFile.Inspect(Application.ExecutablePath);
+        Check(self.Extension == ".exe" && self.Sha256.Length == 64 &&
+            self.Bytes > 1024,
+            "Custom saver pilot reads a PE image without launching it.");
+        CustomSaverPilotFile.ValidateStored(self.Path, self.Sha256);
     }
 
     private static void TestModernMessageDialogs()
