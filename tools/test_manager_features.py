@@ -382,7 +382,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('row.ComputerOuDn, "Computer",', form)
         self.assertIn('row.Name + " #" + (i + 1) + " LS", creds', form)
         self.assertIn('row.UserOuDn, "User",', form)
-        self.assertIn('row.Name + " #" + (i + 1) + " SS", creds', form)
+        self.assertIn('row.UserOuDn, "User", userTarget, creds', form)
         self.assertIn('"policyScope").GetString()', form)
         self.assertIn('data.GetProperty("highRisk")', form)
         self.assertIn('data.GetProperty("warningsCount")', form)
