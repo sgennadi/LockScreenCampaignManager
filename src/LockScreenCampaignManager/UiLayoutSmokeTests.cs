@@ -749,12 +749,26 @@ internal static class UiLayoutSmokeTests
                 !x.WordWrap && x.ScrollBars == ScrollBars.Horizontal))
             throw new InvalidOperationException(
                 $"SMB feedback share is not horizontally scrollable at {profile}.");
-        if (all.OfType<ClientFeedbackPanel>().Any() &&
-            !all.OfType<TextBox>().Any(x =>
-                x.Name == "ClientHealthSmbPath" && x.Multiline &&
-                !x.WordWrap && x.ScrollBars == ScrollBars.Horizontal))
-            throw new InvalidOperationException(
-                $"Client Health SMB share cannot be scrolled at {profile}.");
+        if (all.OfType<ClientFeedbackPanel>().Any())
+        {
+            if (!all.OfType<TextBox>().Any(x =>
+                    x.Name == "ClientHealthSmbPath" && x.Multiline &&
+                    !x.WordWrap && x.ScrollBars == ScrollBars.Horizontal))
+                throw new InvalidOperationException(
+                    $"Client Health SMB share cannot be scrolled at {profile}.");
+            var activity = all.OfType<ComboBox>()
+                .SingleOrDefault(x => x.Name == "ClientHealthAdActivityWindow");
+            var coverage = all.OfType<Label>()
+                .SingleOrDefault(x => x.Name == "ClientHealthAdReportCoverage");
+            if (activity is null || activity.Items.Count != 4 ||
+                activity.SelectedIndex != 1 ||
+                activity.DropDownStyle != ComboBoxStyle.DropDownList ||
+                coverage is null || coverage.AutoEllipsis ||
+                coverage.Text.Length < 30)
+                throw new InvalidOperationException(
+                    $"Client Health read-only AD/SMB coverage must start unverified " +
+                    $"with a visible activity window at {profile}.");
+        }
         if (form is GpoOperationsForm &&
             !all.OfType<TextBox>().Any(x =>
                 x.Name == "GpoScopePathViewer" && x.ReadOnly &&
