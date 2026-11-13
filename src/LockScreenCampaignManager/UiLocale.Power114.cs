@@ -77,4 +77,8 @@ internal static partial class UiLocale
         ["User Screen Saver secure"] = "אבטחת שומר המסך",
         ["Screen Saver UI restriction"] = "הגבלת ממשק שומר המסך"
     };
+    private static readonly Dictionary<string,string> Power114EnglishByRussian =
+        Power114Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
+    private static readonly Dictionary<string,string> Power114EnglishByHebrew =
+        Power114Hebrew.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);
 }
