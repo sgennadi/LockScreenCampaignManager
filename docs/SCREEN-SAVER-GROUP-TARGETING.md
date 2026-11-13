@@ -1,3 +1,7 @@
+## Preview.114 — verify the actual User HKCU Screen Saver in a manual pilot
+
+On an approved Windows 10/11 PC, sign in as the test user and open **Tools → Endpoint user Screen Saver probe...** (or launch the portable manager with `--endpoint-user-probe`). Click **Capture this Windows user**, review the read-only HKCU values and explicitly save a PRIVATE local JSON. In the manager, after scanning the selected DC's GPOs and importing separate User/Computer `gpresult` XML, open **Pilot readiness... → Import user HKCU JSON...**. The computer DNS suffix/FQDN must match the pilot; user XML identity is independently checked and any different UPN/NetBIOS form remains **Not verified**. Optional remote power readings require a separate approved action. Neither registry values nor unsigned JSON prove winning GPO or visual behavior. [Full procedure](RELEASE-PREVIEW114.md).
+
 ## Preview.113 - choose local custom SCR/EXE, or create from JPG
 
 In Wizard -> Campaign Type -> Screen Saver/Both, select **Custom .scr / .exe (local pilot only)** and click **Browse .scr / .exe...**. Only regular local PE files are accepted; UNC and symbolic links are rejected. SHA-256 and Authenticode status are shown. This never executes, installs or distributes the file. A generic EXE requires genuine Windows Screen Saver /s, /p and /c support. Changing extension alone is insufficient.
