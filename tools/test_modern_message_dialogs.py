@@ -25,6 +25,7 @@ class ModernTests(unittest.TestCase):
             self.assertNotIn(t,x)
         self.assertIn("InspectPeOnlyForSelfTest(Application.ExecutablePath)", read("SelfTests.cs"))
         self.assertIn("WindowsAuthenticodeAudit.Inspect(staged.ExtractedExecutablePath!, cacheOnly: true)", read("SelfTests.cs"))
+        self.assertEqual(read("SelfTests.cs").count("Task.Run(TestPrivateGitHubReleaseDownload).GetAwaiter().GetResult();"), 2)
         sign=read("WindowsAuthenticodeAudit.cs")
         self.assertIn("WTD_CACHE_ONLY_URL_RETRIEVAL", sign)
         self.assertIn("0x00001000u", sign)
