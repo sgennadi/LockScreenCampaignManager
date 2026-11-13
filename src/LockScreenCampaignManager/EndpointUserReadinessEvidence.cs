@@ -66,7 +66,11 @@ internal sealed class EndpointUserReadinessEvidence
             !NativeGpoConflictScan.SafeComputerName(fqdn, suffix))
             throw new InvalidDataException(
                 "Local DNS domain suffix cannot identify this PC; no endpoint evidence exported.");
-        string user = WindowsIdentity.GetCurrent().Name;
+        using var currentIdentity = WindowsIdentity.GetCurrent();
+        if (!Environment.UserInteractive || currentIdentity.IsSystem)
+            throw new InvalidDataException(
+                "Endpoint probe requires an interactive pilot Windows user, not a SYSTEM/service account.");
+        string user = currentIdentity.Name;
         if (string.IsNullOrWhiteSpace(user) || user.Length > 256 ||
             user.Any(char.IsControl))
             throw new InvalidDataException("Windows identity is unavailable.");
