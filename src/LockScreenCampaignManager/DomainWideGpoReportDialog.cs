@@ -45,7 +45,7 @@ internal sealed class DomainWideGpoReportDialog : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 168));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -124,9 +124,11 @@ internal sealed class DomainWideGpoReportDialog : Form
         _details.BackColor = UiStyle.Surface;
         root.Controls.Add(_details, 0, 3);
 
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 555));
+        var footer = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
+        };
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _count.Dock = DockStyle.Fill;
         _count.TextAlign = ContentAlignment.MiddleLeft;
         _count.ForeColor = UiStyle.Muted;
@@ -150,7 +152,14 @@ internal sealed class DomainWideGpoReportDialog : Form
             dialog.ShowDialog(this);
         };
         buttons.Controls.Add(compare);
-        footer.Controls.Add(buttons, 1, 0);
+        var rsop = MakeButton("Compare gpresult XML...", 215);
+        rsop.Name = "AllDcGpoRsopButton";
+        rsop.Click += (_, _) => {
+            using var dialog = new DomainGpoRsopDialog(_report);
+            dialog.ShowDialog(this);
+        };
+        buttons.Controls.Add(rsop);
+        footer.Controls.Add(buttons, 0, 1);
         root.Controls.Add(footer, 0, 4);
         UiStyle.Apply(this);
         UiWindowPlacement.Attach(this, "all-dc-gpo-audit");
