@@ -1,3 +1,11 @@
+## 0.4.0-preview.107 — Windows client power observation for Screen Saver (2026-11-13)
+
+- Add explicit per-PC read-only power check in GPO Operations / Conflicts, after verifying the supplied FQDN, domain controller and exact Computer OU via signed/sealed LDAP.
+- Read active Windows power plan display/sleep AC/DC values with WMI Win32_PowerPlan → Win32_PowerSettingDataIndex → Win32_PowerSetting associations and computer HKLM policy registry timers separately. Missing/ambiguous/denied data is **Not verified**, never zero or safe.
+- Show a dedicated, searchable-by-eye comparison window with source, value, configured Screen Saver idle timeout and static OU-linked GPO policy candidates. Values earlier than target time are potential blockers; equal thresholds and machine locks require review.
+- Translate new English/Russian/Hebrew captions, add 100–200% simulated layout smoke, strict scoped evidence parsing and C# plus Python offline regressions. Native x64/x86 builds and Offline AD Lab Kit are release gates.
+- **No endpoint scripts, tasks, writes or auto-fixes.** Active WMI plan and remote HKLM do **not** establish effective RSoP, User HKCU, actual power draw, physical monitor behavior or winning GPO. Real Windows 10/11 live client AC/DC and gpresult/powercfg acceptance remains open.
+
 ## 0.4.0-preview.106 — Screen Saver power GPO candidates + AD/SMB Client Health (2026-11-13)
 
 - Read linked Computer GPO candidates under the explicitly selected device OU, including VIDEOIDLE AC/DC and sleep Power.admx policies, machine inactivity lock, GPP Registry and PowerOptions XML with bounded safe parsing. Compare positive seconds against configured User Screen Saver idle; 0 = Never, equal = warning, earlier display/sleep = high-risk candidate.
