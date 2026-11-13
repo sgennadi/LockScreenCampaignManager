@@ -58,7 +58,7 @@ class ScopedHealthAndPowerContracts(unittest.TestCase):
         self.assertIn('row.UserOuDn, "User", userTarget', matrix)
         self.assertIn("GroupConflictFinding(", matrix)
         self.assertIn('powerWarnings = 1;', matrix)
-        self.assertIn('powerHigh +', matrix.replace("audit.HighRisk + powerHigh", "powerHigh +") )
+        self.assertIn('audit.HighRisk + powerHigh', matrix)
         self.assertIn("_computerOu.Enabled = hasComputer || hasUser;", assignments)
         self.assertIn("_computerGroup.Enabled = hasComputer;", assignments)
         self.assertIn("TestScreenSaverPowerConflictAnalysis();", read("SelfTests.cs"))
@@ -66,7 +66,7 @@ class ScopedHealthAndPowerContracts(unittest.TestCase):
                           "File.WriteAllBytes", "Process.Start", "powercfg.exe"):
             self.assertNotIn(forbidden, compare)
         self.assertIn("NOT RSoP", matrix)
-        self.assertIn("not targeting", assignments.lower()) if "not targeting" in assignments.lower() else self.assertIn("not a Computer GPO", assignments)
+        self.assertIn("it does NOT assign a computer policy", assignments)
         
     def test_trilingual_ui_and_dpi(self):
         locale = read("UiLocale.Coverage106.cs")
