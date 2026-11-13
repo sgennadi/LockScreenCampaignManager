@@ -15,7 +15,7 @@ class DomainGpresultContracts(unittest.TestCase):
         for marker in (
             "ReadLocalXmlDocument(path)", "FileShare.Read",
             "SHA256.HashData(stream)", "FileAttributes.ReparsePoint",
-            'full.StartsWith(@"\\\\")', "DtdProcessing = DtdProcessing.Prohibit",
+            'full.StartsWith(@"\\\\",', "DtdProcessing = DtdProcessing.Prohibit",
             "XmlResolver = null", "MaxBytes", "Path.GetFullPath(path)",
         ):
             self.assertIn(marker, computer, marker)

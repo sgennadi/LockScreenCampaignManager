@@ -74,7 +74,7 @@ internal sealed class UserRsopEvidence
         { /* UPN is explicitly in the selected DNS domain. */ }
         else
             throw new InvalidDataException(
-                "Enter the exact DOMAIN\\user or user@dns.domain from gpresult.");
+                "Enter the exact DOMAIN\\user or a User Principal Name (UPN) from gpresult.");
 
         var root = document.Root;
         if (root is null || root.Name.LocalName != "Rsop" ||
