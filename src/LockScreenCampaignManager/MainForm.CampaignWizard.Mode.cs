@@ -315,8 +315,8 @@ public sealed partial class MainForm
                 SuggestCampaignName(selected);
                 _owner._project.CampaignMode = selected;
                 _owner._project.CampaignModeExplicit = true;
-                bool customSelected = saver.SelectedItem is string option &&
-                    option == customOption && !photo.Checked;
+                bool customSelected = saver.SelectedItem is string chosen &&
+                    chosen == customOption && !photo.Checked;
                 if (!customSelected)
                 {
                     _owner._project.ScreenSaver.CustomExecutablePath = "";
