@@ -1,3 +1,11 @@
+## 0.4.0-preview.110 — independent User/Computer gpresult XML correlation (2026-11-13)
+
+- Add **Compare gpresult XML...** to the read-only all-domain GPO scan. It correlates a selected-DC source snapshot with two independent, manually selected local gpresult XML files by **GPO GUID + Computer/User scope**. Names alone never establish policy identity.
+- Reuse the existing hardened computer gpresult XML reader; add strict, bounded UserResults parsing with explicit matching operator-entered user principal and domain, Reported applied/filtered/insufficient-flags states, duplicate/foreign GUID detection, logged-data timestamps and local SHA-256 evidence. Missing/ambiguous entries cannot claim application.
+- New searchable, DPI-aware tri-language (EN/RU/HE) comparison window with typed Computer FQDN and User principal, separate Import/Clear actions, a privacy review before each import, historical-snapshot warnings and no automatic file persistence.
+- Keep server-side GPO setting risk and link state distinct from XML-reported per-GPO flags. A GPO reported applied is not proof its **specific parameter won**; a GUID missing from XML is unknown, not proof of exclusion. User and Computer imports are not asserted to describe the same endpoint/session.
+- Add C# offline regressions, Python privacy/scope/identity contracts, x64/x86 WinForms simulated-DPI checks and Offline AD Lab test gate. No domain write, remote execution, user settings collection, agent install or report upload. Real AD/Windows 10/11 acceptance remains open.
+
 ## 0.4.0-preview.109 — RDS session blockers and cross-GPO same-setting comparison (2026-11-13)
 
 - Expand the existing read-only all-DC source scan to recognize RDS Session Host `MaxIdleTime`, `MaxConnectionTime`, `MaxDisconnectionTime` and `fResetBroken` from User and Computer GPO registry-policy/GPP sources. Interpret RDS duration values as **milliseconds** and compare RDS idle (not total-session or post-disconnection) with the campaign Screen Saver time.

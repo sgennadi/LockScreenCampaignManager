@@ -55,6 +55,9 @@ internal static class UiLayoutSmokeTests
     private static Form CreateGpoOverlapSmoke() =>
         new DomainGpoOverlapDialog(CreateAllDcGpoFixture().Overlaps);
 
+    private static Form CreateGpoRsopSmoke() =>
+        new DomainGpoRsopDialog(CreateAllDcGpoFixture());
+
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
     {
         ("100%", new UiPreferences { Density = "Auto", UiScalePercent = 100, FontScalePercent = 100 }),
@@ -147,7 +150,11 @@ internal static class UiLayoutSmokeTests
             CreateEndpointPowerSmoke, new[] { "Close" }),
         ("Domain-wide GPO audit - offline simulated layout",
             CreateAllDcGpoSmoke, new[] {
-                "Export filtered CSV...", "Compare GPO settings...", "Close" }),
+                "Export filtered CSV...", "Compare GPO settings...",
+                "Compare gpresult XML...", "Close" }),
+        ("Domain GPO gpresult Computer/User comparison - offline simulated layout",
+            CreateGpoRsopSmoke, new[] { "Import Computer XML...",
+                "Import User XML...", "Clear Computer", "Clear User", "Close" }),
         ("Domain GPO same-setting comparisons - offline simulated layout",
             CreateGpoOverlapSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),

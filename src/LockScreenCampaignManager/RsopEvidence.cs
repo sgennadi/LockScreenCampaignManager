@@ -20,7 +20,7 @@ internal sealed class RsopEvidence
     private static readonly Regex GuidPattern = new(
         @"\{(?<id>[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly XmlReaderSettings SafeXml = new()
+    internal static readonly XmlReaderSettings SafeXml = new()
     {
         DtdProcessing = DtdProcessing.Prohibit,
         XmlResolver = null,
@@ -42,34 +42,43 @@ internal sealed class RsopEvidence
 
     internal static RsopEvidence LoadLocalXml(string path, string expectedComputer, string expectedDomain)
     {
+        var (document, hash) = ReadLocalXmlDocument(path);
+        return ParseDocument(document, expectedComputer, expectedDomain,
+            DateTimeOffset.UtcNow, hash);
+    }
+
+    /// <summary>
+    /// Shared bounded XML read for explicit Computer and User gpresult import.
+    /// Only returns a parsed document and checksum; no file is stored or
+    /// executed. The source file itself is NOT authenticated by SHA-256.
+    /// </summary>
+    internal static (XDocument Document, string Sha256) ReadLocalXmlDocument(string path)
+    {
         if (string.IsNullOrWhiteSpace(path) ||
             !string.Equals(Path.GetExtension(path), ".xml",
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Choose a local gpresult /x XML report.");
-        // Never follow remote UNC paths or linked parent directories. Only
-        // files explicitly selected on a local volume may be imported.
         string full = Path.GetFullPath(path);
         if (!Path.IsPathFullyQualified(full) ||
             full.StartsWith(@"\\", StringComparison.Ordinal) ||
             full.StartsWith(@"\\?\", StringComparison.Ordinal) ||
             full.StartsWith(@"\\.\", StringComparison.Ordinal))
-            throw new InvalidDataException("Select a regular local XML file, not a network or device path.");
+            throw new InvalidDataException(
+                "Select a regular local XML file, not a network or device path.");
         for (var folder = new DirectoryInfo(Path.GetDirectoryName(full)!);
              folder is not null && folder.Parent is not null; folder = folder.Parent)
-        {
             if ((folder.Attributes & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException("Linked folder is not accepted for RSoP import.");
-        }
         var file = new FileInfo(full);
         if (!file.Exists || file.Length is < 64 or > MaxBytes ||
             (file.Attributes & FileAttributes.ReparsePoint) != 0 ||
-            (file.Directory is { } directory &&
-                (directory.Attributes & FileAttributes.ReparsePoint) != 0))
+            (file.Directory is { } dir &&
+                (dir.Attributes & FileAttributes.ReparsePoint) != 0))
             throw new InvalidDataException(
                 "RSoP XML missing, oversized, or located through a reparse point.");
         try
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            using var stream = new FileStream(full, FileMode.Open, FileAccess.Read,
                 FileShare.Read, 65536, FileOptions.SequentialScan);
             if (stream.Length is < 64 or > MaxBytes)
                 throw new InvalidDataException("RSoP file changed during import.");
@@ -79,8 +88,7 @@ internal sealed class RsopEvidence
             stream.Position = 0;
             string digest = Convert.ToHexString(SHA256.HashData(stream))
                 .ToLowerInvariant();
-            return ParseDocument(document, expectedComputer, expectedDomain,
-                DateTimeOffset.UtcNow, digest);
+            return (document, digest);
         }
         catch (XmlException ex)
         {
@@ -92,10 +100,10 @@ internal sealed class RsopEvidence
     private static XElement? Child(XElement element, string localName) =>
         element.Elements().SingleOrDefault(x => x.Name.LocalName == localName);
 
-    private static string? Text(XElement element, string localName) =>
+    internal static string? Text(XElement element, string localName) =>
         Child(element, localName)?.Value.Trim();
 
-    private static bool? Bool(XElement element, string localName)
+    internal static bool? Bool(XElement element, string localName)
     {
         var raw = Text(element, localName);
         if (raw is null) return null;
@@ -103,7 +111,7 @@ internal sealed class RsopEvidence
         throw new InvalidDataException("Malformed gpresult computer GPO flag: " + localName);
     }
 
-    private static string? GuidFromGpo(XElement item)
+    internal static string? GuidFromGpo(XElement item)
     {
         // The reported GUID is embedded in GPO/Identifier or in the
         // GPO LDAP Path. Never infer identity from display name.
