@@ -69,6 +69,7 @@ internal static class SelfTests
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
+        TestEndpointUserReadinessEvidence();
         Console.Error.WriteLine("SELF-TEST checkpoint: before modern dialogs");
         TestModernMessageDialogs();
         Console.Error.WriteLine("SELF-TEST checkpoint: before custom saver");
@@ -1629,6 +1630,144 @@ StartExecutePSFirst=true
             discard.DefaultAction == DialogResult.No &&
             discard.AcceptButton is Button { DialogResult: DialogResult.No },
             "Cancel-capable destructive dialog retains separate cancel on Esc.");
+    }
+
+
+    private static void TestEndpointUserReadinessEvidence()
+    {
+        const string pc = "pc01.example.com";
+        const string domain = "example.com";
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        static string Fixture(DateTimeOffset captured, string host,
+            string active = "0", string timeout = "900")
+        {
+            var pairs = new List<(string Source, string Setting)>();
+            foreach (string source in new[] { "PolicyHKCU", "DesktopHKCU" })
+                foreach (string setting in new[] {
+                    "ScreenSaveActive", "ScreenSaveTimeOut",
+                    "SCRNSAVE.EXE", "ScreenSaverIsSecure"
+                })
+                    pairs.Add((source, setting));
+            pairs.Add(("RestrictionHKCU", "NoDispScrSavPage"));
+            var readings = pairs.Select(x =>
+            {
+                string value = x.Source == "PolicyHKCU" ?
+                    x.Setting switch {
+                        "ScreenSaveActive" => active,
+                        "ScreenSaveTimeOut" => timeout,
+                        "SCRNSAVE.EXE" => "scrnsave.scr",
+                        "ScreenSaverIsSecure" => "0",
+                        _ => ""
+                    } : "";
+                return new {
+                    source = x.Source, setting = x.Setting,
+                    status = value.Length > 0 ? "Present" : "Missing",
+                    value
+                };
+            }).ToArray();
+            return System.Text.Json.JsonSerializer.Serialize(new {
+                schema = EndpointUserReadinessEvidence.Schema,
+                capturedUtc = captured.ToString("O"),
+                domain = "example.com", computer = host,
+                user = @"EXAMPLE\pilot", session = "NonRemoteUnverified",
+                values = readings
+            });
+        }
+        string valid = Fixture(now, pc);
+        var result = EndpointUserReadinessEvidence.ParseJson(valid, now);
+        Check(result.Computer == pc && result.Domain == domain &&
+            result.User == @"EXAMPLE\pilot" && result.Values.Count == 9 &&
+            result.IsFresh(now) && !result.SignedByDomain &&
+            !result.ProvesWinningGpo && !result.ProvesScreenSaverDisplayed &&
+            result.Get("PolicyHKCU", "ScreenSaveActive").Value == "0" &&
+            result.Get("DesktopHKCU", "ScreenSaveTimeOut").Status == "Missing" &&
+            result.Sha256.Length == 64,
+            "Exact bounded HKCU snapshot is unsigned and scoped.");
+
+        static bool Reject(string json, DateTimeOffset at)
+        {
+            try { _ = EndpointUserReadinessEvidence.ParseJson(json, at); return false; }
+            catch (Exception ex) when (ex is InvalidDataException or
+                System.Text.Json.JsonException) { return true; }
+        }
+        Check(Reject(valid.Replace("\"schema\":",
+                "\"unexpected\":\"script\",\"schema\":", StringComparison.Ordinal), now) &&
+            Reject(valid.Replace("\"schema\":",
+                "\"schema\":\"duplicate\",\"schema\":", StringComparison.Ordinal), now) &&
+            Reject(valid.Replace("\"PolicyHKCU\"",
+                "\"UnknownScope\"", StringComparison.Ordinal), now) &&
+            Reject(valid.Replace("\"status\":\"Present\"",
+                "\"status\":\"Executed\"", StringComparison.Ordinal), now) &&
+            Reject(valid.Replace("\"computer\":\"pc01.example.com\"",
+                "\"computer\":\"pc01.other.com\"", StringComparison.Ordinal), now) &&
+            Reject(Fixture(now.AddMinutes(4), pc), now) &&
+            Reject(new string('x', 65_536), now),
+            "Endpoint JSON fails closed on extra/duplicate keys, scopes, states, " +
+            "mismatched DNS identity, future timestamps and oversize input.");
+
+        var stale = EndpointUserReadinessEvidence.ParseJson(
+            Fixture(now.AddMinutes(-11), pc), now);
+        Check(!stale.IsFresh(now), "Endpoint HKCU snapshot older than ten minutes is stale.");
+
+        // The import is local-only, original JSON is unchanged, and saving
+        // cannot silently overwrite an older operator evidence file.
+        string folder = Path.Combine(Path.GetTempPath(),
+            "lscm-hkcu-fixture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            string path = Path.Combine(folder, "local-evidence.json");
+            result.SaveLocalJson(path);
+            var loaded = EndpointUserReadinessEvidence.LoadLocalJson(
+                path, domain, pc, now);
+            Check(loaded.Sha256 == result.Sha256 && loaded.RawJson == valid,
+                "Private local export/import preserves original unsigned evidence.");
+            bool rejected = false;
+            try { result.SaveLocalJson(path); }
+            catch (IOException) { rejected = true; }
+            Check(rejected, "Endpoint local evidence must never be overwritten.");
+            rejected = false;
+            try { _ = EndpointUserReadinessEvidence.LoadLocalJson(
+                path, domain, "another.example.com", now); }
+            catch (InvalidDataException) { rejected = true; }
+            Check(rejected, "Endpoint JSON is bound to the operator-selected pilot PC.");
+        }
+        finally { Directory.Delete(folder, true); }
+
+        const string ou = "OU=Computers,DC=example,DC=com";
+        DateTimeOffset scanNow = DateTimeOffset.UtcNow;
+        var raw = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain, dc = "dc01.example.com", observedUtc = scanNow,
+            computerOus = new[] { ou }, userOus = Array.Empty<string>(),
+            gpoCount = 0, inspectedHalves = 0, emptyHalves = 0,
+            issueCount = 0, complete = true,
+            issues = Array.Empty<object>(), notes = Array.Empty<string>(),
+            matches = Array.Empty<object>(), count = 0,
+            linkedCandidates = 0, highRisk = 0, warningsCount = 0
+        });
+        var report = DomainWideGpoReport.Parse(raw, domain,
+            "dc01.example.com", [ou], []);
+        var readiness = DomainGpoPilotReadiness.Build(
+            report, pc, ou, 600, null, null, null, scanNow, result);
+        Check(readiness.EndpointUserImported &&
+            readiness.Findings.Any(x => x.Area == "User Screen Saver active" &&
+                x.State == "Observed concern") &&
+            readiness.Findings.Any(x => x.Area == "User Screen Saver idle" &&
+                x.State == "Observed concern") &&
+            readiness.Findings.Any(x => x.Area == "User Screen Saver secure" &&
+                x.State == "Source candidate") &&
+            !readiness.ProvesScreenSaverDisplayed &&
+            !readiness.ProvesWinningGpo &&
+            !readiness.PermitsAutomaticRemediation,
+            "Manual HKCU snapshot flags disabled and late Screen Saver without claiming winner.");
+
+        var past = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, stale);
+        Check(past.Findings.Any(x => x.Area == "User HKCU snapshot" &&
+                x.State == "Not verified") &&
+            !past.Findings.Any(x => x.Area == "User Screen Saver active" &&
+                x.State == "Observed concern"),
+            "Expired HKCU evidence never receives a current observed-concern verdict.");
     }
 
     private static void TestDomainPilotReadiness()
