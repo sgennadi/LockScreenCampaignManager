@@ -3508,6 +3508,11 @@ StartExecutePSFirst=true
                 new[] { "PC001", "PC002" }, now);
             Check(snapshot.Expected == 2 && snapshot.Healthy == 1 && snapshot.NoReport == 1,
                 "health denominator uses AD list and reports");
+            var emptyVerified = ClientFeedbackReader.ReadDirectory(root,
+                "test-campaign-202611081400", [], now, expectedScopeVerified: true);
+            Check(emptyVerified.Expected == 0 && emptyVerified.Rows.Count == 0 &&
+                emptyVerified.LatestReports.Count == 0,
+                "verified AD group with zero members never borrows unrelated SMB reports as targets");
             Check(snapshot.LatestReports.Count == 1 &&
                 snapshot.LatestReports.ContainsKey("PC001") &&
                 !snapshot.LatestReports.ContainsKey("PC002"),
