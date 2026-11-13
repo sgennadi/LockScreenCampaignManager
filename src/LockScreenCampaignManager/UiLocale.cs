@@ -403,7 +403,8 @@ internal static partial class UiLocale
             }
             if (child is Label technicalLabel && technicalLabel.Name is
                 ("CampaignWizardVersion" or "WizardTimeZoneDifference" or
-                 "CampaignWizardImagePath" or "ScheduleTimeZoneDifference"))
+                 "CampaignWizardImagePath" or "ScheduleTimeZoneDifference" or
+                 "EndpointPowerScopeLabel"))
                 technicalLabel.RightToLeft = RightToLeft.No;
             // UI-only formatted choices: SelectedItem stays the original enum or
             // English storage key. Never translate values saved to campaign JSON.
