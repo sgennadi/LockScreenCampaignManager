@@ -19,6 +19,7 @@ internal sealed class DomainGpoPilotReadiness
     internal bool PowerObserved { get; private init; }
     internal bool ComputerXmlImported { get; private init; }
     internal bool UserXmlImported { get; private init; }
+    internal bool EndpointUserImported { get; private init; }
     internal IReadOnlyList<DomainPilotFinding> Findings { get; private init; } = [];
     internal IReadOnlyList<DomainPilotBlocker> NamedBlockers { get; private init; } = [];
     internal int Concerns => Findings.Count(x => x.State == "Observed concern");
@@ -32,7 +33,7 @@ internal sealed class DomainGpoPilotReadiness
         DomainWideGpoReport report, string computer, string selectedComputerOu,
         int saverIdleSeconds, EndpointPowerObservation? power,
         RsopEvidence? computerXml, UserRsopEvidence? userXml,
-        DateTimeOffset now)
+        DateTimeOffset now, EndpointUserReadinessEvidence? endpointUser = null)
     {
         ArgumentNullException.ThrowIfNull(report);
         if (saverIdleSeconds is < 60 or > 86400 ||
@@ -55,6 +56,12 @@ internal sealed class DomainGpoPilotReadiness
         if (userXml is not null &&
             !userXml.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("User gpresult XML belongs to another domain.");
+        if (endpointUser is not null &&
+            (!endpointUser.Computer.Equals(computer, StringComparison.OrdinalIgnoreCase) ||
+             !endpointUser.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
+             endpointUser.CapturedUtc > now.AddMinutes(2)))
+            throw new InvalidDataException(
+                "Local User HKCU snapshot belongs to another computer/domain or is future-dated.");
         if (power is not null &&
             (!power.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
              !NativeGpoLifecycleList.SameController(power.Dc, report.Dc) ||
@@ -94,6 +101,7 @@ internal sealed class DomainGpoPilotReadiness
             computerXml?.IsHistorical, computerXml?.Sha256, computerXml?.UnidentifiedEntries);
         AddXml(findings, "User", userXml?.ReadUtc,
             userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries);
+        AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
 
         // A GPO being "Reported applied" only raises the priority for review.
         // This is NOT a per-setting winner and is never a confirmed policy block.
@@ -206,9 +214,151 @@ internal sealed class DomainGpoPilotReadiness
             SaverIdleSeconds = saverIdleSeconds, BuiltUtc = now.ToUniversalTime(),
             PowerObserved = power is not null,
             ComputerXmlImported = computerXml is not null,
-            UserXmlImported = userXml is not null, Findings = findings,
+            UserXmlImported = userXml is not null,
+            EndpointUserImported = endpointUser is not null, Findings = findings,
             NamedBlockers = namedBlockers
         };
+    }
+
+
+    private static void AddEndpointUser(List<DomainPilotFinding> findings,
+        EndpointUserReadinessEvidence? endpoint, UserRsopEvidence? userXml,
+        int idleSeconds, DateTimeOffset now)
+    {
+        static void Add(List<DomainPilotFinding> target, string area, string state,
+            string observed, string next) =>
+            target.Add(new DomainPilotFinding(area, state, observed, next));
+
+        if (endpoint is null)
+        {
+            Add(findings, "User HKCU snapshot", "Not verified",
+                "No snapshot of the actual signed-in user's Screen Saver registry settings.",
+                "Run the standalone endpoint probe as the pilot Windows user, " +
+                "then explicitly import the private local JSON on the manager.");
+            return;
+        }
+        bool fresh = endpoint.IsFresh(now);
+        Add(findings, "User HKCU snapshot",
+            fresh ? "Information" : "Not verified",
+            "Unsigned " + endpoint.Session + " HKCU snapshot for " +
+            endpoint.User + " captured " + endpoint.CapturedUtc.ToString("u") +
+            "; SHA-256 " + endpoint.Sha256 +
+            (fresh ? "." : " [STALE: older than ten minutes]."),
+            "The JSON is operator-supplied. Computer/domain strings and SHA-256 " +
+            "do not authenticate the endpoint, user or winning Group Policy.");
+        if (userXml is not null &&
+            !userXml.UserPrincipal.Equals(endpoint.User,
+                StringComparison.OrdinalIgnoreCase))
+            Add(findings, "User identity correlation", "Not verified",
+                "Imported User gpresult principal differs from the Windows HKCU " +
+                "snapshot principal (possibly UPN vs DOMAIN\\user).",
+                "Resolve the user's SID and gpresult context on the pilot PC. " +
+                "Matching computer DNS names do not link a User XML to this HKCU.");
+
+        foreach (string setting in new[] {
+            "ScreenSaveActive", "ScreenSaveTimeOut", "SCRNSAVE.EXE", "ScreenSaverIsSecure"
+        })
+        {
+            var policy = endpoint.Get("PolicyHKCU", setting);
+            var desktop = endpoint.Get("DesktopHKCU", setting);
+            // Inspect both. A registry policy candidate is not itself proof
+            // of winning RSoP, especially without live RSoP/session evidence.
+            if (policy.Status == "Unreadable" ||
+                desktop.Status == "Unreadable")
+            {
+                Add(findings, "User HKCU " + setting, "Not verified",
+                    "HKCU Screen Saver policy/desktop value could not be read.",
+                    "Run the probe under the actual interactive user, not a different admin.");
+                continue;
+            }
+            if (policy.Status == "Present" && desktop.Status == "Present" &&
+                !policy.Value.Equals(desktop.Value, StringComparison.OrdinalIgnoreCase))
+                Add(findings, "User HKCU " + setting, "Source candidate",
+                    "PolicyHKCU = '" + policy.Value + "'; DesktopHKCU = '" +
+                    desktop.Value + "' (different sources).",
+                    "Compare the actual User RSoP and behavior. Do not infer which value wins.");
+
+            var chosen = policy.Status == "Present" ? policy : desktop;
+            if (chosen.Status != "Present")
+            {
+                Add(findings, "User HKCU " + setting, "Not verified",
+                    "Neither PolicyHKCU nor DesktopHKCU supplies this setting.",
+                    "Inspect User GPO settings and the actual Windows Screen Saver behavior.");
+                continue;
+            }
+
+            string source = chosen.Source + " = '" + chosen.Value + "'. ";
+            bool concern = fresh;
+            switch (setting)
+            {
+                case "ScreenSaveActive":
+                    if (chosen.Value == "0")
+                        Add(findings, "User Screen Saver active",
+                            concern ? "Observed concern" : "Not verified",
+                            source + "Screen Saver appears disabled in this snapshot.",
+                            "Check actual User RSoP, current HKCU and in-session idle behavior.");
+                    else if (chosen.Value != "1")
+                        Add(findings, "User Screen Saver active", "Not verified",
+                            source + "Value is not a recognized on/off setting.",
+                            "Confirm the user's effective Screen Saver policy.");
+                    break;
+                case "ScreenSaveTimeOut":
+                    if (!long.TryParse(chosen.Value, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out long seconds) ||
+                        seconds < 0 || seconds > 86400)
+                    {
+                        Add(findings, "User Screen Saver idle", "Not verified",
+                            source + "Timeout is not a valid nonnegative number of seconds.",
+                            "Confirm the policy timeout on the actual client.");
+                        break;
+                    }
+                    if (seconds == 0)
+                        Add(findings, "User Screen Saver idle",
+                            concern ? "Observed concern" : "Not verified",
+                            source + "Timeout is zero; automatic activation may be disabled.",
+                            "Verify active/timeout/secure settings and real idle behavior.");
+                    else if (seconds > idleSeconds)
+                        Add(findings, "User Screen Saver idle",
+                            concern ? "Observed concern" : "Not verified",
+                            source + "Timeout exceeds campaign target " + idleSeconds + " s.",
+                            "Review the winning User GPO and adjust only after authorization.");
+                    else if (seconds < idleSeconds)
+                        Add(findings, "User Screen Saver idle", "Source candidate",
+                            source + "Starts earlier than the proposed " + idleSeconds + " s.",
+                            "Confirm the user experience and campaign schedule on the pilot.");
+                    break;
+                case "SCRNSAVE.EXE":
+                    if (string.IsNullOrWhiteSpace(chosen.Value))
+                        Add(findings, "User Screen Saver file", "Not verified",
+                            source + "No executable selected.",
+                            "Check the user's Screen Saver GPO and chosen Windows .scr.");
+                    else
+                        Add(findings, "User Screen Saver file", "Information",
+                            source + "Executable path was read, NOT executed or verified.",
+                            "Verify existence, signature, switches and real screen display locally.");
+                    break;
+                case "ScreenSaverIsSecure":
+                    if (chosen.Value == "0")
+                        Add(findings, "User Screen Saver secure", "Source candidate",
+                            source + "Resume password may not be required.",
+                            "Check the campaign's security requirement and actual lock behavior.");
+                    else if (chosen.Value != "1")
+                        Add(findings, "User Screen Saver secure", "Not verified",
+                            source + "Unexpected secure-on-resume value.",
+                            "Inspect the current User policy and lock behavior.");
+                    break;
+            }
+        }
+        var restriction = endpoint.Get("RestrictionHKCU", "NoDispScrSavPage");
+        if (restriction.Status == "Unreadable")
+            Add(findings, "Screen Saver UI restriction", "Not verified",
+                "Could not read NoDispScrSavPage HKCU value.",
+                "Read the restriction in the actual user context.");
+        else if (restriction.Status == "Present" && restriction.Value != "0")
+            Add(findings, "Screen Saver UI restriction", "Source candidate",
+                "NoDispScrSavPage = " + restriction.Value +
+                " (hides settings UI; not proof that the Screen Saver is disabled).",
+                "Inspect User GPO restrictions before troubleshooting the UI.");
     }
 
     private static void AddXml(List<DomainPilotFinding> findings, string scope,

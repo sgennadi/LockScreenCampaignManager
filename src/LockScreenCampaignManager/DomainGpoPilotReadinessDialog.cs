@@ -23,6 +23,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     private readonly Button _verifyPower;
     private readonly Button _review;
     private readonly Button _reviewNamedGpos;
+    private readonly Button _importEndpoint;
+    private readonly Button _clearEndpoint;
+    private readonly Button _captureEndpoint;
+    private EndpointUserReadinessEvidence? _endpointUser;
     private EndpointPowerObservation? _observation;
     private bool _reading;
     private DomainGpoPilotReadiness? _assessment;
@@ -54,7 +58,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -136,9 +140,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.Controls.Add(_details, 0, 3);
 
         var footer = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3
         };
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
         _summary.TextAlign = ContentAlignment.MiddleLeft;
@@ -171,6 +176,30 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         };
         actions.Controls.Add(_reviewNamedGpos);
         footer.Controls.Add(actions, 0, 1);
+        var endpointActions = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, AutoScroll = true
+        };
+        _captureEndpoint = Button("Capture this PC's user HKCU...", 230);
+        _captureEndpoint.Name = "PilotCaptureCurrentUser";
+        _captureEndpoint.Click += (_, _) => {
+            if (_reading) return;
+            using var window = new EndpointUserProbeDialog();
+            window.ShowDialog(this);
+        };
+        endpointActions.Controls.Add(_captureEndpoint);
+        _importEndpoint = Button("Import user HKCU JSON...", 225);
+        _importEndpoint.Name = "PilotImportUserHkcu";
+        _importEndpoint.Click += (_, _) => ImportEndpointSnapshot();
+        endpointActions.Controls.Add(_importEndpoint);
+        _clearEndpoint = Button("Clear HKCU evidence", 180);
+        _clearEndpoint.Name = "PilotClearUserHkcu";
+        _clearEndpoint.Enabled = false;
+        _clearEndpoint.Click += (_, _) => {
+            _endpointUser = null; _clearEndpoint.Enabled = false; Review();
+        };
+        endpointActions.Controls.Add(_clearEndpoint);
+        footer.Controls.Add(endpointActions, 0, 2);
         root.Controls.Add(footer, 0, 4);
 
         FormClosing += (_, e) => {
@@ -201,6 +230,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         // observation; the two separately imported gpresult XMLs remain as
         // clearly labeled historical/unsigned evidence.
         _observation = null;
+        _endpointUser = null;
+        _clearEndpoint.Enabled = false;
         Review();
     }
 
@@ -237,7 +268,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         {
             _assessment = DomainGpoPilotReadiness.Build(_report, computer,
                 ou, _idle, _observation, _computerXml, _userXml,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow, _endpointUser);
         }
         catch (Exception ex)
         {
@@ -276,6 +307,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         }
         Details();
         _reviewNamedGpos.Enabled = _assessment.NamedBlockers.Count > 0;
+        _clearEndpoint.Enabled = _endpointUser is not null;
         _summary.Text = _assessment.NamedBlockers.Count +
             UiLocale.Display(" named GPO candidates | ") +
             _assessment.Concerns +
@@ -297,6 +329,37 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         else
             _details.Text = DomainGpoRsopCorrelation.EvidenceWarning(
                 _computerXml, _userXml);
+    }
+
+
+    private void ImportEndpointSnapshot()
+    {
+        if (_reading) return;
+        string computer = _computer.Text.Trim();
+        if (!NativeGpoConflictScan.SafeComputerName(computer, _report.Domain) ||
+            !_report.ComputerOus.Contains(SelectedOu, StringComparer.OrdinalIgnoreCase))
+        {
+            Review();
+            return;
+        }
+        using var picker = new OpenFileDialog
+        {
+            Title = UiLocale.Display("Import private local user HKCU evidence"),
+            Filter = "JSON (*.json)|*.json", CheckFileExists = true,
+            Multiselect = false
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            _endpointUser = EndpointUserReadinessEvidence.LoadLocalJson(
+                picker.FileName, _report.Domain, computer, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _endpointUser = null;
+            UiErrorDialog.Show(this, "Import pilot user HKCU evidence", ex);
+        }
+        Review();
     }
 
     private async Task VerifyPowerAsync()
@@ -322,6 +385,9 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _verifyPower.Enabled = false;
         _review.Enabled = false;
         _reviewNamedGpos.Enabled = false;
+        _importEndpoint.Enabled = false;
+        _clearEndpoint.Enabled = false;
+        _captureEndpoint.Enabled = false;
         _computer.Enabled = false;
         _ou.Enabled = false;
         _summary.Text = UiLocale.Display("Reading endpoint power (read-only)...");
@@ -345,6 +411,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         {
             _reading = false;
             _review.Enabled = true;
+            _importEndpoint.Enabled = true;
+            _captureEndpoint.Enabled = true;
             _computer.Enabled = true;
             _ou.Enabled = true;
             Review();

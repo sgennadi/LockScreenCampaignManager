@@ -42,6 +42,15 @@ internal static class Program
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
 
+        if (args.Contains("--endpoint-user-probe", StringComparer.OrdinalIgnoreCase))
+        {
+            // Explicit, local-only CURRENT-USER HKCU Screen Saver capture.
+            // It neither requires nor opens an AD connection.
+            ApplicationConfiguration.Initialize();
+            Application.Run(new EndpointUserProbeDialog());
+            return 0;
+        }
+
         if (args.Contains("--ui-smoke-test", StringComparer.OrdinalIgnoreCase))
         {
             // CI-only and offline: do not Show/ShowDialog, start gMSA, access AD,

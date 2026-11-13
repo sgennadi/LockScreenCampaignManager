@@ -1,3 +1,10 @@
+## 0.4.0-preview.114 — local User HKCU Screen Saver pilot evidence (2026-11-13)
+
+- Add explicit local-only Windows endpoint probe via Tools or `--endpoint-user-probe`; read current account's HKCU Screen Saver policy/desktop/restriction values, preview and manually export private JSON with safe confirmation.
+- Strict local import into GPO Pilot readiness bound to selected FQDN/domain; reject unbounded/duplicate/missing JSON fields, inconsistent identity, UNC/reparse paths, and unverified stale observations.
+- Correlate active/timeout/file/secure settings with configured Screen Saver and existing GPO/gpresult/power evidence; never claim winning GPO, endpoint attestation, or automated correction.
+- RU/HE labels and 100–200% offline UI smoke; native x86/x64 tests, source contracts and documentation.
+
 ## 0.4.0-preview.113 - modern confirmation dialogs and custom SCR/EXE pilot (2026-11-13)
 
 - Unified scrollable modern in-app dialogs for updates, unsaved changes and deployment confirmation; preserve safe negative defaults, Esc/X and native service/UAC prompts.

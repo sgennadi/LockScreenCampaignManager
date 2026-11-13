@@ -43,6 +43,6 @@ class ModernTests(unittest.TestCase):
         for t in ("Power113Russian", "Power113Hebrew",
                   "Browse .scr / .exe...", "Power113EnglishByRussian"):
             self.assertIn(t,ui)
-        self.assertIn("0.4.0-preview.113",read("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.114",read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT/"docs"/"RELEASE-PREVIEW113.md").is_file())
 if __name__=="__main__": unittest.main(verbosity=2)
