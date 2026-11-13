@@ -64,6 +64,7 @@ internal static class SelfTests
         TestNativeDcConsistencyContracts();
         TestNativeComputerGroupAssignmentContracts();
         TestNativeGpoConflictScanContracts();
+        TestScreenSaverPowerConflictAnalysis();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
@@ -184,6 +185,7 @@ internal static class SelfTests
         catch (ArgumentException) { dangerous = true; }
         Check(dangerous, "SYSVOL rejected as telemetry destination");
         TestClientFeedback();
+        TestClientHealthAdCoverage();
         TestDeviceRepairDashboard();
         TestCampaignClosureAudit();
         TestDcConsistencyAudit();
@@ -1342,6 +1344,89 @@ StartExecutePSFirst=true
             catch (InvalidOperationException) { denied = true; }
             Check(denied, "Native lifecycle preview refuses unsafe link changes");
         }
+    }
+
+    private static void TestScreenSaverPowerConflictAnalysis()
+    {
+        const string displayKey = @"Software\Policies\Microsoft\Power\PowerSettings\3C0BC021-C8A8-4E07-A973-6B14CBCB2B7E";
+        const string sleepKey = @"Software\Policies\Microsoft\Power\PowerSettings\29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA";
+        const string inactiveKey = @"Software\Microsoft\Windows\CurrentVersion\Policies\System";
+        Check(NativeGpoConflictScan.TargetValue(displayKey,
+                "ACSettingIndex", "300")?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(displayKey,
+                "DCSettingIndex", "600")?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(sleepKey,
+                "ACSettingIndex", "180")?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(inactiveKey,
+                "InactivityTimeoutSecs", "240")?.risk == "Warning" &&
+            NativeGpoConflictScan.TargetValue(displayKey,
+                "ACSettingIndex", "300", userScope: true) is null,
+            "Computer Power.admx display/sleep and machine lock settings are read-only candidates; never User scope");
+
+        static GroupConflictFinding Power(string key, string name,
+            string value, string risk = "Warning") =>
+            new("Test Screen Saver device power", "Computer", "Test power GPO",
+                "01234567-89ab-cdef-0123-456789abcdef", risk, name, value,
+                "Registry.pol", key, "OU=Computers,DC=example,DC=com", "Estimated");
+        const string deviceTarget = "Test Screen Saver device power";
+        var raw = new[] {
+            Power(displayKey, "ACSettingIndex", "300"),
+            Power(displayKey, "DCSettingIndex", "600"),
+            Power(sleepKey, "ACSettingIndex", "0"),
+            Power(inactiveKey, "InactivityTimeoutSecs", "240")
+        };
+        var result = ScreenSaverPowerConflictAnalysis.Compare(deviceTarget, 600, raw);
+        Check(result.Count(x => x.Risk == "High") == 1 &&
+            result.Count(x => x.Risk == "Warning") == 2 &&
+            result.Any(x => x.Setting.Contains("Display off AC BEFORE") &&
+                x.Value.Contains("300 s") && x.Scope == "Computer" &&
+                x.Target == deviceTarget) &&
+            result.Any(x => x.Setting.Contains("Display off DC AT") &&
+                x.Risk == "Warning") &&
+            result.Any(x => x.Setting.Contains("Machine inactivity") &&
+                x.Risk == "Warning"),
+            "Display off 300s precedes 600s saver; equal DC is uncertain; lock is a warning");
+        Check(ScreenSaverPowerConflictAnalysis.Compare(deviceTarget, 600,
+                [Power(displayKey, "ACSettingIndex", "0"),
+                 Power(displayKey, "DCSettingIndex", "900"),
+                 Power(displayKey, "ACSettingIndex", "50", "Inactive/filtered")]).Count == 0,
+            "Never = 0, later screen-off, and inactive GPO links are not blockers");
+        Check(ScreenSaverPowerConflictAnalysis.Compare(deviceTarget, 600,
+                [Power(displayKey, "ACSettingIndex", "[binary or unsupported]")])
+                .Single().Risk == "Warning",
+            "Unreadable Power.admx timing is unknown, never a clean or verified zero");
+
+        var xml = System.Text.Encoding.UTF8.GetBytes(
+            "<PowerOptions><GlobalPowerOptionsV2><Properties " +
+            "displayOffAC=\"300\" displayOffDC=\"0\" sleepAfterAC=\"120\"/>" +
+            "</GlobalPowerOptionsV2><PowerScheme><Properties " +
+            "monitorAc=\"5\" monitorDc=\"20\"/></PowerScheme></PowerOptions>");
+        var hits = ScreenSaverPowerConflictAnalysis.ParseGppPowerOptions(xml);
+        Check(hits.Count == 5 && hits.Any(x => x.key == "GPP:GlobalPowerOptionsV2"
+                && x.name == "displayOffAC" && x.value == "300") &&
+            hits.Any(x => x.key == "GPP:PowerScheme" && x.name == "monitorAc" &&
+                x.value == "5"),
+            "GPP PowerOptions reads Vista+ seconds and legacy monitor minutes without changes");
+        var candidates = hits.Select(hit =>
+            Power(hit.key, hit.name, hit.value)).ToArray();
+        result = ScreenSaverPowerConflictAnalysis.Compare(deviceTarget, 600, candidates);
+        Check(result.Count(x => x.Risk == "High") == 3 &&
+            result.All(x => x.Value.Contains("300 s") || x.Value.Contains("120 s")) &&
+            !result.Any(x => x.Setting.Contains("DC")),
+            "GPP AC 300 seconds and legacy 5 minutes are compared against User Screen Saver 600 seconds");
+        bool dtdRejected = false;
+        try
+        {
+            _ = ScreenSaverPowerConflictAnalysis.ParseGppPowerOptions(
+                System.Text.Encoding.UTF8.GetBytes("<!DOCTYPE x [<!ENTITY y 'x'>]><PowerOptions/>"));
+        }
+        catch (System.Xml.XmlException) { dtdRejected = true; }
+        Check(dtdRejected, "Untrusted GPP PowerOptions XML rejects DTD and entity expansion");
+        Check(ScreenSaverPowerConflictAnalysis.ParseGppPowerOptions(
+            System.Text.Encoding.UTF8.GetBytes(
+                "<PowerOptions disabled=\"1\"><GlobalPowerOptionsV2>" +
+                "<Properties displayOffAC=\"20\"/></GlobalPowerOptionsV2></PowerOptions>")).Count == 0,
+            "A disabled GPP PowerOptions root cannot produce power conflict candidates");
     }
 
     private static void TestNativeGpoConflictScanContracts()
@@ -3348,6 +3433,60 @@ StartExecutePSFirst=true
         Check(invalid, "Invalid monitor geometry cannot silently create offscreen windows");
     }
 
+    private static void TestClientHealthAdCoverage()
+    {
+        const string campaign = "test-campaign-202611081400";
+        var now = DateTimeOffset.UtcNow;
+        string dcClock = now.UtcDateTime.ToString("yyyyMMddHHmmss'.0Z'",
+            System.Globalization.CultureInfo.InvariantCulture);
+        object Data(int groupTotal = 3) => new
+        {
+            ouTotal = 8, groupEligible = groupTotal,
+            activitySource = "lastLogonTimestamp (replicated; approximate, not online presence)",
+            dcCurrentTime = dcClock,
+            computers = new object[] {
+                new { name = "pc001.example.com", adLastSeenUtc = (DateTimeOffset?)now.AddDays(-6), adDisabled = (bool?)false },
+                new { name = "pc002.example.com", adLastSeenUtc = (DateTimeOffset?)null, adDisabled = (bool?)false },
+                new { name = "pc003.example.com", adLastSeenUtc = (DateTimeOffset?)now.AddDays(-4), adDisabled = (bool?)true }
+            }
+        };
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(Data());
+        var scope = ClientHealthAdInventory.Parse(json, "example.com", now);
+        Check(scope.OuTotal == 8 && scope.GroupTotal == 3 &&
+            scope.ExpectedHosts.Contains("PC001") && scope.ExpectedHosts.Contains("PC003"),
+            "AD health inventory resolves short computer IDs within verified OU/group");
+        var reports = new Dictionary<string, ClientFeedbackRecord>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["PC001"] = new("PC001", campaign, now.AddMinutes(-10),
+                "Active", "Healthy", "a.jpg", true, true, true, 0, 0, "0.4.0", "PowerShell"),
+            ["PC002"] = new("PC002", campaign, now.AddHours(-2),
+                "Completed", "Completed", "a.jpg", true, true, false, 0, 0, "0.4.0", "Executable")
+        };
+        var snapshot = new ClientHealthSnapshot
+        {
+            CampaignId = campaign, SharePath = "C:/offline-credentials-safe-fixture",
+            Rows = [], ObservedUtc = now, Expected = 3,
+            LatestReports = reports, Healthy = 1, Completed = 1, NoReport = 1
+        };
+        var summary = scope.Summarize(snapshot, campaign, 30, now, 45);
+        Check(summary.OuTotal == 8 && summary.GroupTotal == 3 &&
+            summary.Enabled == 2 && summary.Disabled == 1 &&
+            summary.UnknownLogon == 1 && summary.RecentlySeenAd == 1 &&
+            summary.Reported == 2 && summary.FreshReports == 1 &&
+            summary.StaleReports == 1 && summary.NoReport == 1 &&
+            summary.ReportsVerified, 
+            "AD activity and SMB reports are independent, selected-group-only denominators");
+        Check(!scope.Summarize(snapshot, "other-campaign", 30, now, 45).ReportsVerified &&
+            !scope.Summarize(snapshot, campaign, 30, now.AddMinutes(30), 45).ReportsVerified ,
+            "Stale AD and foreign campaign snapshots cannot be presented as valid matching coverage");
+        bool mismatchedRejected = false;
+        try { _ = ClientHealthAdInventory.Parse(
+            System.Text.Json.JsonSerializer.SerializeToElement(Data(groupTotal: 4)),
+            "example.com", now); }
+        catch (InvalidDataException) { mismatchedRejected = true; }
+        Check(mismatchedRejected, "Partial or truncated AD member inventory must fail closed");
+    }
+
     private static void TestClientFeedback()
     {
         string root = Path.Combine(Path.GetTempPath(), "lscm-feedback-test-" + Guid.NewGuid().ToString("N"));
@@ -3369,6 +3508,11 @@ StartExecutePSFirst=true
                 new[] { "PC001", "PC002" }, now);
             Check(snapshot.Expected == 2 && snapshot.Healthy == 1 && snapshot.NoReport == 1,
                 "health denominator uses AD list and reports");
+            var emptyVerified = ClientFeedbackReader.ReadDirectory(root,
+                "test-campaign-202611081400", [], now, expectedScopeVerified: true);
+            Check(emptyVerified.Expected == 0 && emptyVerified.Rows.Count == 0 &&
+                emptyVerified.LatestReports.Count == 0,
+                "verified AD group with zero members never borrows unrelated SMB reports as targets");
             Check(snapshot.LatestReports.Count == 1 &&
                 snapshot.LatestReports.ContainsKey("PC001") &&
                 !snapshot.LatestReports.ContainsKey("PC002"),

@@ -277,17 +277,65 @@ internal sealed partial class DomainDeploymentForm
                         int members = result.GetProperty("directGroupMembers").GetInt32();
                         if (hash.Length != 64)
                             throw new InvalidDataException("Screen Saver plan hash missing.");
+                        string userTarget = row.Name + " #" + (i + 1) + " SS";
                         var audit = await ScanTargetConflictsAsync(
-                            domain, dc, row.UserOuDn, "User",
-                            row.Name + " #" + (i + 1) + " SS", creds);
+                            domain, dc, row.UserOuDn, "User", userTarget, creds);
                         completeReports.Add(new GroupConflictTarget(
-                            row.Name + " #" + (i + 1) + " SS",
-                            "User", row.UserOuDn, row.UserGroupDn,
+                            userTarget, "User", row.UserOuDn, row.UserGroupDn,
                             audit.HighRisk, audit.Warnings,
                             audit.Findings, audit.Notes));
+
+                        // Machine power and User Screen Saver are distinct policy
+                        // scopes. A Computer OU here is an OPTIONAL read-only
+                        // audit context, never a Computer GPO target.
+                        string powerTarget = userTarget + " device power";
+                        var powerNotes = new List<string>();
+                        GroupConflictFinding[] powerFindings;
+                        int powerHigh, powerWarnings;
+                        if (string.IsNullOrWhiteSpace(row.ComputerOuDn))
+                        {
+                            powerFindings =
+                            [
+                                new GroupConflictFinding(
+                                    powerTarget, "Computer", "Power GPO not checked", "",
+                                    "Warning", "Computer OU for Screen Saver power audit",
+                                    "Not selected", "Audit coverage", "",
+                                    "", "Unknown: select a computer OU or verify gpresult/powercfg " +
+                                    "on the computers where the users sign in.")
+                            ];
+                            powerNotes.Add("No Computer OU chosen for this Screen Saver. " +
+                                "Cannot compare computer-side AC/DC display-off, sleep or inactivity GPOs.");
+                            powerHigh = 0;
+                            powerWarnings = 1;
+                        }
+                        else
+                        {
+                            var computerAudit = await ScanTargetConflictsAsync(
+                                domain, dc, row.ComputerOuDn, "Computer", powerTarget, creds);
+                            // Keep exact GPO source evidence but do not count a
+                            // raw power setting as a warning until compared.
+                            var rawPower = computerAudit.Findings
+                                .Where(ScreenSaverPowerConflictAnalysis.IsMachinePowerCandidate)
+                                .Select(x => x.Risk is "Inactive/filtered"
+                                    ? x : x with { Risk = "Info" }).ToArray();
+                            var comparisons = ScreenSaverPowerConflictAnalysis.Compare(
+                                powerTarget, saver.IdleSeconds, rawPower);
+                            powerFindings = rawPower.Concat(comparisons).ToArray();
+                            powerHigh = comparisons.Count(x => x.Risk == "High");
+                            powerWarnings = comparisons.Count(x => x.Risk == "Warning");
+                            powerNotes.Add("Read-only Computer OU used ONLY for display/sleep GPO audit: " +
+                                row.ComputerOuDn + ". It is NOT a Computer GPO deployment.");
+                            powerNotes.Add("Computer OU candidates may not apply to the actual computers " +
+                                "where users sign in. Confirm effective gpresult and powercfg on a pilot PC.");
+                            powerNotes.AddRange(computerAudit.Notes);
+                        }
+                        completeReports.Add(new GroupConflictTarget(
+                            powerTarget, "Computer", row.ComputerOuDn, "",
+                            powerHigh, powerWarnings, powerFindings, powerNotes));
+
                         planned.Add(new TargetPlanEntry(i, "ScreenSaver",
                             row.UserOuDn, row.UserGroupDn, gpoName, "", hash, members,
-                            audit.HighRisk, audit.Warnings));
+                            audit.HighRisk + powerHigh, audit.Warnings + powerWarnings));
                         info.AppendLine("SCREEN SAVER - " + row.Name);
                         info.AppendLine("  GPO: " + gpoName + " | USER policy / HKCU");
                         info.AppendLine("  User OU: " + row.UserOuDn);
@@ -296,6 +344,16 @@ internal sealed partial class DomainDeploymentForm
                             saver.Executable + " | idle " + saver.IdleSeconds +
                             "s | resume password: " + saver.PasswordOnResume);
                         info.Append(audit.Preview);
+                        info.AppendLine("  SCREEN SAVER DISPLAY/POWER AUDIT: " + powerHigh +
+                            " high-risk, " + powerWarnings + " warnings (read-only candidates).");
+                        info.AppendLine("  Device OU: " +
+                            (row.ComputerOuDn.Length == 0 ? "NOT SELECTED" : row.ComputerOuDn));
+                        foreach (var check in powerFindings
+                            .Where(x => x.Risk is "High" or "Warning").Take(12))
+                            info.AppendLine("    " + check.Risk + " | " +
+                                check.Gpo + " | " + check.Setting + " = " + check.Value);
+                        info.AppendLine("  NOT RSoP: GPO links, power plan, WMI and GPP " +
+                            "item-level targeting must be verified on an actual client.");
                     }
                     info.AppendLine();
                 }

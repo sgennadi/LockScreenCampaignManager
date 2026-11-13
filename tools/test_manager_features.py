@@ -382,7 +382,7 @@ class ClientManagementContracts(unittest.TestCase):
         self.assertIn('row.ComputerOuDn, "Computer",', form)
         self.assertIn('row.Name + " #" + (i + 1) + " LS", creds', form)
         self.assertIn('row.UserOuDn, "User",', form)
-        self.assertIn('row.Name + " #" + (i + 1) + " SS", creds', form)
+        self.assertIn('row.UserOuDn, "User", userTarget, creds', form)
         self.assertIn('"policyScope").GetString()', form)
         self.assertIn('data.GetProperty("highRisk")', form)
         self.assertIn('data.GetProperty("warningsCount")', form)
@@ -758,7 +758,8 @@ class ClientManagementContracts(unittest.TestCase):
             'UiLocale.Preview97.cs', 'UiLocale.RepairResults.cs',
             'ImageFilenameMatcher.cs', 'SelfTests.cs',
             'UiLocale.Visual102.cs', 'UiLocale.Targeting103.cs',
-            'UiLocale.Coverage104.cs', 'UiLocale.Activity105.cs'
+            'UiLocale.Coverage104.cs', 'UiLocale.Activity105.cs',
+            'UiLocale.Coverage106.cs'
         }
         for source in APP.glob('*.cs'):
             if source.name in allowed_russian_ui:

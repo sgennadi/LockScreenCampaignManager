@@ -1,3 +1,11 @@
+## 0.4.0-preview.106 — Screen Saver power GPO candidates + AD/SMB Client Health (2026-11-13)
+
+- Read linked Computer GPO candidates under the explicitly selected device OU, including VIDEOIDLE AC/DC and sleep Power.admx policies, machine inactivity lock, GPP Registry and PowerOptions XML with bounded safe parsing. Compare positive seconds against configured User Screen Saver idle; 0 = Never, equal = warning, earlier display/sleep = high-risk candidate.
+- Screen Saver-only Group assignments can optionally pick a Computer OU for **read-only audit only**, with independent User OU/group still the only actual GPO target. Missing device OU produces a warning, not a false clean scan. Full conflict report shows originating GPO, key, source, values, link and uncertainty.
+- Extend Client Health with verified read-only OU/group computer inventory, enabled/disabled/unknown states and independent 30/90/180/365-day approximate AD activity and scoped SMB agent report coverage. Distinguish verified zero, missing agent report, stale data and not verified.
+- Add RU/HE display-only captions, C# self-tests, fail-closed source contracts and six-profile simulated Windows DPI tests for new controls. Windows x64/x86 build and Lab Kit required for release.
+- **No effective RSoP or machine presence claim:** security/WMI filters, GPP targeting, MDM, actual active power plan, user/device association and actual .scr remain unknown. No AD/GPO/SMB writes or automatic power changes are introduced by the audit; live Windows domain acceptance remains open.
+
 ## 0.4.0-preview.105 — approximate AD computer logon activity (2026-11-12)
 
 - Extend signed/sealed read-only Computer OU discovery with `userAccountControl`, replicated `lastLogonTimestamp` and DC RootDSE UTC; return only aggregate enabled/disabled/unknown and direct group counts, never individual identities.

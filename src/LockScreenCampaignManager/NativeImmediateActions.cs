@@ -120,6 +120,7 @@ internal static class NativeImmediateActions
                         ouTotal = computersInOu.Count,
                         groupEligible = members.Length,
                         activitySource = "lastLogonTimestamp (replicated; approximate, not online presence)",
+                        dcCurrentTime = NativeAdDiscovery.Attr(root, "currentTime"),
                         computers = members
                     }
                 }, Json);

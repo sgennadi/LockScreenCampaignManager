@@ -235,7 +235,8 @@ internal sealed class CampaignAssignmentsDialog : Form
             _computerCoverage = null;
             UpdateCoverageLabel(false);
             CommitRow();
-            if (!_loading) await RefreshScopeGroupChoicesAsync(false);
+            if (!_loading && _mode.SelectedItem is not CampaignTargetMode.ScreenSaver)
+                await RefreshScopeGroupChoicesAsync(false);
         };
         _computerGroup.SelectedIndexChanged += (_, _) => {
             CommitRow();
@@ -252,7 +253,7 @@ internal sealed class CampaignAssignmentsDialog : Form
             CommitRow();
             UpdateCoverageLabel(true);
         };
-        fields.Controls.Add(Field("Computer OU (Lock Screen target)", _computerOu), 0, 2);
+        fields.Controls.Add(Field("Computer OU (Lock Screen target / optional Screen Saver power audit)", _computerOu), 0, 2);
         fields.Controls.Add(Field("Computer security group (Lock Screen)", _computerGroup), 0, 3);
         _computerDirectMembers.Name = "AssignmentFilterComputerGroupsByOu";
         _computerDirectMembers.Dock = DockStyle.Fill;
@@ -337,6 +338,8 @@ internal sealed class CampaignAssignmentsDialog : Form
             "Screen Saver is a USER policy; Lock Screen is a COMPUTER policy. " +
             "A group may be stored anywhere in AD: the OU is the GPO LINK target. " +
             "Direct-member filters exclude nested/primary memberships; uncheck for All groups. " +
+            "Screen Saver-only: an optional Computer OU checks device power GPO candidates; " +
+            "it does NOT assign a computer policy or filter the User GPO. " +
             "No loopback/Replace is configured automatically.");
         _help.ForeColor = UiStyle.Muted;
         fields.Controls.Add(_help, 0, 14);
@@ -685,7 +688,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             or CampaignTargetMode.Both;
         bool hasUser = _mode.SelectedItem is CampaignTargetMode.ScreenSaver
             or CampaignTargetMode.Both;
-        _computerOu.Enabled = _computerGroup.Enabled = hasComputer;
+        // Screen Saver-only can optionally inspect the COMPUTERS where
+        // those users sign in, without deploying ANY Computer policy.
+        _computerOu.Enabled = hasComputer || hasUser;
+        _computerGroup.Enabled = hasComputer;
         _userOu.Enabled = _userGroup.Enabled = hasUser;
         _computerDirectMembers.Enabled = hasComputer && _membershipLookup is not null;
         _userDirectMembers.Enabled = hasUser && _membershipLookup is not null;
@@ -733,8 +739,13 @@ internal sealed class CampaignAssignmentsDialog : Form
                 lines.Add("  Computer OU: " + target.ComputerOuDn +
                     " | Computer group: " + target.ComputerGroupDn);
             if (target.UsesScreenSaver)
+            {
                 lines.Add("  User OU: " + target.UserOuDn +
                     " | User group: " + target.UserGroupDn);
+                lines.Add("  Device power GPO audit OU (read-only, not targeting): " +
+                    (target.ComputerOuDn.Length == 0 ? "Not selected; cannot compare display-off timeout" :
+                        target.ComputerOuDn));
+            }
         }
         lines.Add("Screen Saver: " + (_photo.Checked
             ? "JPG slideshow (local .scr pilot; GPO blocked)"
