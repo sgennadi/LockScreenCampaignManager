@@ -87,26 +87,20 @@ internal static class ScreenSaverPowerConflictAnalysis
 
     private static bool TrySeconds(string text, bool minutes, out long seconds)
     {
+        seconds = 0;
         string value = text.Trim();
         bool hex = value.StartsWith("0x", StringComparison.OrdinalIgnoreCase);
-        bool valid = hex
-            ? uint.TryParse(value[2..], NumberStyles.AllowHexSpecifier,
-                CultureInfo.InvariantCulture, out uint hexValue) &&
-                Assign(hexValue, out seconds)
-            : uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture,
-                out uint decimalValue) && Assign(decimalValue, out seconds);
-        if (!valid)
+        uint parsed;
+        if (hex)
         {
-            seconds = 0;
-            return false;
+            if (!uint.TryParse(value[2..], NumberStyles.AllowHexSpecifier,
+                    CultureInfo.InvariantCulture, out parsed))
+                return false;
         }
-        if (minutes) seconds *= 60;
-        return true;
-    }
-
-    private static bool Assign(uint value, out long seconds)
-    {
-        seconds = value;
+        else if (!uint.TryParse(value, NumberStyles.None,
+                    CultureInfo.InvariantCulture, out parsed))
+            return false;
+        seconds = minutes ? (long)parsed * 60L : parsed;
         return true;
     }
 
