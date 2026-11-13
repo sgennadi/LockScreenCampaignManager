@@ -80,6 +80,11 @@ internal static class NativeGpoDomainAudit
             NativeGpoConflictScan.EnsureDirectory(sysvol);
             var rows = new List<Row>();
             var issues = new List<Issue>();
+            var knownIds = gpos.Select(x => x.Id).ToHashSet();
+            foreach (var missing in links.Where(x => !knownIds.Contains(x.Id))
+                .Select(x => new { x.Id, x.Scope }).Distinct())
+                AddIssue(issues, "Unresolved AD GPO link", missing.Id, missing.Scope,
+                    "Selected OU ancestry links a missing or unreadable GPC object.");
             var notes = new List<string>();
             int inspectedHalves = 0, emptyHalves = 0;
             foreach (var (entry, id) in gpos)
@@ -200,6 +205,7 @@ internal static class NativeGpoDomainAudit
                 message = "All domain GPOs enumerated on selected DC (read-only).",
                 data = new {
                     domain, dc = actualDc, computerOus, userOus,
+                    observedUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     gpoCount = gpos.Count, inspectedHalves, emptyHalves,
                     issueCount = issues.Count, issues, notes,
                     matches = rows, count = rows.Count,
@@ -339,7 +345,7 @@ internal static class NativeGpoDomainAudit
         return ("Outside selected OUs", "No linked ancestor path in selected OUs");
     }
 
-    private static string AssessRisk(NativeGpoConflictScan.Hit hit, bool user,
+    internal static string AssessRisk(NativeGpoConflictScan.Hit hit, bool user,
         string campaignMode, int idle, string saverExe, string linkStatus)
     {
         if (linkStatus == "Inactive/filtered") return "Inactive/filtered";
@@ -365,6 +371,18 @@ internal static class NativeGpoDomainAudit
                 ? "Warning" : "Info";
             return hit.risk;
         }
+        if (name == "userpolicymode" &&
+            key == @"software\policies\microsoft\windows\system")
+        {
+            if (!includesSaver) return "Info";
+            return hit.value.Trim() switch {
+                "2" => "High", "1" => "Warning", "0" => "Info", _ => "Warning"
+            };
+        }
+        if (name == "nolockscreen" && includesLock)
+            return hit.value.Trim() switch {
+                "1" => "High", "0" => "Info", _ => "Warning"
+            };
         var example = new GroupConflictFinding("Selected OUs", "Computer",
             "Static domain GPO", Guid.Empty.ToString(), hit.risk, hit.name,
             hit.value, "SYSVOL", hit.key, "", "Candidate");

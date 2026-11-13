@@ -449,6 +449,14 @@ internal static class NativeGpoConflictScan
                     "does not itself prevent a screen saver from running.");
             return null;
         }
+        // Loopback Replace can suppress the intended User OU Screen Saver policy
+        // when a different Computer OU wins. Never claim applicability without
+        // device/user RSoP, but surface Merge and Replace as domain candidates.
+        if (k == @"software\policies\microsoft\windows\system" &&
+            n == "userpolicymode")
+            return new Hit(key, name, value, "Warning",
+                "User Group Policy loopback processing. Replace may bypass User OU " +
+                "Screen Saver GPO; verify Computer + User gpresult and security filters.");
         // Microsoft Power.admx: VIDEOIDLE under Computer Configuration. AC
         // and DC are seconds; 0 means Never, NOT an immediate screen-off.
         // A linked GPO here is only a candidate, never proof that the client
