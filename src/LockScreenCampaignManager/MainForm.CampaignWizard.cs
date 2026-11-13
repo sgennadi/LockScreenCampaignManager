@@ -1080,6 +1080,17 @@ public sealed partial class MainForm
 
         private void RenderSave(FlowLayoutPanel actions, Panel body, Label status)
         {
+            if (_owner._project.ScreenSaver.CustomExecutablePath.Length > 0 &&
+                _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
+            {
+                MessageBox.Show(this,
+                    "Custom .scr/.exe is LOCAL PILOT ONLY. Verify /s, /p and /c, " +
+                    "file integrity, trusted publisher, endpoint path and permissions " +
+                    "before enabling user GPO delivery.",
+                    "Custom Screen Saver pilot only",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             if (_owner._project.ScreenSaver.UseJpegSlideshow &&
                 _owner._project.EffectiveCampaignMode != CampaignTargetMode.LockScreen)
                 Action(actions, "Export JPG .scr pilot...", () =>

@@ -46,6 +46,9 @@ public sealed class CampaignScreenSaverSettings
     // JPG slideshow is a separate portable package that must be tested
     // locally before administrator-approved GPO deployment.
     public string Executable { get; set; } = "scrnsave.scr";
+    // Selected local PE for an explicit, read-only pilot. NOT a GPO target.
+    public string CustomExecutablePath { get; set; } = "";
+    public string CustomExecutableSha256 { get; set; } = "";
     public bool UseJpegSlideshow { get; set; }
     public int SlideSeconds { get; set; } = 15;
     public int IdleSeconds { get; set; } = 600;
@@ -101,6 +104,8 @@ public static class CampaignTargetAssignments
                 StringComparer.OrdinalIgnoreCase))
             throw new CampaignValidationException(
                 "Choose a supported built-in Windows .scr for non-JPG mode.");
+        CustomSaverPilotFile.ValidateStored(
+            saver.CustomExecutablePath, saver.CustomExecutableSha256);
         if (saver.SlideSeconds is < 5 or > 3600)
             throw new CampaignValidationException(
                 "JPG slideshow interval must be between 5 and 3600 seconds.");
