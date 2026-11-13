@@ -1,3 +1,11 @@
+## 0.4.0-preview.109 — RDS session blockers and cross-GPO same-setting comparison (2026-11-13)
+
+- Expand the existing read-only all-DC source scan to recognize RDS Session Host `MaxIdleTime`, `MaxConnectionTime`, `MaxDisconnectionTime` and `fResetBroken` from User and Computer GPO registry-policy/GPP sources. Interpret RDS duration values as **milliseconds** and compare RDS idle (not total-session or post-disconnection) with the campaign Screen Saver time.
+- Differentiate local-console Screen Saver from remote interactive-session limits; RDS remains a **conditional remote-only** risk, never an established local desktop blocker.
+- Add **Compare GPO settings...** in the all-DC report, grouping the same exact policy identity by **User/Computer + registry key + value name** across distinct GPO GUIDs. Show identical, differing or ambiguous source values, number of linked candidates, and explicit non-RSoP applicability caveats.
+- New wide searchable read-only comparison dialog with privacy-confirmed local CSV (formula-safe), RU/HE captions, in-process 100-200% simulated DPI smoke, C# tests for milliseconds and policy identity grouping, and offline source/safety contracts. Include both Windows x86/x64 and Offline AD CI gates.
+- **No GPO / SYSVOL / endpoint writes, no RDS changes and no automatic repair.** Static source conflicts cannot establish the winning policy, security/WMI/GPP filters, loopback behavior, or the active logged-in desktop. Verify relevant `gpresult` / user or computer RSoP in a Windows 10/11 domain pilot.
+
 ## 0.4.0-preview.108 — read-only all-domain GPO inventory and blocker candidates (2026-11-13)
 
 - Enumerate all GPCs via bounded signed/sealed paged LDAP from the explicitly selected DC; read the same DC's SYSVOL User/Computer halves and recognized Registry.pol / GPP Registry.xml / GPP PowerOptions.xml / Security Template GptTmpl.inf machine-inactivity source policies.

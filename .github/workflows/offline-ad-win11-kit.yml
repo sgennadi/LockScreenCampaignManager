@@ -42,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_domain_gpo_audit.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_gpo_rds_overlap.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_targeting103_locales.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_native_ui_visual_acceptance.py

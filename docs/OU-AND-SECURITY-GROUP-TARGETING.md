@@ -1,3 +1,11 @@
+## Preview.109 — remote-session timeouts and same-setting source overlaps
+
+**Scan all DC GPOs** additionally detects RDS idle/active/disconnected session-time limit policy values (User or Computer policy half, including registry preferences). RDS time limits are recorded in milliseconds. Only RDS **MaxIdleTime** can be cautiously compared with the campaign's seconds-based idle Screen Saver threshold, and it is applicable to Remote Desktop sessions, **not proof of a local console Screen Saver blocker**. Total connection age, post-disconnect limits and whether to end instead of disconnect are separate remote-session conditions.
+
+Choose **Compare GPO settings...** from the existing domain-wide audit window to identify the same User/Computer registry key and value name configured by more than one distinct GPO. The report distinguishes identical configured values, differing values, and contradictory source values within one GPO. It lists GPO names/IDs, how many are linked within any selected OU ancestry, and whether the evidence is only a domain-wide collision. No implicit link-order winner is calculated: settings can be linked on different target branches or filtered by security/WMI/GPP item-level targeting. Use gpresult/RSoP for the actual user/device session before changing any GPO.
+
+This remains a **source audit**, not complete arbitrary-CSE settings coverage, not validation of interactive Desktop HKCU/MDM/Remote Desktop state, and not proof of simultaneous application. Exports stay local, require confirmation and guard against spreadsheet formula injection. No automatic remediation or remote actions occur.
+
 ## Preview.108 — scan all GPO objects on the selected DC
 
 GPO Operations → Lock Screen conflicts → **Scan all DC GPOs** is an explicit read-only domain inventory, independent of the ordinary **Scan OU + GPO**. It uses the verified connected DC for signed/sealed, paged LDAP groupPolicyContainer enumeration (up to 2,000 GPCs), then inspects known source files in User and Computer policy halves under that *same* DC's SYSVOL. It does not launch scripts, write policies or run remote processes.

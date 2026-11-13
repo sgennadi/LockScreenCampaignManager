@@ -430,6 +430,10 @@ internal static class NativeGpoConflictScan
     {
         string k = key.TrimStart('\\').ToLowerInvariant();
         string n = name.ToLowerInvariant();
+        // Same normalized RDS source detection for both HKCU User policies
+        // and HKLM Computer policies. No endpoint reads are implied.
+        var rds = RdsSessionPolicyBlockers.Recognize(key, name, value);
+        if (rds is not null) return rds;
         if (userScope)
         {
             // User Group Policy writes these REG_SZ values in HKCU.

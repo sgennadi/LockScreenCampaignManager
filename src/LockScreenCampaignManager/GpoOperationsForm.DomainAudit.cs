@@ -38,15 +38,17 @@ internal sealed partial class GpoOperationsForm
             _conflicts.Text =
                 "ALL DC GPOs (READ ONLY) | " + report.Dc + Environment.NewLine +
                 "GPO objects inspected: " + report.GpoCount +
-                " | Source matches: " + report.Count + Environment.NewLine +
+                " | Source matches: " + report.Count +
+                " | Same-setting overlaps: " + report.Overlaps.Count + Environment.NewLine +
                 "Possible blockers: " + report.HighRisk + " high, " +
                 report.Warnings + " warning" + Environment.NewLine +
                 "Unverified/unreadable GPO halves or files: " +
                 report.Issues.Count + Environment.NewLine +
                 "Linked settings are candidates, NOT effective RSoP." +
                 Environment.NewLine +
-                "All GPOs were inventoried; only recognized Registry.pol, " +
-                "Registry.xml and PowerOptions.xml settings were classified.";
+                "All GPO objects were inventoried; recognized Registry.pol, " +
+                "Registry.xml, PowerOptions.xml and GptTmpl.inf settings classified. " +
+                "RDS session limits are remote-session-only candidates.";
             _status.Text = UiLocale.Display(
                 "Domain GPO inventory finished (read-only). Review source and scope.");
             using var dialog = new DomainWideGpoReportDialog(report);
