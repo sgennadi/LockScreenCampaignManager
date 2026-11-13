@@ -135,7 +135,7 @@ public sealed partial class MainForm
                 Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList,
                 AccessibleName = "Built-in Windows screen saver"
             };
-            const string customOption = "Custom .scr / .exe (local pilot only)";
+            string customOption = T("Custom .scr / .exe (local pilot only)");
             saver.Items.AddRange(CampaignTargetAssignments.BuiltInScreenSavers
                 .Cast<object>().Concat([customOption]).ToArray());
             saver.SelectedItem = _owner._project.ScreenSaver.CustomExecutablePath.Length > 0
@@ -152,6 +152,11 @@ public sealed partial class MainForm
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
             }, 0, 0);
             saverRow.Controls.Add(saver, 1, 0);
+            var photo = new CheckBox {
+                Name = "WizardScreenSaverJpegMode", Dock = DockStyle.Fill,
+                Text = "JPG photo slideshow (use selected campaign images)",
+                Checked = _owner._project.ScreenSaver.UseJpegSlideshow
+            };
             var customBrowse = new Button {
                 Name = "WizardScreenSaverBrowseCustom",
                 Text = T("Browse .scr / .exe..."),
@@ -192,11 +197,6 @@ public sealed partial class MainForm
             saverRow.Controls.Add(customBrowse, 2, 0);
             details.Controls.Add(saverRow, 0, 3);
 
-            var photo = new CheckBox {
-                Name = "WizardScreenSaverJpegMode", Dock = DockStyle.Fill,
-                Text = "JPG photo slideshow (use selected campaign images)",
-                Checked = _owner._project.ScreenSaver.UseJpegSlideshow
-            };
             details.Controls.Add(photo, 0, 4);
             var slide = new NumericUpDown {
                 Name = "WizardScreenSaverSlideSeconds",
@@ -293,7 +293,12 @@ public sealed partial class MainForm
                 status.Text = T("Selected type: ") + T(selected.ToString()) +
                     (saverEnabled ? T(" | idle ") + idle.Value + T(" s") : "") +
                     T(" | no AD changes made.");
-                _next.Enabled = true;
+                bool missingCustom = saverEnabled && !photo.Checked &&
+                    saver.SelectedItem is string option && option == customOption &&
+                    string.IsNullOrWhiteSpace(_owner._project.ScreenSaver.CustomExecutablePath);
+                _next.Enabled = !missingCustom;
+                if (missingCustom)
+                    status.Text = T("Select a custom .scr/.exe using Browse before continuing.");
                 if (!persist) return;
                 // Repaint the rail as soon as the operator changes the type.
                 // JPG Screen Saver needs images; only built-in Screen Saver
