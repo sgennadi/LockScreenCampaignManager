@@ -175,10 +175,12 @@ public sealed partial class MainForm
                 try
                 {
                     var observation = CustomSaverPilotFile.Inspect(picker.FileName);
+                    // Toggle controls first: their events clear any previous
+                    // custom selection before committing the newly inspected PE.
+                    photo.Checked = false;
+                    saver.SelectedItem = customOption;
                     _owner._project.ScreenSaver.CustomExecutablePath = observation.Path;
                     _owner._project.ScreenSaver.CustomExecutableSha256 = observation.Sha256;
-                    saver.SelectedItem = customOption;
-                    photo.Checked = false;
                     RefreshDescription(true);
                     MessageBox.Show(this,
                         T("Selected local custom Screen Saver for manual pilot testing only.") +
