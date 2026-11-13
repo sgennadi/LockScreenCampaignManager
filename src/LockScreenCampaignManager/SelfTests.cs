@@ -2726,7 +2726,8 @@ StartExecutePSFirst=true
             comparison.Any(x => x.Scope == "Computer" && x.GpoId == g2 &&
                 x.ReportedRsop == "Not listed (unknown)") &&
             comparison.All(x => x.Interpretation.Contains("not", StringComparison.OrdinalIgnoreCase) ||
-                x.Interpretation.Contains("proof", StringComparison.OrdinalIgnoreCase)) &&
+                x.Interpretation.Contains("prove", StringComparison.OrdinalIgnoreCase) ||
+                x.Interpretation.Contains("proven", StringComparison.OrdinalIgnoreCase)) &&
             DomainGpoRsopCorrelation.Compare(report, computer, null)
                 .Any(x => x.Scope == "User" && x.ReportedRsop == "Not imported"),
             "Domain-wide correlation does not conflate User/Computer or missing GUIDs.");
