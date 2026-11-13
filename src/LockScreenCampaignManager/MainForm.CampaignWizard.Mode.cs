@@ -98,11 +98,11 @@ public sealed partial class MainForm
             var details = new TableLayoutPanel
             {
                 Name = "WizardCampaignTypeDetails",
-                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 9,
+                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 10,
                 AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Height = 650, Padding = new Padding(14, 12, 14, 14)
+                Height = 715, Padding = new Padding(14, 12, 14, 14)
             };
-            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115 })
+            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115, 62 })
                 details.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
             details.Controls.Add(heading, 0, 0);
 
@@ -255,6 +255,14 @@ public sealed partial class MainForm
                 ForeColor = UiStyle.Muted, Padding = new Padding(8, 8, 8, 8)
             };
             details.Controls.Add(note, 0, 8);
+            var customInfo = new Label {
+                Name = "WizardCustomScreenSaverStatus",
+                Dock = DockStyle.Fill, AutoEllipsis = false,
+                ForeColor = UiStyle.Navy,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 2, 8, 2)
+            };
+            details.Controls.Add(customInfo, 0, 9);
 
             void RefreshDescription(bool persist)
             {
@@ -263,6 +271,7 @@ public sealed partial class MainForm
                     saver.Enabled = idle.Enabled = password.Enabled = false;
                     photo.Enabled = slide.Enabled = false;
                     customBrowse.Enabled = false;
+                    customInfo.Text = "";
                     message.Text = T("Choose a campaign type to continue. No images or schedule steps are skipped yet.");
                     status.Text = T("No campaign type selected. Choose Lock Screen, Screen Saver or Both.");
                     _next.Enabled = false;
@@ -299,6 +308,15 @@ public sealed partial class MainForm
                     saver.SelectedItem is string option && option == customOption &&
                     string.IsNullOrWhiteSpace(_owner._project.ScreenSaver.CustomExecutablePath);
                 _next.Enabled = !missingCustom;
+                customInfo.Text = saverEnabled && !photo.Checked &&
+                    saver.SelectedItem is string name && name == customOption
+                    ? string.IsNullOrWhiteSpace(_owner._project.ScreenSaver.CustomExecutablePath)
+                        ? T("Choose a local .scr/.exe with Browse.")
+                        : T("Pilot file: ") +
+                          Path.GetFileName(_owner._project.ScreenSaver.CustomExecutablePath) +
+                          Environment.NewLine + "SHA-256: " +
+                          _owner._project.ScreenSaver.CustomExecutableSha256
+                    : "";
                 if (missingCustom)
                     status.Text = T("Select a custom .scr/.exe using Browse before continuing.");
                 if (!persist) return;
