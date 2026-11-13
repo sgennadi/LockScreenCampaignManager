@@ -12,6 +12,8 @@ namespace LockScreenCampaignManager;
 internal sealed class DomainGpoRsopDialog : Form
 {
     private readonly DomainWideGpoReport _report;
+    private readonly Func<string, string, Task<EndpointPowerObservation>>? _pilotPowerReader;
+    private readonly int _saverIdleSeconds;
     private RsopEvidence? _computer;
     private UserRsopEvidence? _user;
     private readonly TextBox _computerName = new() { Name = "GpresultComputerFqdn" };
@@ -26,9 +28,13 @@ internal sealed class DomainGpoRsopDialog : Form
     private readonly Button _clearUser;
     private DomainGpoRsopMatch[] _visible = [];
 
-    internal DomainGpoRsopDialog(DomainWideGpoReport report)
+    internal DomainGpoRsopDialog(DomainWideGpoReport report,
+        int saverIdleSeconds = 600,
+        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
+        _saverIdleSeconds = saverIdleSeconds;
+        _pilotPowerReader = pilotPowerReader;
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
             " - " + UiLocale.Display("Compare gpresult XML");
         Name = "DomainGpoRsopDialog";
@@ -182,7 +188,7 @@ internal sealed class DomainGpoRsopDialog : Form
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 345));
         _status.Dock = DockStyle.Fill;
         _status.AutoEllipsis = false;
         _status.ForeColor = UiStyle.Muted;
@@ -191,7 +197,22 @@ internal sealed class DomainGpoRsopDialog : Form
         var close = Action("Close", 118);
         close.Name = "GpresultComparisonClose";
         close.Click += (_, _) => Close();
-        footer.Controls.Add(close, 1, 0);
+        var actions = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+            AutoScroll = true, WrapContents = false
+        };
+        actions.Controls.Add(close);
+        var pilot = Action("Pilot readiness...", 185);
+        pilot.Name = "GpresultPilotReadiness";
+        pilot.Enabled = _saverIdleSeconds is >= 60 and <= 86400;
+        pilot.Click += (_, _) => {
+            using var window = new DomainGpoPilotReadinessDialog(
+                _report, _computer, _user, _computerName.Text.Trim(),
+                _saverIdleSeconds, _pilotPowerReader);
+            window.ShowDialog(this);
+        };
+        actions.Controls.Add(pilot);
+        footer.Controls.Add(actions, 1, 0);
         root.Controls.Add(footer, 0, 5);
         UiStyle.Apply(this);
         UiWindowPlacement.Attach(this, "all-gpo-rsop-correlation");

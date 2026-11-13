@@ -58,6 +58,10 @@ internal static class UiLayoutSmokeTests
     private static Form CreateGpoRsopSmoke() =>
         new DomainGpoRsopDialog(CreateAllDcGpoFixture());
 
+    private static Form CreateGpoPilotReadinessSmoke() =>
+        new DomainGpoPilotReadinessDialog(CreateAllDcGpoFixture(),
+            null, null, "pilot.example.com", 600, null);
+
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
     {
         ("100%", new UiPreferences { Density = "Auto", UiScalePercent = 100, FontScalePercent = 100 }),
@@ -154,7 +158,11 @@ internal static class UiLayoutSmokeTests
                 "Compare gpresult XML...", "Close" }),
         ("Domain GPO gpresult Computer/User comparison - offline simulated layout",
             CreateGpoRsopSmoke, new[] { "Import Computer XML...",
-                "Import User XML...", "Clear Computer", "Clear User", "Close" }),
+                "Import User XML...", "Clear Computer", "Clear User",
+                "Pilot readiness...", "Close" }),
+        ("Pilot readiness — offline simulated layout",
+            CreateGpoPilotReadinessSmoke, new[] {
+                "Refresh review", "Verify power (PC)...", "Close" }),
         ("Domain GPO same-setting comparisons - offline simulated layout",
             CreateGpoOverlapSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),

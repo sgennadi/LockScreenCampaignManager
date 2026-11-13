@@ -12,6 +12,8 @@ namespace LockScreenCampaignManager;
 internal sealed class DomainWideGpoReportDialog : Form
 {
     private readonly DomainWideGpoReport _report;
+    private readonly int _saverIdleSeconds;
+    private readonly Func<string, string, Task<EndpointPowerObservation>>? _pilotPowerReader;
     private readonly DataGridView _grid = new() { Name = "AllDcGpoFindingsGrid" };
     private readonly TextBox _details = new() { Name = "AllDcGpoDetails" };
     private readonly TextBox _search = new() { Name = "AllDcGpoSearch" };
@@ -24,9 +26,13 @@ internal sealed class DomainWideGpoReportDialog : Form
         public override string ToString() => UiLocale.Display(Key);
     }
 
-    internal DomainWideGpoReportDialog(DomainWideGpoReport report)
+    internal DomainWideGpoReportDialog(DomainWideGpoReport report,
+        int saverIdleSeconds = 600,
+        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
+        _saverIdleSeconds = saverIdleSeconds;
+        _pilotPowerReader = pilotPowerReader;
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
             " - " + UiLocale.Display("All DC GPO conflict audit");
         Name = "DomainWideGpoReportDialog";
@@ -155,7 +161,8 @@ internal sealed class DomainWideGpoReportDialog : Form
         var rsop = MakeButton("Compare gpresult XML...", 215);
         rsop.Name = "AllDcGpoRsopButton";
         rsop.Click += (_, _) => {
-            using var dialog = new DomainGpoRsopDialog(_report);
+            using var dialog = new DomainGpoRsopDialog(
+                _report, _saverIdleSeconds, _pilotPowerReader);
             dialog.ShowDialog(this);
         };
         buttons.Controls.Add(rsop);
