@@ -30,7 +30,7 @@ internal static class UiLayoutSmokeTests
             "Not verified: offline simulated UI.");
     }
 
-    private static Form CreateAllDcGpoSmoke()
+    private static DomainWideGpoReport CreateAllDcGpoFixture()
     {
         var input = System.Text.Json.JsonSerializer.SerializeToElement(new {
             domain = "example.com", dc = "dc01.example.com",
@@ -46,8 +46,14 @@ internal static class UiLayoutSmokeTests
         var report = DomainWideGpoReport.Parse(
             input, "example.com", "dc01.example.com",
             [], []);
-        return new DomainWideGpoReportDialog(report);
+        return report;
     }
+
+    private static Form CreateAllDcGpoSmoke() =>
+        new DomainWideGpoReportDialog(CreateAllDcGpoFixture());
+
+    private static Form CreateGpoOverlapSmoke() =>
+        new DomainGpoOverlapDialog(CreateAllDcGpoFixture().Overlaps);
 
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
     {
@@ -140,7 +146,10 @@ internal static class UiLayoutSmokeTests
         ("Screen Saver endpoint power - no-network simulated layout",
             CreateEndpointPowerSmoke, new[] { "Close" }),
         ("Domain-wide GPO audit - offline simulated layout",
-            CreateAllDcGpoSmoke, new[] { "Export filtered CSV...", "Close" }),
+            CreateAllDcGpoSmoke, new[] {
+                "Export filtered CSV...", "Compare GPO settings...", "Close" }),
+        ("Domain GPO same-setting comparisons - offline simulated layout",
+            CreateGpoOverlapSmoke, new[] { "Export filtered CSV...", "Close" }),
         ("Interface settings", () => new UiSettingsDialog(),
             new[] { "Apply" }),
         ("Visual DPI / language acceptance", () => new UiVisualAcceptanceDialog(),

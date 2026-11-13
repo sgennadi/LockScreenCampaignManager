@@ -67,6 +67,7 @@ internal static class SelfTests
         TestScreenSaverPowerConflictAnalysis();
         TestEndpointPowerObservation();
         TestDomainWideGpoAudit();
+        TestRdsSessionAndGpoOverlaps();
         TestFullGroupConflictReport();
         TestNativeSysvolStorageContracts();
         TestNativeGpoLifecycleListContracts();
@@ -1449,6 +1450,88 @@ StartExecutePSFirst=true
             "OU=Clients,DC=example,DC=com", "pc01.example.com", now.AddMinutes(10)); }
         catch (InvalidDataException) { rejected = true; }
         Check(rejected, "Expired endpoint readings are not reused as current.");
+    }
+
+    private static void TestRdsSessionAndGpoOverlaps()
+    {
+        const string key = @"SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services";
+        var idle = NativeGpoConflictScan.TargetValue(key, "MaxIdleTime", "300000");
+        var active = NativeGpoConflictScan.TargetValue(key, "MaxConnectionTime", "1200000",
+            userScope: true);
+        var disconnected = NativeGpoConflictScan.TargetValue(
+            key, "MaxDisconnectionTime", "300000");
+        var action = NativeGpoConflictScan.TargetValue(key, "fResetBroken", "1");
+        Check(idle is not null && active is not null && disconnected is not null &&
+            action is not null && RdsSessionPolicyBlockers.TryMilliseconds(
+                "0x493E0", out uint fiveMinutes) && fiveMinutes == 300000,
+            "Both User/Computer GPO scopes recognize RDS session limits in milliseconds.");
+        Check(NativeGpoDomainAudit.AssessRisk(idle!, false, "ScreenSaver", 600,
+                "scrnsave.scr", "Linked candidate") == "Warning" &&
+            NativeGpoDomainAudit.AssessRisk(idle!, false, "LockScreen", 600,
+                "scrnsave.scr", "Linked candidate") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(idle!, false, "ScreenSaver", 600,
+                "scrnsave.scr", "Outside selected OUs") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(
+                NativeGpoConflictScan.TargetValue(key, "MaxIdleTime", "900000")!,
+                true, "Both", 600, "scrnsave.scr", "Linked candidate") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(
+                NativeGpoConflictScan.TargetValue(key, "MaxIdleTime", "0")!,
+                false, "Both", 600, "scrnsave.scr", "Linked candidate") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(
+                NativeGpoConflictScan.TargetValue(key, "MaxIdleTime", "not-number")!,
+                false, "Both", 600, "scrnsave.scr", "Linked candidate") == "Warning" &&
+            NativeGpoDomainAudit.AssessRisk(active!, true, "ScreenSaver", 600,
+                "scrnsave.scr", "Linked candidate") == "Warning" &&
+            NativeGpoDomainAudit.AssessRisk(disconnected!, false, "ScreenSaver", 600,
+                "scrnsave.scr", "Linked candidate") == "Info" &&
+            NativeGpoDomainAudit.AssessRisk(action!, false, "ScreenSaver", 600,
+                "scrnsave.scr", "Linked candidate") == "Warning",
+            "RDS risks distinguish User/Computer source, remote-only idle, unlimited, " +
+            "total-session duration, post-disconnect limits and selected OU applicability.");
+
+        static DomainGpoMatch Match(string id, string name, string value,
+            string link, string setting = "MaxIdleTime", string scope = "Computer") =>
+            new(name, id, scope, "Registry.pol", key, setting, value,
+                "Warning", "RDS only", link, "OU=Computers,DC=example,DC=com",
+                "Not winning RSoP");
+        const string g1 = "01234567-89ab-cdef-0123-456789abcdef";
+        const string g2 = "12345678-89ab-cdef-0123-456789abcdef";
+        const string g3 = "22345678-89ab-cdef-0123-456789abcdef";
+        var report = new[] {
+            Match(g1, "Remote A", "300000", "Linked candidate"),
+            Match(g2, "Remote B", "600000", "Linked candidate"),
+            Match(g3, "Remote C", "300000", "Outside selected OUs"),
+            Match(g1, "Remote A", "300000", "Linked candidate",
+                "MaxConnectionTime", "Computer"),
+            Match(g2, "Remote B", "300000", "Linked candidate",
+                "MaxConnectionTime", "Computer"),
+            Match(g1, "Remote A", "42", "Linked candidate",
+                "MaxIdleTime", "User"),
+            Match(g2, "Remote B", "43", "Linked candidate",
+                "MaxIdleTime", "User")
+        };
+        var overlaps = DomainGpoOverlapAnalysis.Analyze(report);
+        Check(overlaps.Count == 3 &&
+            overlaps.Any(x => x.Setting == "MaxIdleTime" && x.Scope == "Computer" &&
+                x.Kind == "Different configured values" &&
+                x.GpoCount == 3 && x.LinkedCandidates == 2) &&
+            overlaps.Any(x => x.Setting == "MaxConnectionTime" &&
+                x.Kind == "Same configured value" && x.LinkedCandidates == 2) &&
+            overlaps.Any(x => x.Setting == "MaxIdleTime" && x.Scope == "User" &&
+                x.Kind == "Different configured values"),
+            "Cross-GPO grouping uses exact scope, registry key and setting, not labels alone.");
+        var contradictory = report.Concat([
+            Match(g1, "Remote A", "700000", "Linked candidate")
+        ]).ToArray();
+        Check(DomainGpoOverlapAnalysis.Analyze(contradictory)
+                .Any(x => x.Setting == "MaxIdleTime" &&
+                    x.Scope == "Computer" && x.Kind == "Ambiguous source values") &&
+            DomainGpoOverlapAnalysis.BuildCsv([
+                new DomainGpoOverlap("Computer", key, "MaxIdleTime",
+                    "Different configured values", 2, 2,
+                    "=malicious", "+test", "RSoP unknown")
+            ]).Contains("\"'=malicious\"", StringComparison.Ordinal),
+            "Duplicate values inside one GPO remain ambiguous, CSV export escapes formulas.");
     }
 
     private static void TestDomainWideGpoAudit()

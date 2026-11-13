@@ -126,7 +126,7 @@ internal sealed class DomainWideGpoReportDialog : Form
 
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 350));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 555));
         _count.Dock = DockStyle.Fill;
         _count.TextAlign = ContentAlignment.MiddleLeft;
         _count.ForeColor = UiStyle.Muted;
@@ -142,6 +142,14 @@ internal sealed class DomainWideGpoReportDialog : Form
         export.Name = "AllDcGpoExport";
         export.Click += (_, _) => ExportCsv();
         buttons.Controls.Add(export);
+        var compare = MakeButton("Compare GPO settings...", 215);
+        compare.Name = "AllDcGpoCompareButton";
+        compare.Click += (_, _) =>
+        {
+            using var dialog = new DomainGpoOverlapDialog(_report.Overlaps);
+            dialog.ShowDialog(this);
+        };
+        buttons.Controls.Add(compare);
         footer.Controls.Add(buttons, 1, 0);
         root.Controls.Add(footer, 0, 4);
         UiStyle.Apply(this);
