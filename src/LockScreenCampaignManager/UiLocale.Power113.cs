@@ -59,7 +59,7 @@ internal static partial class UiLocale
         ["Retry"] = "נסה שוב",
         ["Abort"] = "הפסק",
         ["Ignore"] = "התעלם",
-        ["Try again"] = "נסה שוב",
+        ["Try again"] = "נסה מחדש",
         ["Continue"] = "המשך"
     };
     private static readonly Dictionary<string,string> Power113EnglishByRussian =
