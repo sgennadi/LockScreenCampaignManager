@@ -20,6 +20,7 @@ internal sealed class DomainGpoPilotReadiness
     internal bool ComputerXmlImported { get; private init; }
     internal bool UserXmlImported { get; private init; }
     internal bool EndpointUserImported { get; private init; }
+    internal bool SysvolSystemImported { get; private init; }
     internal bool AdScopeObserved { get; private init; }
     internal IReadOnlyList<DomainPilotFinding> Findings { get; private init; } = [];
     internal IReadOnlyList<DomainPilotBlocker> NamedBlockers { get; private init; } = [];
@@ -35,7 +36,8 @@ internal sealed class DomainGpoPilotReadiness
         int saverIdleSeconds, EndpointPowerObservation? power,
         RsopEvidence? computerXml, UserRsopEvidence? userXml,
         DateTimeOffset now, EndpointUserReadinessEvidence? endpointUser = null,
-        DomainGpoScopeEvidence? adScope = null)
+        DomainGpoScopeEvidence? adScope = null,
+        DomainSysvolSystemEvidence? sysvolSystem = null)
     {
         ArgumentNullException.ThrowIfNull(report);
         if (saverIdleSeconds is < 60 or > 86400 ||
@@ -72,6 +74,13 @@ internal sealed class DomainGpoPilotReadiness
              adScope.ObservedUtc > now.AddMinutes(2)))
             throw new InvalidDataException(
                 "AD-only scope reading belongs to another pilot PC/DC/OU or is future-dated.");
+        if (sysvolSystem is not null &&
+            (!sysvolSystem.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
+             !NativeGpoLifecycleList.SameController(sysvolSystem.Dc, report.Dc) ||
+             !sysvolSystem.Computer.Equals(computer, StringComparison.OrdinalIgnoreCase) ||
+             sysvolSystem.ObservedUtc > now.AddMinutes(2)))
+            throw new InvalidDataException(
+                "Local SYSTEM SYSVOL report is from another PC/domain/DC or future date.");
         if (power is not null &&
             (!power.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
              !NativeGpoLifecycleList.SameController(power.Dc, report.Dc) ||
@@ -121,6 +130,7 @@ internal sealed class DomainGpoPilotReadiness
         AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
+        AddSysvolSystem(findings, sysvolSystem, adScope, now);
 
         // Imported UserResults must describe the same explicit AD user before
         // they can elevate a candidate GPO for that AD scope. Domain/RSoP XML
@@ -261,6 +271,7 @@ internal sealed class DomainGpoPilotReadiness
             ComputerXmlImported = computerXml is not null,
             UserXmlImported = userXml is not null,
             EndpointUserImported = endpointUser is not null,
+            SysvolSystemImported = sysvolSystem is not null,
             AdScopeObserved = adScope is not null, Findings = findings,
             NamedBlockers = namedBlockers
         };
@@ -407,6 +418,47 @@ internal sealed class DomainGpoPilotReadiness
                 "Inspect User GPO restrictions before troubleshooting the UI.");
     }
 
+
+    /// <summary>
+    /// Optional read-only, manually imported local SYSTEM SYSVOL observation.
+    /// This is one GUID and one PC only; unsigned evidence cannot establish
+    /// GPO application, source hash correctness or a winning setting.
+    /// </summary>
+    private static void AddSysvolSystem(List<DomainPilotFinding> findings,
+        DomainSysvolSystemEvidence? sysvol, DomainGpoScopeEvidence? scope,
+        DateTimeOffset now)
+    {
+        if (sysvol is null)
+        {
+            findings.Add(new DomainPilotFinding("SYSVOL / LocalSystem", "Not verified",
+                "No locally captured SYSTEM SYSVOL GPT.INI read report was imported.",
+                "Run the offline SYSTEM SYSVOL canary on the exact pilot PC, then " +
+                "import its private JSON. AD GPC Read alone cannot verify SMB/NTFS."));
+            return;
+        }
+        bool linked = scope is not null && scope.Fresh(now) &&
+            scope.Links.Any(x => x.GpoId.Equals(sysvol.GpoId,
+                StringComparison.OrdinalIgnoreCase) &&
+                !x.State.StartsWith("Excluded:", StringComparison.Ordinal));
+        bool fresh = sysvol.Fresh(now);
+        string state = !fresh || !linked ? "Not verified" :
+            sysvol.GptIni == "Read" ? "Information" : "Source candidate";
+        string note = "Operator-imported UNSIGNED local SYSTEM report for GPO " +
+            sysvol.GpoId + ": GPT.INI " + sysvol.GptIni +
+            ", User Registry.pol " + sysvol.UserRegistryPol +
+            ", Machine Registry.pol " + sysvol.MachineRegistryPol +
+            ". File absence can be normal for a policy half or another CSE.";
+        if (!linked)
+            note += " Selected, fresh AD OU/GPO link correlation is not established.";
+        if (!fresh)
+            note += " Report is stale.";
+        findings.Add(new DomainPilotFinding("SYSVOL / LocalSystem", state, note,
+            sysvol.GptIni == "Read"
+                ? "A readable GPT.INI is not proof of gpresult, User GPO precedence " +
+                  "or Screen Saver execution. Check actual user RSoP and HKCU."
+                : "Investigate machine-account SYSVOL share/NTFS access, DC/DFS " +
+                  "reachability and GPT.INI for this GUID; verify on the real PC."));
+    }
 
     /// <summary>
     /// Add the DC's per-object AD applicability projection to the SAME
