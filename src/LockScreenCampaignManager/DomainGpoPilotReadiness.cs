@@ -436,7 +436,7 @@ internal sealed class DomainGpoPilotReadiness
                 "import its private JSON. AD GPC Read alone cannot verify SMB/NTFS."));
             return;
         }
-        bool linked = scope is not null && scope.Fresh(now) &&
+        bool linked = scope is not null && scope.Complete && scope.Fresh(now) &&
             scope.Links.Any(x => x.GpoId.Equals(sysvol.GpoId,
                 StringComparison.OrdinalIgnoreCase) &&
                 !x.State.StartsWith("Excluded:", StringComparison.Ordinal));
