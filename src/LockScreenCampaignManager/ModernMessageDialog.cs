@@ -318,6 +318,25 @@ internal sealed class ModernMessageDialog : Form
             outer.RowStyles[3].SizeType = SizeType.Absolute;
             outer.RowStyles[3].Height = Math.Max(76, Math.Max(
                 requiredActions + actions.Padding.Vertical + 11, hintNeeded + 12));
+
+            // When fonts or language grow after construction, retain enough
+            // visible body space for the first lines of the warning; the rest
+            // remains scrollable. Never grow beyond the monitor's work area.
+            int bodyMinimum = Math.Max(105,
+                TextRenderer.MeasureText("Agpqy", body.Font).Height * 4);
+            int neededClientHeight = outer.Padding.Vertical +
+                (int)outer.RowStyles[0].Height +
+                (int)outer.RowStyles[1].Height +
+                (int)outer.RowStyles[3].Height +
+                card.Margin.Vertical + bodyMinimum;
+            if (ClientSize.Height < neededClientHeight &&
+                WindowState == FormWindowState.Normal)
+            {
+                int available = Math.Max(MinimumSize.Height,
+                    Screen.FromControl(this).WorkingArea.Height - 40);
+                Height = Math.Min(available,
+                    Height + neededClientHeight - ClientSize.Height);
+            }
         }
         void FitOnWidthChange()
         {
