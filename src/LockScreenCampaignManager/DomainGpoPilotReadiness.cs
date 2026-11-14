@@ -1,9 +1,9 @@
 namespace LockScreenCampaignManager;
 
 /// <summary>
-/// Operator-controlled correlation of THREE independent evidence sources:
-/// DC-wide GPO files, unsigned gpresult XML, and a fresh read-only endpoint
-/// power observation. None of the sources prove actual Screen Saver display,
+/// Operator-controlled correlation of DC-wide GPO source inventory, AD-only
+/// principal scope, optional unsigned gpresult XML and endpoint observations.
+/// None of the sources prove actual Screen Saver display,
 /// current interactive HKCU, final setting precedence, or a causal blocker.
 /// </summary>
 internal sealed record DomainPilotFinding(
@@ -433,8 +433,9 @@ internal sealed class DomainGpoPilotReadiness
             findings.Add(new DomainPilotFinding("AD scope freshness",
                 "Not verified", "AD applicability is stale, incomplete or source files were unreadable.",
                 "Refresh all DC GPOs and repeat the explicit AD-only pilot scan."));
-        findings.Add(new DomainPilotFinding("AD loopback", scope.User.Length == 0 ||
-            scope.Loopback == "Unknown" ? "Not verified" : "Information",
+        findings.Add(new DomainPilotFinding("AD loopback", !complete ||
+            scope.User.Length == 0 || scope.Loopback == "Unknown"
+                ? "Not verified" : "Information",
             "Computer-side UserPolicyMode: " + scope.Loopback +
             ". User Configuration candidates: " +
             links.Count(x => x.Scope == "User" && x.Origin == "User OU") +
