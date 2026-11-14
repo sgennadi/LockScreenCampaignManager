@@ -106,7 +106,7 @@ public sealed partial class MainForm
             // A fixed 155px third column clipped it at RU/HE and 125-200%.
             int[] sectionHeights = [53, 55, 87, 58, 52, 59, 57, 54, 115, 62];
             for (int i = 0; i < sectionHeights.Length; i++)
-                details.RowStyles.Add(i == 3
+                details.RowStyles.Add(i is 3 or 5 or 6 or 8 or 9
                     ? new RowStyle(SizeType.AutoSize)
                     : new RowStyle(SizeType.Absolute, sectionHeights[i]));
             details.Controls.Add(heading, 0, 0);
@@ -186,7 +186,9 @@ public sealed partial class MainForm
                 Dock = DockStyle.Fill
             };
             var slideRow = new TableLayoutPanel {
-                Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2
+                Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 52)
             };
             slideRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
             slideRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -205,7 +207,9 @@ public sealed partial class MainForm
                 Value = Math.Clamp(_owner._project.ScreenSaver.IdleSeconds, 60, 86400)
             };
             var idleRow = new TableLayoutPanel {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 52)
             };
             idleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
             idleRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -229,19 +233,33 @@ public sealed partial class MainForm
                     "is not automatically a Windows Screen Saver. JPG slideshow can be " +
                     "exported as PhotoScreenSaver.scr from selected images. " +
                     "GPO delivery of custom/JPG executables is blocked.",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false,
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoEllipsis = false, MaximumSize = new Size(680, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = UiStyle.Muted, Padding = new Padding(8, 8, 8, 8)
             };
             details.Controls.Add(note, 0, 8);
+            details.SizeChanged += (_, _) => {
+                int textWidth = Math.Max(250, details.ClientSize.Width -
+                    details.Padding.Horizontal - 18);
+                if (note.MaximumSize.Width != textWidth)
+                    note.MaximumSize = new Size(textWidth, 0);
+            };
             var customInfo = new Label {
                 Name = "WizardCustomScreenSaverStatus",
-                Dock = DockStyle.Fill, AutoEllipsis = false,
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoEllipsis = false, MaximumSize = new Size(680, 0),
                 ForeColor = UiStyle.Navy,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(8, 2, 8, 2)
             };
             details.Controls.Add(customInfo, 0, 9);
+            details.SizeChanged += (_, _) => {
+                int textWidth = Math.Max(250, details.ClientSize.Width -
+                    details.Padding.Horizontal - 18);
+                if (customInfo.MaximumSize.Width != textWidth)
+                    customInfo.MaximumSize = new Size(textWidth, 0);
+            };
 
             void RefreshDescription(bool persist)
             {
