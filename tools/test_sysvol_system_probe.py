@@ -54,7 +54,7 @@ class SysvolSystemContracts(unittest.TestCase):
                        "RequiredKeys", "localSystem", "JsonValueKind.True",
                        "Guid.TryParseExact", "SafeComputerName",
                        "SameController", "ReportSha256", "Fresh(",
-                       "FileAttributes.ReparsePoint", "FileInfo(full).Length",
+                       "FileAttributes.ReparsePoint", "new FileInfo(full)",
                        "ProvesWinningGpo => false",
                        "ProvesClientApplication => false"):
             self.assertIn(marker, parser, marker)
