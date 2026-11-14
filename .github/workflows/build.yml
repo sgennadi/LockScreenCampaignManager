@@ -79,6 +79,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_unified_ad_gpo_scope.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_sysvol_system_probe.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_dpi_text_clipping.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_modern_message_dialogs.py
@@ -125,6 +127,8 @@ jobs:
             'tools/smb_system_canary_probe.ps1',
             'tools/smb_canary_rsop.ps1',
             'tools/test_smb_rsop_xml.ps1',
+            'tools/sysvol_system_probe.ps1',
+            'tools/run_sysvol_system_probe_local.ps1',
             'tools/endpoint_closure_probe.ps1',
             'tools/run_endpoint_closure_local.ps1',
             'tools/test_hosted_agent_lifecycle.ps1',
