@@ -1939,6 +1939,55 @@ StartExecutePSFirst=true
             !readiness.PermitsAutomaticRemediation,
             "Unified GPO readiness works with no XML and conservatively flags AD-only sources.");
 
+        string SysvolJson(string gpt, DateTimeOffset seen, bool system = true) =>
+            System.Text.Json.JsonSerializer.Serialize(new {
+                schema = DomainSysvolSystemEvidence.Schema,
+                observedUtc = seen.ToString("O"),
+                domain, dc, computer = pc, gpoId = gpo,
+                localSystem = system, gptIni = gpt,
+                userRegistryPol = "Read", machineRegistryPol = "Missing",
+                result = gpt == "Read" ? "GPT_READ" : "GPT_NOT_READ"
+            });
+        var sysvolRead = DomainSysvolSystemEvidence.ParseJson(
+            SysvolJson("Read", now), domain, dc, pc, now);
+        var sysvolGood = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, scope, sysvolRead);
+        Check(sysvolGood.SysvolSystemImported &&
+            sysvolGood.Findings.Any(x => x.Area == "SYSVOL / LocalSystem" &&
+                x.State == "Information" &&
+                x.Observation.Contains(gpo, StringComparison.Ordinal)) &&
+            !sysvolGood.PermitsAutomaticRemediation &&
+            !sysvolGood.ProvesScreenSaverDisplayed,
+            "Exact current SYSTEM GPT read is reported without claiming policy application.");
+
+        var sysvolDenied = DomainSysvolSystemEvidence.ParseJson(
+            SysvolJson("Denied", now), domain, dc, pc, now);
+        var sysvolBlocked = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, scope, sysvolDenied);
+        Check(sysvolBlocked.Findings.Any(x => x.Area == "SYSVOL / LocalSystem" &&
+                x.State == "Source candidate" &&
+                x.Observation.Contains("GPT.INI Denied", StringComparison.Ordinal)),
+            "Operator-reported SYSTEM GPT access denial must surface for triage.");
+        var sysvolOld = DomainSysvolSystemEvidence.ParseJson(
+            SysvolJson("Denied", now.AddMinutes(-20)), domain, dc, pc, now);
+        var sysvolStale = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, scope, sysvolOld);
+        Check(sysvolStale.Findings.Any(x => x.Area == "SYSVOL / LocalSystem" &&
+                x.State == "Not verified"),
+            "Old SYSVOL report cannot establish a current access problem.");
+        bool sysvolRejected = false;
+        try {
+            _ = DomainSysvolSystemEvidence.ParseJson(
+                SysvolJson("Read", now), domain, dc, "another.example.com", now);
+        } catch (InvalidDataException) { sysvolRejected = true; }
+        Check(sysvolRejected, "SYSVOL report must bind the exact selected computer.");
+        sysvolRejected = false;
+        try {
+            _ = DomainSysvolSystemEvidence.ParseJson(
+                SysvolJson("Read", now, system: false), domain, dc, pc, now);
+        } catch (InvalidDataException) { sysvolRejected = true; }
+        Check(sysvolRejected, "Non-SYSTEM SYSVOL reports must not be imported.");
+
         var denied = DomainGpoScopeEvidence.Parse(
             Json(now, pc, "pilot", computerRead: "Deny"),
             report, pc, ou, "pilot", now);
