@@ -1787,6 +1787,19 @@ StartExecutePSFirst=true
             !NativeGpoDomainAudit.TryGpoFlags("-1", out _) &&
             !NativeGpoDomainAudit.TryGpoFlags("4", out _),
             "GPC flags accept missing=0 but reject corrupt/unsupported values.");
+        Check(NativeGpoDomainAudit.QualifyComputerRead("AD candidate",
+                "Read") == "AD candidate" &&
+            NativeGpoDomainAudit.QualifyComputerRead("AD candidate",
+                "Deny") == "Excluded: computer GPO Read denied" &&
+            NativeGpoDomainAudit.QualifyComputerRead("AD candidate",
+                "Unknown") == "Conditional: computer Read not verified" &&
+            NativeGpoDomainAudit.QualifyComputerRead(
+                "Conditional: WMI not evaluated", "Read") ==
+                "Conditional: WMI not evaluated" &&
+            NativeGpoDomainAudit.QualifyComputerRead(
+                "Excluded: matching security deny", "Read") ==
+                "Excluded: matching security deny",
+            "MS16-072 computer GPC Read permission never gives client attestation.");
         Check(NativeGpoDomainAudit.QualifyLoopbackUserRow(
                 "AD candidate", "Replace candidate", false) ==
                     "Conditional: loopback Replace candidate" &&
@@ -1827,13 +1840,15 @@ StartExecutePSFirst=true
         });
         var report = DomainWideGpoReport.Parse(data, domain, dc, [ou], [userOu]);
         static object Link(string id, string scope, string origin,
-            string linked, string state, string loopbackValue = "") => new {
+            string linked, string state, string loopbackValue = "",
+            string computerRead = "Read") => new {
                 gpo = "Pilot Restrictions", gpoId = id, scope, origin,
                 linkedAt = linked, depth = 1, order = 1, enforced = false,
-                state, security = "Read+Apply", wmi = "None", loopbackValue
+                state, security = "Read+Apply", wmi = "None", loopbackValue,
+                computerRead = scope == "User" ? computerRead : "N/A"
             };
         System.Text.Json.JsonElement Json(DateTimeOffset at, string host,
-            string who, bool complete = true) =>
+            string who, bool complete = true, string computerRead = "Read") =>
             System.Text.Json.JsonSerializer.SerializeToElement(new {
                 domain, dc, computer = host, computerOu = ou,
                 actualComputerOu = ou, requestedUser = who,
@@ -1848,9 +1863,19 @@ StartExecutePSFirst=true
                     Link(gpo, "Computer", "Computer OU", ou,
                         "AD candidate", "2"),
                     Link(gpo, "User", "User OU", userOu,
-                        "Conditional: loopback Replace candidate"),
+                        computerRead == "Deny"
+                            ? "Excluded: computer GPO Read denied"
+                            : computerRead == "Unknown"
+                                ? "Conditional: computer Read not verified"
+                                : "Conditional: loopback Replace candidate",
+                        computerRead: computerRead),
                     Link(gpo, "User", "Computer OU (loopback)", ou,
-                        "Conditional: loopback not confirmed")
+                        computerRead == "Deny"
+                            ? "Excluded: computer GPO Read denied"
+                            : computerRead == "Unknown"
+                                ? "Conditional: computer Read not verified"
+                                : "Conditional: loopback not confirmed",
+                        computerRead: computerRead)
                 }.Where((_, i) => who.Length > 0 || i == 0).ToArray(),
                 limitations = new[] { "Site/WMI/GPP and client state unknown." }
             });
@@ -1861,7 +1886,8 @@ StartExecutePSFirst=true
             scope.Complete && scope.ComputerToken == "Read" &&
             scope.UserToken == "Read" && scope.Loopback == "Replace candidate" &&
             scope.Links.Any(x => x.Origin == "User OU" &&
-                x.State == "Conditional: loopback Replace candidate") &&
+                x.State == "Conditional: loopback Replace candidate" &&
+                x.ComputerRead == "Read") &&
             scope.Links.Any(x => x.Origin == "Computer OU (loopback)" &&
                 x.State == "Conditional: loopback not confirmed") &&
             !scope.ProvesWinningGpo && !scope.ProvesClientApplication,
@@ -1881,11 +1907,40 @@ StartExecutePSFirst=true
                 x.State == "Information") &&
             readiness.Findings.Any(x => x.Area == "User / User OU" &&
                 x.State == "Not verified") &&
+            readiness.Findings.Any(x => x.Area == "Computer GPO Read" &&
+                x.Observation.Contains("2 User GPO links grant computer GPC Read",
+                    StringComparison.Ordinal)) &&
             readiness.NamedBlockers.Any(x => x.GpoId == gpo &&
                 x.ReportedRsop == "AD-only (no XML)") &&
             !readiness.ProvesWinningGpo && !readiness.ProvesScreenSaverDisplayed &&
             !readiness.PermitsAutomaticRemediation,
             "Unified GPO readiness works with no XML and conservatively flags AD-only sources.");
+
+        var denied = DomainGpoScopeEvidence.Parse(
+            Json(now, pc, "pilot", computerRead: "Deny"),
+            report, pc, ou, "pilot", now);
+        var deniedReview = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, denied);
+        Check(denied.Links.Where(x => x.Scope == "User").All(x =>
+                x.State == "Excluded: computer GPO Read denied" &&
+                x.ComputerRead == "Deny") &&
+            deniedReview.Findings.Any(x => x.Area == "Computer GPO Read" &&
+                x.State == "Not verified" &&
+                x.Observation.Contains("2 explicitly deny", StringComparison.Ordinal)),
+            "Explicit computer Read deny must exclude User GPO source candidates.");
+
+        var unknownRead = DomainGpoScopeEvidence.Parse(
+            Json(now, pc, "pilot", complete: false, computerRead: "Unknown"),
+            report, pc, ou, "pilot", now);
+        var unknownReview = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, unknownRead);
+        Check(unknownRead.Links.Where(x => x.Scope == "User").All(x =>
+                x.State == "Conditional: computer Read not verified" &&
+                x.ComputerRead == "Unknown") &&
+            unknownReview.Findings.Any(x => x.Area == "Computer GPO Read" &&
+                x.State == "Not verified" &&
+                x.Observation.Contains("2 unresolved", StringComparison.Ordinal)),
+            "Unavailable computer GPO Read must stay conditional and incomplete.");
 
         var withoutUser = DomainGpoScopeEvidence.Parse(Json(now, pc, ""),
             report, pc, ou, "", now);
