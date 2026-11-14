@@ -93,7 +93,7 @@ $config=[ordered]@{
 $task='LSCM-SYSVOL-Canary-'+$runId
 $registered=$false
 try {
-    $ps=Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    $ps=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $arguments='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+
         $localScript+'" -ConfigPath "'+$configPath+'" -ReportPath "'+$reportPath+'"'
     $action=New-ScheduledTaskAction -Execute $ps -Argument $arguments
