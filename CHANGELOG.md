@@ -1,3 +1,10 @@
+## 0.4.0-preview.119 — require complete GPO token evidence (2026-11-14)
+
+1. Require the selected computer and optional exact user tokenGroups before marking an AD-only GPO scope complete; zero links or entirely excluded links are not an exception.
+2. Preserve explicit computer GPC Read Deny for User GPO sources even when selected user's ACL cannot be verified, without overriding independent link exclusions.
+3. Strictly reject AD-only snapshots with missing required tokens but a `complete` claim, or AD candidate states without verified ACL, computer token and Read evidence.
+4. Add native regression and offline source checks, bump Preview.119 and retain Windows x86/x64, simulated HiDPI, Russian/Hebrew and privacy gates. No domain writes.
+
 ## 0.4.0-preview.118 — User GPO computer-context Read preflight (2026-11-14)
 
 1. Check selected computer's GPC Read against matching User GPO ACL separately from user's Read+Apply security filtering.
