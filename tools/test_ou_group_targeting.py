@@ -139,7 +139,6 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
         # Preview.116 replaced the old single warning-only auto row with
         # a completely auto-sized User/Computer field layout.
         self.assertIn('fields.RowStyles.Add(i switch', matrix)
-        self.assertIn('14 =>', matrix) if False else None
         self.assertIn('RowStyle(SizeType.AutoSize)', matrix)
         self.assertIn('caption.MaximumSize = new Size(width, 0)', matrix)
         self.assertIn('fields.RowStyles[14].SizeType != SizeType.AutoSize', smoke)
