@@ -102,8 +102,13 @@ public sealed partial class MainForm
                 AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Height = 715, Padding = new Padding(14, 12, 14, 14)
             };
-            foreach (int h in new[] { 53, 55, 87, 58, 52, 59, 57, 54, 115, 62 })
-                details.RowStyles.Add(new RowStyle(SizeType.Absolute, h));
+            // Screen Saver Browse is a complete, independent action row.
+            // A fixed 155px third column clipped it at RU/HE and 125-200%.
+            int[] sectionHeights = [53, 55, 87, 58, 52, 59, 57, 54, 115, 62];
+            for (int i = 0; i < sectionHeights.Length; i++)
+                details.RowStyles.Add(i == 3
+                    ? new RowStyle(SizeType.AutoSize)
+                    : new RowStyle(SizeType.Absolute, sectionHeights[i]));
             details.Controls.Add(heading, 0, 0);
 
             var mode = new ComboBox
@@ -142,11 +147,14 @@ public sealed partial class MainForm
                 ? customOption : _owner._project.ScreenSaver.Executable;
             if (saver.SelectedIndex < 0) saver.SelectedIndex = 0;
             var saverRow = new TableLayoutPanel {
-                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1
+                Name = "WizardScreenSaverPickerLayout",
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
             saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
             saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            saverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
+            saverRow.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            saverRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             saverRow.Controls.Add(new Label {
                 Text = "Screen Saver (.scr)", Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = false
@@ -160,10 +168,14 @@ public sealed partial class MainForm
             var customBrowse = new Button {
                 Name = "WizardScreenSaverBrowseCustom",
                 Text = T("Browse .scr / .exe..."),
-                Dock = DockStyle.Fill, AutoEllipsis = true,
-                Margin = new Padding(6, 2, 2, 2)
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoEllipsis = false,
+                MinimumSize = new Size(190, 43),
+                Margin = new Padding(6, 5, 2, 5)
             };
-            saverRow.Controls.Add(customBrowse, 2, 0);
+            saverRow.Controls.Add(customBrowse, 1, 1);
             details.Controls.Add(saverRow, 0, 3);
 
             details.Controls.Add(photo, 0, 4);
