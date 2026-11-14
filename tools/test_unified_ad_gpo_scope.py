@@ -43,6 +43,10 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "DecideLoopback(", "UserPolicyMode",
                     "Merge candidate", "Replace candidate",
                     "Computer OU (loopback)", "Conditional: WMI not evaluated",
+                    "TryGpoFlags(", "QualifyLoopbackUserRow(",
+                    "Conditional: loopback Replace candidate",
+                    "Conditional: loopback unknown",
+                    "Conditional: loopback not confirmed",
                     "Not configured", "Unknown",
                     "provesWinningGpo = false", "provesClientApplication = false"):
             self.assertIn(key, model, key)
@@ -62,6 +66,9 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "NativeGpoConflictScan.Inside("):
             self.assertIn(key, scope, key)
         for key in ("AdScopeObserved", "AddAdScope(", "adScope is not null",
+                    "bool currentAd = adScope is not null",
+                    "BlockerEvidencePriority(",
+                    "Historical AD scope",
                     "DomainGpoScopeEvidence? adScope = null",
                     "DomainPilotBlocker", "User OU",
                     "Computer OU (loopback)", "Not verified",
@@ -89,15 +96,18 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         tests = read("SelfTests.cs")
         for key in ("TestUnifiedAdScopeApplicability();",
                     "DomainGpoScopeEvidence.Parse(", "AdScopeObserved",
-                    "wrongIdentityRejected", "Expired", "AD-only (no XML)"):
+                    "wrongIdentityRejected", "Expired", "AD-only (no XML)",
+                    "defaultFlags", "bothDisabled", "computerOnly",
+                    "incomplete", "combined"):
             if key == "Expired":
                 self.assertIn("var expired =", tests)
             else:
                 self.assertIn(key, tests)
         self.assertIn("UiLocale.Power115.cs", (ROOT / "tools" /
             "test_manager_features.py").read_text(encoding="utf-8"))
-        self.assertIn("0.4.0-preview.116",
+        self.assertIn("0.4.0-preview.117",
             read("LockScreenCampaignManager.csproj"))
+        self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW117.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW115.md").is_file())
 
 if __name__ == "__main__":
