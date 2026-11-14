@@ -16,8 +16,8 @@ $who=[Security.Principal.WindowsPrincipal]::new(
 if (-not $who.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Run elevated on the specifically approved Windows 10/11 pilot PC.'
 }
-if ($Domain -cnotmatch '^(?=.{4,253}$)[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$' -or
-    $Dc -cnotmatch '^(?=.{4,253}$)[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$' -or
+if ($Domain -cnotmatch '^(?=.{4,253}$)[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' -or
+    $Dc -cnotmatch '^(?=.{4,253}$)[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$' -or
     -not $Dc.EndsWith('.'+$Domain,[StringComparison]::OrdinalIgnoreCase) -or
     $ComputerFqdn -ine ($env:COMPUTERNAME+'.'+$Domain)) {
     throw 'The selected DC/domain/PC must match the local domain PC.'
