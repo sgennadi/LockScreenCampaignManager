@@ -5,8 +5,9 @@
 1. **Screen Saver Browse no longer clipped.** The button `Browse .scr / .exe...` occupies its own auto-sized second row instead of a fixed 155-pixel column. ComboBox selection, custom SCR/EXE validation and local-pilot-only security behavior remain unchanged.
 2. **Assignment editor labels wrap.** User/Computer OU and security-group captions now use content-measured field heights and vertical scrolling, rather than fixed 34-pixel label rows. Selection, filtering and per-scope GPO behavior are unchanged.
 3. **Modern warnings show complete captions and details.** Dialog header/title, hint and action footer grow with translated text and DPI. The message body retains visible space, starts at its first line and remains scrollable/selectable. Esc/X/No/Cancel still never approve sensitive actions.
-4. **AD deployment title/version fit.** The version column is measured by the full Preview build string, and the main heading can wrap without ellipsis. Header height adapts to font changes while credentials and authorization logic remain untouched.
-5. **Broader high-DPI regression matrix.** CI checks all existing offline WinForms screens, and separately exercises the screenshot-affected Wizard, assignment editor, AD/GPO deployment and warning dialogs in **English, Russian and Hebrew at 100%, 150% and 200%**. The actual screenshot-specific `Check target assignments` warning is included.
+4. **AD connection credentials no longer disappear.** The **Current Windows account**, **Other AD account**, **AD user**, **Password** and **Select AD user / Connect** controls use an auto-sized, scrollable credential section. The connection row grows to available window space rather than cutting off its lower half at high DPI.
+5. **AD deployment title/version fit.** The version column is measured by the full Preview build string, and the main heading can wrap without ellipsis. Header height adapts to font changes while credentials and authorization logic remain untouched.
+6. **Broader high-DPI regression matrix.** CI checks all existing offline WinForms screens, and separately exercises the screenshot-affected Wizard, assignment editor, AD/GPO deployment and warning dialogs in **English, Russian and Hebrew at 100%, 150% and 200%**. The actual screenshot-specific `Check target assignments` warning is included.
 
 ## How to verify
 
