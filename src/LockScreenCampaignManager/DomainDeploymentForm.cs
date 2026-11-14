@@ -217,17 +217,50 @@ internal sealed partial class DomainDeploymentForm : Form
         var pageHeader = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2 };
         pageHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         pageHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        pageHeader.Controls.Add(new Label {
+        var deploymentTitle = new Label {
+            Name = "DeploymentHeaderTitle",
             Text = "Active Directory / GPO Deployment", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold),
-            ForeColor = Color.FromArgb(30, 44, 65), AutoEllipsis = true
-        }, 0, 0);
-        pageHeader.Controls.Add(new Label {
+            ForeColor = Color.FromArgb(30, 44, 65), AutoEllipsis = false,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        pageHeader.Controls.Add(deploymentTitle, 0, 0);
+        var deploymentVersion = new Label {
             Name = "DeploymentVersion", Text = "Version " + AppVersion.Current,
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = UiStyle.Accent, AutoEllipsis = true,
+            ForeColor = UiStyle.Accent, AutoEllipsis = false,
             Font = new Font("Segoe UI Semibold", 10f)
-        }, 1, 0);
+        };
+        pageHeader.Controls.Add(deploymentVersion, 1, 0);
+        void FitDeploymentHeader()
+        {
+            if (pageHeader.IsDisposed || deploymentVersion.IsDisposed) return;
+            int needed = TextRenderer.MeasureText(
+                deploymentVersion.Text, deploymentVersion.Font).Width +
+                deploymentVersion.Padding.Horizontal + 22;
+            // Never clip the preview version. Prefer taking width from the
+            // title column, whose multiline label may grow vertically.
+            pageHeader.ColumnStyles[1].Width = Math.Max(220, needed);
+            int titleWidth = Math.Max(180,
+                pageHeader.ClientSize.Width - (int)pageHeader.ColumnStyles[1].Width -
+                pageHeader.Padding.Horizontal - 6);
+            int titleHeight = TextRenderer.MeasureText(deploymentTitle.Text,
+                deploymentTitle.Font, new Size(titleWidth, 4096),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix).Height + 16;
+            int versionHeight = TextRenderer.MeasureText("Agpqy",
+                deploymentVersion.Font).Height + 13;
+            layout.RowStyles[0].Height = Math.Max(42,
+                Math.Max(titleHeight, versionHeight));
+        }
+        deploymentVersion.FontChanged += (_, _) => FitDeploymentHeader();
+        deploymentVersion.TextChanged += (_, _) => FitDeploymentHeader();
+        deploymentTitle.FontChanged += (_, _) => FitDeploymentHeader();
+        int lastHeaderWidth = -1;
+        pageHeader.SizeChanged += (_, _) => {
+            if (pageHeader.Width == lastHeaderWidth) return;
+            lastHeaderWidth = pageHeader.Width;
+            FitDeploymentHeader();
+        };
         layout.Controls.Add(pageHeader, 0, 0);
         var navigation = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
