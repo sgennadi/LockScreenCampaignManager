@@ -113,6 +113,9 @@ internal sealed class DomainGpoScopeEvidence
                 !NativeGpoConflictScan.Inside(linkedAt,
                     "DC=" + report.Domain.Replace(".", ",DC=", StringComparison.OrdinalIgnoreCase)) ||
                 state is not ("AD candidate" or "Conditional: WMI not evaluated" or
+                    "Conditional: loopback not confirmed" or
+                    "Conditional: loopback Replace candidate" or
+                    "Conditional: loopback unknown" or
                     "Excluded: link disabled" or "Excluded: block inheritance" or
                     "Excluded: policy half disabled" or
                     "Excluded: matching security deny" or
