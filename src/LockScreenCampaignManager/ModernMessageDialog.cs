@@ -287,7 +287,7 @@ internal sealed class ModernMessageDialog : Form
             int available = Math.Max(180, headerText.ClientSize.Width - 6);
             if (available < 190) available = Math.Max(180,
                 ClientSize.Width - outer.Padding.Horizontal -
-                header.Padding.Horizontal - header.ColumnStyles[0].Width - 30);
+                header.Padding.Horizontal - (int)Math.Ceiling(header.ColumnStyles[0].Width) - 30);
             static int WrappedHeight(Label label, int width, int extra)
             {
                 string value = label.Text.Length == 0 ? "Agpqy" : label.Text;
