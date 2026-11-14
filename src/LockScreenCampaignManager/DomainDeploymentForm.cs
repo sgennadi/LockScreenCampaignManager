@@ -51,6 +51,7 @@ internal sealed partial class DomainDeploymentForm : Form
     private SplitContainer? _targetSplit;
     private TableLayoutPanel? _deploymentLayout;
     private Control? _connectionPanel;
+    private TableLayoutPanel? _connectionContent;
     private readonly List<DirectoryRow> _allOus = new();
     private readonly List<DirectoryRow> _allGroups = new();
     private string _connectedDomain = string.Empty;
@@ -176,14 +177,27 @@ internal sealed partial class DomainDeploymentForm : Form
 
     private static TableLayoutPanel ResponsiveField(string title, Control editor)
     {
-        var holder = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
-            RowCount = 2, Margin = new Padding(2, 3, 10, 4) };
-        holder.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-        holder.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        holder.Controls.Add(new Label { Text = title, Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Muted,
-            AutoEllipsis = true }, 0, 0);
-        editor.Dock = DockStyle.Fill;
+        // The AD connection is a two-row, scrollable form. Its field labels
+        // must wrap and its editors must keep their full preferred height;
+        // 25px + 50%-of-222px clipped AD user/password at 150%-200% fonts.
+        var holder = new TableLayoutPanel {
+            Name = "DeploymentConnectionField",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 2,
+            MinimumSize = new Size(0, 65),
+            Margin = new Padding(2, 3, 10, 5)
+        };
+        holder.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        holder.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var caption = new Label {
+            Text = title, Dock = DockStyle.Top, AutoSize = true,
+            AutoEllipsis = false, TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = UiStyle.Muted, Padding = new Padding(0, 1, 0, 5)
+        };
+        holder.Controls.Add(caption, 0, 0);
+        editor.Dock = DockStyle.Top;
+        editor.MinimumSize = new Size(0, 34);
         editor.Margin = Padding.Empty;
         holder.Controls.Add(editor, 0, 1);
         return holder;
@@ -207,7 +221,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _deploymentLayout = layout;
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 222));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
         // Two status banners and the client/GPO-method selector must retain
         // independent height at 100%-200% scaling.
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 198));
@@ -282,13 +296,31 @@ internal sealed partial class DomainDeploymentForm : Form
         navigation.Controls.Add(_advancedModeButton, 2, 0);
         layout.Controls.Add(navigation, 0, 1);
 
-        var connection = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
+        var connection = new Panel {
+            Name = "DeploymentConnectionPanel",
+            Dock = DockStyle.Fill, BackColor = Color.White,
+            Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle,
+            AutoScroll = true
+        };
         _connectionPanel = connection;
-        var connLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        connLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        var connLayout = new TableLayoutPanel {
+            Name = "DeploymentConnectionContents",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1, RowCount = 2
+        };
+        _connectionContent = connLayout;
+        connLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        connLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         connection.Controls.Add(connLayout);
-        var connFields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        var connFields = new TableLayoutPanel {
+            Name = "DeploymentConnectionTopFields",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 75),
+            ColumnCount = 3, RowCount = 1
+        };
+        connFields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
         connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
         connFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
@@ -303,15 +335,26 @@ internal sealed partial class DomainDeploymentForm : Form
         connFields.Controls.Add(ResponsiveField("Writable DC", _dcBox), 1, 0);
         connFields.Controls.Add(ResponsiveField("New GPO name", _gpoBox), 2, 0);
         connLayout.Controls.Add(connFields, 0, 0);
-        var accounts = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+        var accounts = new TableLayoutPanel {
+            Name = "DeploymentAccountSection",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 3, RowCount = 2
+        };
         accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
         accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
         accounts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
-        accounts.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-        accounts.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        accounts.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        accounts.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _currentRadio.Text = "Current Windows account";
+        _currentRadio.Name = "DeploymentCurrentAccount";
+        _currentRadio.Dock = DockStyle.Top;
+        _currentRadio.MinimumSize = new Size(0, 36);
         _currentRadio.AutoSize = true;
         _alternateRadio.Text = "Other AD account";
+        _alternateRadio.Name = "DeploymentAlternateAccount";
+        _alternateRadio.Dock = DockStyle.Top;
+        _alternateRadio.MinimumSize = new Size(0, 36);
         _alternateRadio.AutoSize = true;
         _currentRadio.CheckedChanged += (_, _) => SetCredentialFields();
         _alternateRadio.CheckedChanged += (_, _) =>
@@ -330,21 +373,33 @@ internal sealed partial class DomainDeploymentForm : Form
         // without exposing a second, inconsistent password editor.
         _passwordBox.UseSystemPasswordChar = true;
         _passwordBox.TextChanged += (_, _) => ConnectionChanged();
-        _otherAccountHint.Dock = DockStyle.Fill;
+        _otherAccountHint.Dock = DockStyle.Top;
+        _otherAccountHint.AutoSize = true;
         _otherAccountHint.TextAlign = ContentAlignment.MiddleLeft;
         _otherAccountHint.ForeColor = UiStyle.Muted;
-        _otherAccountHint.AutoEllipsis = true;
-        accounts.Controls.Add(ResponsiveField("AD user", _userBox), 0, 1);
-        accounts.Controls.Add(ResponsiveField("Password", _otherAccountHint), 1, 1);
-        var accountActions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        _otherAccountHint.AutoEllipsis = false;
+        var adUserField = ResponsiveField("AD user", _userBox);
+        adUserField.Name = "DeploymentConnectionAdUserField";
+        accounts.Controls.Add(adUserField, 0, 1);
+        var passwordField = ResponsiveField("Password", _otherAccountHint);
+        passwordField.Name = "DeploymentConnectionPasswordField";
+        accounts.Controls.Add(passwordField, 1, 1);
+        var accountActions = new FlowLayoutPanel {
+            Name = "DeploymentAccountButtons",
+            Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true, FlowDirection = FlowDirection.LeftToRight
+        };
         _usersButton.Text = "Select AD user...";
-        _usersButton.Width = 168;
-        _usersButton.Height = 34;
+        _usersButton.MinimumSize = new Size(168, 42);
+        _usersButton.AutoSize = true;
+        _usersButton.AutoSizeMode = AutoSizeMode.GrowOnly;
         _usersButton.Click += (_, _) => EditAlternateAccount();
         accountActions.Controls.Add(_usersButton);
         _connectButton.Text = "Connect";
-        _connectButton.Width = 122;
-        _connectButton.Height = 34;
+        _connectButton.MinimumSize = new Size(122, 42);
+        _connectButton.AutoSize = true;
+        _connectButton.AutoSizeMode = AutoSizeMode.GrowOnly;
         _connectButton.Click += async (_, _) => await ConnectAsync();
         accountActions.Controls.Add(_connectButton);
         accounts.Controls.Add(accountActions, 2, 1);
@@ -828,7 +883,27 @@ internal sealed partial class DomainDeploymentForm : Form
         if (_deploymentLayout is not null)
         {
             _deploymentLayout.RowStyles[2].SizeType = SizeType.Absolute;
-            _deploymentLayout.RowStyles[2].Height = connectionVisible ? 222 : 0;
+            if (connectionVisible && _connectionContent is not null &&
+                _connectionPanel is not null)
+            {
+                // Reserve as much room as the form can afford while keeping
+                // the status/footer reachable; scrollbar exposes all controls
+                // when font scaling makes the full account form taller.
+                int width = Math.Max(320, _connectionPanel.ClientSize.Width -
+                    _connectionPanel.Padding.Horizontal - 6);
+                int preferred = _connectionContent.GetPreferredSize(
+                    new Size(width, 0)).Height +
+                    _connectionPanel.Padding.Vertical + 16;
+                int available = Math.Max(240, ClientSize.Height -
+                    _deploymentLayout.Padding.Vertical -
+                    (int)_deploymentLayout.RowStyles[0].Height -
+                    (int)_deploymentLayout.RowStyles[1].Height -
+                    (int)_deploymentLayout.RowStyles[3].Height -
+                    (int)_deploymentLayout.RowStyles[5].Height - 48);
+                _deploymentLayout.RowStyles[2].Height =
+                    Math.Min(Math.Max(265, preferred), available);
+            }
+            else _deploymentLayout.RowStyles[2].Height = 0;
         }
         // Use the full content width for target selection and for read-only
         // preview, instead of leaving half the window blank on each page.
