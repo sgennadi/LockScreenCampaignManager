@@ -107,12 +107,17 @@ internal sealed class DomainGpoPilotReadiness
                 "unsupported extensions remain unknown.",
                 "Review scripts, CSEs, GPP targeting, ACL/WMI and site links separately.");
 
+        // An incomplete/stale DC projection does not substitute for missing
+        // endpoint evidence. User policy needs an explicitly resolved AD user.
+        bool currentAd = adScope is not null && adScope.Fresh(now) &&
+            adScope.Complete && report.RecognizedSourcesReadable &&
+            now - report.ObservedUtc <= TimeSpan.FromMinutes(15);
         AddXml(findings, "Computer", computerXml?.ReadUtc,
             computerXml?.IsHistorical, computerXml?.Sha256, computerXml?.UnidentifiedEntries,
-            adScope is not null);
+            currentAd);
         AddXml(findings, "User", userXml?.ReadUtc,
             userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries,
-            adScope is not null);
+            currentAd && adScope?.User.Length > 0);
         AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
@@ -126,8 +131,7 @@ internal sealed class DomainGpoPilotReadiness
             .GroupBy(x => x.Scope + "|" + x.GpoId + "|" +
                 x.RegistryKey + "|" + x.Setting + "|" + x.Value,
                 StringComparer.OrdinalIgnoreCase)
-            .Select(x => x.OrderBy(y => y.ReviewState.StartsWith("AD ",
-                    StringComparison.Ordinal) ? 0 : 1).First())
+            .Select(x => x.OrderBy(y => BlockerEvidencePriority(y.ReviewState)).First())
             .Take(6000).ToArray();
         foreach (string scope in new[] { "Computer", "User" })
         {
@@ -407,7 +411,8 @@ internal sealed class DomainGpoPilotReadiness
         }
         bool fresh = scope.Fresh(now) &&
             now - report.ObservedUtc <= TimeSpan.FromMinutes(15);
-        bool complete = scope.Complete && fresh;
+        bool complete = scope.Complete && fresh &&
+            report.RecognizedSourcesReadable && report.Issues.Count == 0;
         var links = scope.Links;
         int candidate = links.Count(x => x.State == "AD candidate");
         int excluded = links.Count(x => x.State.StartsWith("Excluded:",
@@ -424,9 +429,9 @@ internal sealed class DomainGpoPilotReadiness
             scope.ComputerToken + ", User=" + scope.UserToken + ".",
             "Domain object/ACL readings are not client policy application. " +
             "Missing sites, WMI and GPP targeting can change actual results."));
-        if (!fresh || !scope.Complete)
+        if (!complete)
             findings.Add(new DomainPilotFinding("AD scope freshness",
-                "Not verified", "AD applicability is stale or incomplete.",
+                "Not verified", "AD applicability is stale, incomplete or source files were unreadable.",
                 "Refresh all DC GPOs and repeat the explicit AD-only pilot scan."));
         findings.Add(new DomainPilotFinding("AD loopback", scope.User.Length == 0 ||
             scope.Loopback == "Unknown" ? "Not verified" : "Information",
@@ -472,7 +477,7 @@ internal sealed class DomainGpoPilotReadiness
                 bool possible = IsAdBlockerCandidate(row, idleSeconds);
                 if (!possible) continue;
                 string state = active && complete ? "Source candidate" :
-                    unsure || !fresh || !scope.Complete ? "Not verified" :
+                    unsure || !complete ? "Not verified" :
                     "Information";
                 string description = link.Gpo + " [" + link.GpoId + "] / " +
                     row.Setting + " = " + row.Value + " / " +
@@ -504,6 +509,20 @@ internal sealed class DomainGpoPilotReadiness
                 "Use the named blocker grid and source scan for details."));
         return blockers;
     }
+
+    // Preserve strong current user/computer RSoP evidence before AD-only
+    // guesses when the same GPO/setting is seen in both sources.
+    private static int BlockerEvidencePriority(string state) => state switch {
+        "Review first (GPO reported applied)" => 0,
+        "Reported filtered" => 1,
+        "AD candidate (not applied)" => 2,
+        "AD conditional/unverified" => 3,
+        "Unverified applicability" => 4,
+        "Historical gpresult" => 5,
+        "Historical GPO source" => 6,
+        "Historical AD scope" => 7,
+        _ => 8
+    };
 
     private static bool IsAdBlockerCandidate(DomainGpoMatch row, int idle)
     {
