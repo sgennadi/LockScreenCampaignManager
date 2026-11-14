@@ -186,6 +186,12 @@ internal static class UiLayoutSmokeTests
                 "Capture this Windows user", "Save local HKCU JSON...", "Close" }),
         ("Modern updater warning — offline simulated layout",
             CreateModernWarningSmoke, new[] { "Yes", "No" }),
+        ("Group target validation warning — offline simulated layout",
+            () => new ModernMessageDialog(
+                "Select a complete Active Directory distinguished name for User security group.",
+                "Check target assignments", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1),
+            new[] { "OK" }),
         ("Modern updater information — offline simulated layout",
             CreateModernInfoSmoke, new[] { "OK" }),
         ("Named pilot GPO blockers — offline simulated layout",
@@ -993,6 +999,7 @@ internal static class UiLayoutSmokeTests
                 CheckMainWizardStorage(form, profile.Name);
                 CheckAdAdvancedOptions(form, profile.Name);
                 CheckDpiTableRows(form, profile.Name);
+                UiTextClippingSmoke.Check(form, profile.Name);
                 CheckTimeZoneDifference(form, profile.Name);
                 CheckScrollableUncPaths(form, profile.Name);
                 if (window.Name == "Full group GPO conflict report - offline")
@@ -1334,6 +1341,7 @@ internal static class UiLayoutSmokeTests
                 buttons += actual.Length;
             }
         }
+        CheckThreeLanguageClipping();
         CheckHebrewRtlAndLanguageSelection();
         CheckHebrewCampaignWizardPages();
         CheckHebrewAdAndClientHealth();
@@ -1356,6 +1364,33 @@ internal static class UiLayoutSmokeTests
         Console.WriteLine($"PASS: {forms} offline WinForms dialog layouts and {buttons} button checks; " +
             "font profiles 100%, 125%, 150%, 175%, 187.5%, 200%; no dialog shown, no AD/gMSA/RPC or saved UI settings.");
         Console.WriteLine("NOTE: actual hardware DPI 200% and visual text-overflow inspection require an interactive VM.");
+    }
+
+
+    private static void CheckThreeLanguageClipping()
+    {
+        // Reproduce the operator's Windows 11 cases without an AD connection
+        // or a visible modal: the same controls must fit EN/RU/HE at 100/150/200.
+        string[] required = [
+            "Campaign Wizard - campaign type",
+            "Campaign assignment matrix",
+            "AD / GPO deployment - offline Wizard",
+            "Modern updater warning — offline simulated layout",
+            "Group target validation warning — offline simulated layout"
+        ];
+        foreach (string language in new[] { "English", "Russian", "Hebrew" })
+        foreach (int scale in new[] { 100, 150, 200 })
+        foreach (string name in required)
+        {
+            var factory = Windows.Single(x => x.Name == name).Factory;
+            using var form = factory();
+            UiStyle.Apply(form, new UiPreferences {
+                Language = language, Density = "Comfortable",
+                UiScalePercent = scale, FontScalePercent = 100
+            });
+            form.PerformLayout();
+            UiTextClippingSmoke.Check(form, language + " " + scale + "%");
+        }
     }
 
     private static void CheckHebrewRtlAndLanguageSelection()

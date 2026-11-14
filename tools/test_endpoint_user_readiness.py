@@ -97,7 +97,7 @@ class EndpointUserReadinessContracts(unittest.TestCase):
                        "!result.SignedByDomain", "IsFresh(now)",
                        "PermitsAutomaticRemediation"):
             self.assertIn(marker, read("SelfTests.cs"))
-        self.assertIn("0.4.0-preview.115", read("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.116", read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW114.md").is_file())
 
 if __name__ == "__main__":

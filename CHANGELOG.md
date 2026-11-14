@@ -1,3 +1,12 @@
+## 0.4.0-preview.116 — Windows DPI and text overflow fixes (2026-11-14)
+
+1. Screen Saver wizard: move Browse .scr/.exe to its own content-sized row; let safety notes and idle/slide controls expand without clipping.
+2. Group assignments: auto-size labels and inputs by translated text; keep vertical scrolling and existing independent User/Computer selections.
+3. Warning dialogs: measured wrapped headings, full hint/action footer, readable scrollable body, unchanged negative/Esc/Cancel semantics.
+4. AD connection: auto-sized/scrollable account section keeps Current/Other account radio buttons, AD user, Password and Select/Connect buttons visible at high DPI.
+5. AD deployment: measure full Preview version and multiline heading instead of fixed 220px text column.
+6. WinForms native UI regression on all existing screens plus specific EN/RU/HE 100%/150%/200% clipping cases; CI source contracts.
+
 ## 0.4.0-preview.115 — unified GPO applicability without XML (2026-11-14)
 
 - One read-only AD-first analysis in existing Pilot Readiness: selected Computer FQDN and optional exact User SAM/UPN.

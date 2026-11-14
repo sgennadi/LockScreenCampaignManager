@@ -96,7 +96,7 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                 self.assertIn(key, tests)
         self.assertIn("UiLocale.Power115.cs", (ROOT / "tools" /
             "test_manager_features.py").read_text(encoding="utf-8"))
-        self.assertIn("0.4.0-preview.115",
+        self.assertIn("0.4.0-preview.116",
             read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW115.md").is_file())
 

@@ -99,17 +99,32 @@ internal sealed class CampaignAssignmentsDialog : Form
 
     private static Control Field(string label, Control input, int height = 72)
     {
+        // Let translated long field captions wrap, then grow the ENTIRE
+        // field, including the editable ComboBox. A fixed 34px label row
+        // and 72px container previously clipped RU/HE at 125-200% DPI.
         var table = new TableLayoutPanel {
-            Dock = DockStyle.Top, Height = height,
+            Dock = DockStyle.Top,
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, height),
             ColumnCount = 1, RowCount = 2, Margin = new Padding(0, 0, 0, 9)
         };
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        table.Controls.Add(new Label {
-            Text = label, Dock = DockStyle.Fill, AutoEllipsis = false,
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var caption = new Label {
+            Text = label, Dock = DockStyle.Top, AutoSize = true,
+            AutoEllipsis = false, MaximumSize = new Size(570, 0),
+            Padding = new Padding(0, 4, 0, 4),
             ForeColor = UiStyle.Navy, TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-        input.Dock = DockStyle.Fill;
+        };
+        table.SizeChanged += (_, _) => {
+            int width = Math.Max(180, table.ClientSize.Width -
+                table.Padding.Horizontal - caption.Margin.Horizontal - 8);
+            if (caption.MaximumSize.Width != width)
+                caption.MaximumSize = new Size(width, 0);
+        };
+        table.Controls.Add(caption, 0, 0);
+        input.Dock = DockStyle.Top;
+        input.MinimumSize = new Size(input.MinimumSize.Width, 34);
         table.Controls.Add(input, 0, 1);
         return table;
     }
@@ -203,11 +218,14 @@ internal sealed class CampaignAssignmentsDialog : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             RowCount = 16, ColumnCount = 1, Padding = new Padding(5)
         };
-        foreach (int h in new[] { 75, 75, 74, 74, 50, 75, 74, 50, 75, 55, 65, 60, 62, 84, 58 })
-            fields.RowStyles.Add(h == 58
-                ? new RowStyle(SizeType.AutoSize) // Long translated warning must not be clipped.
-                : new RowStyle(SizeType.Absolute, h));
-        fields.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // Coverage summary for both scopes
+        // Every field caption is measured in the current language/font. The
+        // right side scrolls vertically instead of shaving text/inputs off.
+        for (int i = 0; i < 16; i++)
+            fields.RowStyles.Add(i switch {
+                4 or 7 or 9 or 12 => new RowStyle(SizeType.Absolute, 64),
+                13 => new RowStyle(SizeType.Absolute, 160), // Preview text box
+                _ => new RowStyle(SizeType.AutoSize)
+            });
         details.Controls.Add(fields);
         split.Panel2.Controls.Add(details);
 
