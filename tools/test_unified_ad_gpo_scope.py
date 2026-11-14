@@ -68,7 +68,8 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         for key in ("AdScopeObserved", "AddAdScope(", "adScope is not null",
                     "bool currentAd = adScope is not null",
                     "BlockerEvidencePriority(",
-                    "Historical AD scope",
+                    "Historical AD scope", "UserXmlMatchesScope(",
+                    "boundUserXml", "User XML identity correlation",
                     "DomainGpoScopeEvidence? adScope = null",
                     "DomainPilotBlocker", "User OU",
                     "Computer OU (loopback)", "Not verified",
@@ -98,7 +99,8 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "DomainGpoScopeEvidence.Parse(", "AdScopeObserved",
                     "wrongIdentityRejected", "Expired", "AD-only (no XML)",
                     "defaultFlags", "bothDisabled", "computerOnly",
-                    "incomplete", "combined"):
+                    "incomplete", "combined",
+                    "foreignUserXml", "matchedUserXml"):
             if key == "Expired":
                 self.assertIn("var expired =", tests)
             else:
