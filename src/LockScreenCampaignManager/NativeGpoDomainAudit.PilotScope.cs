@@ -422,6 +422,13 @@ internal static partial class NativeGpoDomainAudit
         return wmi == "None" ? "AD candidate" : "Conditional: WMI not evaluated";
     }
 
+    // GPC Read needs directory property access; READ_CONTROL (0x20000)
+    // alone is NOT enough, even though it allows reading the descriptor.
+    internal static bool GrantsGpcReadFromAccessMask(int rights) =>
+        (rights & 0x10000000) != 0 ||
+        (rights & 0x80000000) != 0 ||
+        (rights & 0x00000010) != 0;
+
     private static string EvaluateSecurity(
         LdapConnection ldap, string policyDn, ScopeSubject subject,
         bool readOnly = false)
@@ -451,9 +458,8 @@ internal static partial class NativeGpoDomainAudit
                     continue;
                 int rights = q.AccessMask;
                 bool all = (rights & 0x10000000) != 0;
-                bool read = all || (rights & 0x80000000) != 0 ||
-                    (rights & 0x00020000) != 0 ||
-                    (rights & 0x00000010) != 0;
+                // READ_CONTROL alone only reads the ACL, not GPO attributes.
+                bool read = GrantsGpcReadFromAccessMask(rights);
                 bool apply = all || (rights & 0x00000100) != 0;
                 if (q is ObjectAce objectAce &&
                     (objectAce.ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
