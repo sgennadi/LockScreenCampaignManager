@@ -1,3 +1,11 @@
+## 0.4.0-preview.115 — unified GPO applicability without XML (2026-11-14)
+
+- One read-only AD-first analysis in existing Pilot Readiness: selected Computer FQDN and optional exact User SAM/UPN.
+- Resolve object OU ancestors, Block Inheritance/Enforced/link state, GPO half flags, AD nested group token SIDs and GPO Read/Apply/Deny ACL.
+- Inspect loopback UserPolicyMode (Merge/Replace/unknown) and user-half GPO candidates on Computer OU conservatively; site, WMI, GPP targeting, client CSE and actual winning policy remain unverified.
+- Correlate GPO GUID/scope and recognized Screen Saver/power settings with existing all-DC source scan; XML/HKCU/power now optional inputs to the SAME report.
+- RU/HE UI, x64/x86 offline self-tests, versioned What's New and GitHub release verification.
+
 ## 0.4.0-preview.114 — local User HKCU Screen Saver pilot evidence (2026-11-13)
 
 - Add explicit local-only Windows endpoint probe via Tools or `--endpoint-user-probe`; read current account's HKCU Screen Saver policy/desktop/restriction values, preview and manually export private JSON with safe confirmation.
