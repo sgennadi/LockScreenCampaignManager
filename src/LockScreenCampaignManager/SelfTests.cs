@@ -1779,6 +1779,29 @@ StartExecutePSFirst=true
         const string ou = "OU=Computers,DC=example,DC=com";
         const string userOu = "OU=Users,DC=example,DC=com";
         const string gpo = "01234567-89ab-cdef-0123-456789abcdef";
+        Check(NativeGpoDomainAudit.TryGpoFlags("", out int defaultFlags) &&
+            defaultFlags == 0 &&
+            NativeGpoDomainAudit.TryGpoFlags("3", out int bothDisabled) &&
+            bothDisabled == 3 &&
+            !NativeGpoDomainAudit.TryGpoFlags("not-a-flag", out _) &&
+            !NativeGpoDomainAudit.TryGpoFlags("-1", out _) &&
+            !NativeGpoDomainAudit.TryGpoFlags("4", out _),
+            "GPC flags accept missing=0 but reject corrupt/unsupported values.");
+        Check(NativeGpoDomainAudit.QualifyLoopbackUserRow(
+                "AD candidate", "Replace candidate", false) ==
+                    "Conditional: loopback Replace candidate" &&
+            NativeGpoDomainAudit.QualifyLoopbackUserRow(
+                "AD candidate", "Unknown", false) ==
+                    "Conditional: loopback unknown" &&
+            NativeGpoDomainAudit.QualifyLoopbackUserRow(
+                "AD candidate", "Merge candidate", false) == "AD candidate" &&
+            NativeGpoDomainAudit.QualifyLoopbackUserRow(
+                "AD candidate", "Merge candidate", true) ==
+                    "Conditional: loopback not confirmed" &&
+            NativeGpoDomainAudit.QualifyLoopbackUserRow(
+                "Excluded: matching security deny", "Replace candidate", false) ==
+                    "Excluded: matching security deny",
+            "Loopback must not promote uncertain User GPOs into confirmed candidates.");
         DateTimeOffset now = DateTimeOffset.UtcNow;
         var data = System.Text.Json.JsonSerializer.SerializeToElement(new {
             domain, dc, observedUtc = now,
@@ -1810,22 +1833,25 @@ StartExecutePSFirst=true
                 state, security = "Read+Apply", wmi = "None", loopbackValue
             };
         System.Text.Json.JsonElement Json(DateTimeOffset at, string host,
-            string who) => System.Text.Json.JsonSerializer.SerializeToElement(new {
+            string who, bool complete = true) =>
+            System.Text.Json.JsonSerializer.SerializeToElement(new {
                 domain, dc, computer = host, computerOu = ou,
                 actualComputerOu = ou, requestedUser = who,
-                user = "pilot", actualUserOu = userOu,
-                computerToken = "Read", userToken = "Read",
+                user = who.Length == 0 ? "" : "pilot",
+                actualUserOu = who.Length == 0 ? "" : userOu,
+                computerToken = "Read",
+                userToken = who.Length == 0 ? "Not selected" : "Read",
                 loopback = "Replace candidate", observedUtc = at,
-                complete = true, provesWinningGpo = false,
+                complete, provesWinningGpo = false,
                 provesClientApplication = false,
                 links = new[] {
                     Link(gpo, "Computer", "Computer OU", ou,
                         "AD candidate", "2"),
                     Link(gpo, "User", "User OU", userOu,
-                        "AD candidate"),
+                        "Conditional: loopback Replace candidate"),
                     Link(gpo, "User", "Computer OU (loopback)", ou,
-                        "Conditional: WMI not evaluated")
-                },
+                        "Conditional: loopback not confirmed")
+                }.Where((_, i) => who.Length > 0 || i == 0).ToArray(),
                 limitations = new[] { "Site/WMI/GPP and client state unknown." }
             });
         var raw = Json(now, pc, "pilot");
@@ -1834,6 +1860,10 @@ StartExecutePSFirst=true
         Check(scope.Links.Count == 3 && scope.Fresh(now) &&
             scope.Complete && scope.ComputerToken == "Read" &&
             scope.UserToken == "Read" && scope.Loopback == "Replace candidate" &&
+            scope.Links.Any(x => x.Origin == "User OU" &&
+                x.State == "Conditional: loopback Replace candidate") &&
+            scope.Links.Any(x => x.Origin == "Computer OU (loopback)" &&
+                x.State == "Conditional: loopback not confirmed") &&
             !scope.ProvesWinningGpo && !scope.ProvesClientApplication,
             "AD-only nested-token/OU/ACL/loopback projection is never client attestation.");
 
@@ -1847,11 +1877,67 @@ StartExecutePSFirst=true
                 x.Observation.Contains("Replace candidate", StringComparison.Ordinal)) &&
             readiness.Findings.Any(x => x.Area == "Computer gpresult" &&
                 x.State == "Information") &&
+            readiness.Findings.Any(x => x.Area == "User gpresult" &&
+                x.State == "Information") &&
+            readiness.Findings.Any(x => x.Area == "User / User OU" &&
+                x.State == "Not verified") &&
             readiness.NamedBlockers.Any(x => x.GpoId == gpo &&
                 x.ReportedRsop == "AD-only (no XML)") &&
             !readiness.ProvesWinningGpo && !readiness.ProvesScreenSaverDisplayed &&
             !readiness.PermitsAutomaticRemediation,
             "Unified GPO readiness works with no XML and conservatively flags AD-only sources.");
+
+        var withoutUser = DomainGpoScopeEvidence.Parse(Json(now, pc, ""),
+            report, pc, ou, "", now);
+        var computerOnly = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, withoutUser);
+        Check(computerOnly.Findings.Any(x => x.Area == "User gpresult" &&
+                x.State == "Not verified") &&
+            computerOnly.Findings.Any(x => x.Area == "User scope" &&
+                x.State == "Not verified"),
+            "A computer-only AD projection cannot substitute for User gpresult.");
+
+        var partial = DomainGpoScopeEvidence.Parse(
+            Json(now, pc, "pilot", false), report, pc, ou, "pilot", now);
+        var incomplete = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, partial);
+        Check(incomplete.Findings.Any(x => x.Area == "Computer gpresult" &&
+                x.State == "Not verified") &&
+            incomplete.Findings.Any(x => x.Area == "AD scope freshness" &&
+                x.State == "Not verified"),
+            "Partial AD security/source readings cannot count as verified evidence.");
+
+        string UserXmlFor(string identity) =>
+            "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.ToString("o") + "</ReadTime>" +
+            "<DataType>LoggedData</DataType><UserResults>" +
+            "<Name>" + identity + "</Name><Domain>EXAMPLE</Domain>" +
+            "<GPO><Identifier>{" + gpo + "}</Identifier>" +
+            "<Name>Pilot Restrictions</Name><Enabled>true</Enabled>" +
+            "<IsValid>true</IsValid><FilterAllowed>true</FilterAllowed>" +
+            "<AccessDenied>false</AccessDenied></GPO></UserResults></Rsop>";
+        const string ownLogin = "EXAMPLE\\pilot";
+        const string foreignLogin = "EXAMPLE\\other";
+        var matchedUserXml = UserRsopEvidence.ParseXml(
+            UserXmlFor(ownLogin), ownLogin, domain, now);
+        var foreignUserXml = UserRsopEvidence.ParseXml(
+            UserXmlFor(foreignLogin), foreignLogin, domain, now);
+        Check(DomainGpoPilotReadiness.UserXmlMatchesScope(matchedUserXml, scope) &&
+            !DomainGpoPilotReadiness.UserXmlMatchesScope(foreignUserXml, scope) &&
+            !DomainGpoPilotReadiness.UserXmlMatchesScope(matchedUserXml, withoutUser),
+            "User gpresult and selected AD user must share a verified account name.");
+        var foreign = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, foreignUserXml, now, null, scope);
+        Check(foreign.Findings.Any(x => x.Area == "User XML identity correlation" &&
+                x.State == "Not verified") &&
+            !foreign.NamedBlockers.Any(x => x.Scope == "User" &&
+                x.ReviewState == "Review first (GPO reported applied)"),
+            "Unrelated imported User gpresult cannot elevate this AD user's GPOs.");
+        var matching = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, matchedUserXml, now, null, scope);
+        Check(matching.NamedBlockers.Any(x => x.Scope == "User" &&
+                x.ReviewState == "Review first (GPO reported applied)"),
+            "Matching User gpresult adds source evidence without proving precedence.");
 
         bool wrongIdentityRejected = false;
         try { _ = DomainGpoScopeEvidence.Parse(raw, report,
@@ -1874,9 +1960,29 @@ StartExecutePSFirst=true
             null, null, null, now, null, expired);
         Check(old.Findings.Any(x => x.Area == "AD scope freshness" &&
                 x.State == "Not verified") &&
+            old.Findings.Any(x => x.Area == "Computer gpresult" &&
+                x.State == "Not verified") &&
+            old.Findings.Any(x => x.Area == "AD loopback" &&
+                x.State == "Not verified") &&
             !old.Findings.Any(x => x.Area == "Computer / Computer OU" &&
                 x.State == "Source candidate"),
             "Stale AD source does not promote any GPO to a current candidate.");
+
+        string xml = "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.ToString("o") + "</ReadTime>" +
+            "<DataType>LoggedData</DataType><ComputerResults>" +
+            "<Name>" + pc + "</Name><Domain>" + domain +
+            "</Domain><GPO><Identifier>{" + gpo + "}</Identifier>" +
+            "<Name>Pilot Restrictions</Name><Enabled>true</Enabled>" +
+            "<IsValid>true</IsValid><FilterAllowed>true</FilterAllowed>" +
+            "<AccessDenied>false</AccessDenied></GPO></ComputerResults></Rsop>";
+        var computerXml = RsopEvidence.ParseXml(xml, pc, domain, now);
+        var combined = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, computerXml, null, now, null, scope);
+        Check(combined.NamedBlockers.Any(x => x.Scope == "Computer" &&
+                x.ReviewState == "Review first (GPO reported applied)") &&
+            !combined.ProvesWinningGpo && !combined.PermitsAutomaticRemediation,
+            "Current imported GPO report must not be hidden by weaker AD-only evidence.");
     }
 
     private static void TestDomainPilotReadiness()

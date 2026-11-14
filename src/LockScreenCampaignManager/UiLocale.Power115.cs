@@ -32,7 +32,11 @@ internal static partial class UiLocale
         ["Unknown: security filtering"] = "Неизвестно: фильтрация доступа",
         ["Not configured"] = "Не настроено",
         ["Merge candidate"] = "Возможный Merge",
-        ["Replace candidate"] = "Возможный Replace"
+        ["Replace candidate"] = "Возможный Replace",
+        ["Conditional: loopback Replace candidate"] = "Условно: возможен Loopback Replace",
+        ["Conditional: loopback unknown"] = "Условно: режим Loopback не определён",
+        ["Conditional: loopback not confirmed"] = "Условно: Loopback не подтверждён на клиенте",
+        ["Historical AD scope"] = "Устаревший снимок области AD"
     };
     private static readonly Dictionary<string, string> Power115Hebrew =
         new(StringComparer.Ordinal)
@@ -62,7 +66,11 @@ internal static partial class UiLocale
         ["Unknown: security filtering"] = "לא ידוע: סינון הרשאות",
         ["Not configured"] = "לא מוגדר",
         ["Merge candidate"] = "Merge אפשרי",
-        ["Replace candidate"] = "Replace אפשרי"
+        ["Replace candidate"] = "Replace אפשרי",
+        ["Conditional: loopback Replace candidate"] = "מותנה: Loopback Replace אפשרי",
+        ["Conditional: loopback unknown"] = "מותנה: מצב Loopback לא ידוע",
+        ["Conditional: loopback not confirmed"] = "מותנה: Loopback לא אומת במחשב",
+        ["Historical AD scope"] = "צילום תחולת AD ישן"
     };
     private static readonly Dictionary<string, string> Power115EnglishByRussian =
         Power115Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);

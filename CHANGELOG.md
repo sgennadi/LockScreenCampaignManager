@@ -1,3 +1,11 @@
+## 0.4.0-preview.117 — conservative GPO flags, loopback and evidence precedence (2026-11-14)
+
+1. Distinguish conditional loopback Replace/Merge processing from normal User OU and computer-OU User GPO sources.
+2. Preserve absent GPC flags=0 while rejecting malformed, negative and unsupported GPO flags as unknown.
+3. Prevent stale/partial/computer-only AD scans from verifying missing per-user evidence, and mark stale loopback unverified.
+4. Keep current imported gpresult applied/filtered GPO evidence ahead of weaker AD-only observations when deduplicating named source settings.
+5. Add RU/HE labels, native self-tests, offline contracts and release documentation; no AD/GPO/endpoint writes.
+
 ## 0.4.0-preview.116 — Windows DPI and text overflow fixes (2026-11-14)
 
 1. Screen Saver wizard: move Browse .scr/.exe to its own content-sized row; let safety notes and idle/slide controls expand without clipping.

@@ -93,6 +93,18 @@ internal static partial class NativeGpoDomainAudit
                 if (loopback != "Not configured")
                     loopbackUserGpos = ReadScopedLinks(ldap, machineLevels, user,
                         actualDc, domain, baseDn, "User", "Computer OU (loopback)");
+                // Replace may skip User OU GPOs, but the endpoint's actual
+                // policy processing remains unverified by this DC scan.
+                normalUserGpos = normalUserGpos with {
+                    Rows = normalUserGpos.Rows.Select(x => x with {
+                        State = QualifyLoopbackUserRow(x.State, loopback, false)
+                    }).ToArray()
+                };
+                loopbackUserGpos = loopbackUserGpos with {
+                    Rows = loopbackUserGpos.Rows.Select(x => x with {
+                        State = QualifyLoopbackUserRow(x.State, loopback, true)
+                    }).ToArray()
+                };
             }
             var rows = machineGpos.Rows.Concat(normalUserGpos.Rows)
                 .Concat(loopbackUserGpos.Rows).ToArray();
@@ -103,7 +115,9 @@ internal static partial class NativeGpoDomainAudit
                 "Site association/site GPOs, WMI evaluation, GPP item-level targeting, " +
                 "CSE execution, group membership refresh, replication and MDM remain unverified.",
                 "User GPO security is evaluated with the user's AD token; endpoint " +
-                "computer Read permissions for user policy processing are not verified."
+                "computer Read permissions for user policy processing are not verified.",
+                "Loopback Replace/Merge are candidates, not confirmed client modes. " +
+                    "Normal User OU and computer-OU user policies can be conditional."
             ];
             return JsonSerializer.SerializeToElement(new
             {
@@ -296,9 +310,9 @@ internal static partial class NativeGpoDomainAudit
                     display = NativeAdDiscovery.Attr(policy, "displayName");
                     if (display.Length == 0) display = id.ToString("D");
                     string rawFlags = NativeAdDiscovery.Attr(policy, "flags");
-                    if (!int.TryParse(rawFlags, NumberStyles.Integer,
-                        CultureInfo.InvariantCulture, out int flags))
-                        flags = 0;
+                    if (!TryGpoFlags(rawFlags, out int flags))
+                        throw new InvalidDataException(
+                            "Missing, malformed or unsupported GPO flags.");
                     wmi = NativeAdDiscovery.Attr(policy, "gPCWQLFilter").Length > 0
                         ? "Unverified" : "None";
                     security = EvaluateSecurity(ldap, link.Dn, identity);
@@ -340,6 +354,31 @@ internal static partial class NativeGpoDomainAudit
             }
         }
         return new ScopedRows(rows, complete);
+    }
+
+    // AD permits an absent GPC flags attribute; it means both halves enabled.
+    // Explicit malformed or out-of-range values must never be read as 0.
+    internal static bool TryGpoFlags(string raw, out int flags)
+    {
+        flags = 0;
+        return raw.Length == 0 ||
+            (int.TryParse(raw, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out flags) && flags is >= 0 and <= 3);
+    }
+
+    // The selected DC never proves that the endpoint's loopback mode ran.
+    internal static string QualifyLoopbackUserRow(
+        string state, string mode, bool fromComputerOu)
+    {
+        if (state is not ("AD candidate" or "Conditional: WMI not evaluated"))
+            return state; // Preserve exclusions and unknown ACL/source states.
+        if (fromComputerOu)
+            return "Conditional: loopback not confirmed";
+        return mode switch {
+            "Replace candidate" => "Conditional: loopback Replace candidate",
+            "Unknown" => "Conditional: loopback unknown",
+            _ => state
+        };
     }
 
     private static string Classify(int linkFlags, bool blocked, bool enforced,
