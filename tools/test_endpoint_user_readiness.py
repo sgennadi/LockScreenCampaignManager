@@ -24,6 +24,8 @@ class EndpointUserReadinessContracts(unittest.TestCase):
             "CheckExactKeys(", "GetArrayLength() != expected",
             "StrictUtf8.GetByteCount(json) > MaxBytes",
             "SHA256.HashData(", "SignedByDomain => false",
+            "UserSid", "currentIdentity.User?.Value", "hasUserSid",
+            "PilotUserSidCorrelation.ValidDomainAccountSid(",
             "ProvesWinningGpo => false", "ProvesScreenSaverDisplayed => false"
         ):
             self.assertIn(marker, model, marker)
@@ -79,6 +81,41 @@ class EndpointUserReadinessContracts(unittest.TestCase):
         self.assertNotIn("Process.Start(", pilot)
         self.assertNotIn("ModifyRequest(", pilot)
 
+    def test_exact_ad_sid_correlation_and_legacy_fail_closed(self):
+        sid = read("PilotUserSidCorrelation.cs")
+        endpoint = read("EndpointUserReadinessEvidence.cs")
+        scoped = read("DomainGpoScopeEvidence.cs")
+        ldap = read("NativeGpoDomainAudit.PilotScope.cs")
+        readiness = read("DomainGpoPilotReadiness.cs")
+        tests = read("SelfTests.cs")
+        for marker in ("ValidDomainAccountSid(", "Matches(",
+                       "SecurityIdentifier(sid)", "string.Equals(adSid, endpointSid",
+                       "sid.Split('-').Length != 8"):
+            self.assertIn(marker, sid, marker)
+        for marker in ("UserSid", "hasUserSid",
+                       "currentIdentity.User?.Value", "CheckExactKeys(root",
+                       "PilotUserSidCorrelation.ValidDomainAccountSid"):
+            self.assertIn(marker, endpoint, marker)
+        for marker in ("internal string UserSid", "userSid = data.TryGetProperty(",
+                       "requestedUser.Length == 0 && userSid.Length > 0"):
+            self.assertIn(marker, scoped, marker)
+        for marker in ("userSid = user?.Sid", "new SecurityIdentifier(sidBytes, 0)",
+                       'string objectSid =', '"objectSid", "tokenGroups"'):
+            self.assertIn(marker, ldap, marker)
+        for marker in ("PilotUserSidCorrelation.Matches(adScope.UserSid, endpoint.UserSid)",
+                       "adScope.Fresh(now) && adScope.Complete",
+                       "adScope.RequestedUser.Length > 0",
+                       'Add(findings, "User identity correlation", "Not verified"',
+                       'Add(findings, "User identity correlation", "Information"',
+                       "if (!fresh || !correlated)", "return;"):
+            self.assertIn(marker, readiness, marker)
+        for marker in ("WithSid(valid, pilotSid)", "WithSid(valid, otherSid)",
+                       "var wrongUser",
+                       "var unselected", "var legacy", "var past",
+                       "User Screen Saver active",
+                       "PilotUserSidCorrelation.Matches"):
+            self.assertIn(marker, tests, marker)
+
     def test_standalone_mode_tests_localization_and_release(self):
         self.assertIn('args.Contains("--endpoint-user-probe"', read("Program.cs"))
         self.assertIn('"Endpoint user Screen Saver probe...", OpenEndpointUserProbe',
@@ -97,7 +134,7 @@ class EndpointUserReadinessContracts(unittest.TestCase):
                        "!result.SignedByDomain", "IsFresh(now)",
                        "PermitsAutomaticRemediation"):
             self.assertIn(marker, read("SelfTests.cs"))
-        self.assertIn("0.4.0-preview.120", read("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.121", read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW114.md").is_file())
 
 if __name__ == "__main__":

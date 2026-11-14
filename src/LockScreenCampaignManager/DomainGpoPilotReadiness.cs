@@ -127,7 +127,8 @@ internal sealed class DomainGpoPilotReadiness
         AddXml(findings, "User", userXml?.ReadUtc,
             userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries,
             currentAd && adScope?.User.Length > 0);
-        AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
+        AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now,
+            adScope);
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
         AddSysvolSystem(findings, sysvolSystem, adScope, now);
@@ -280,7 +281,7 @@ internal sealed class DomainGpoPilotReadiness
 
     private static void AddEndpointUser(List<DomainPilotFinding> findings,
         EndpointUserReadinessEvidence? endpoint, UserRsopEvidence? userXml,
-        int idleSeconds, DateTimeOffset now)
+        int idleSeconds, DateTimeOffset now, DomainGpoScopeEvidence? adScope)
     {
         static void Add(List<DomainPilotFinding> target, string area, string state,
             string observed, string next) =>
@@ -295,14 +296,43 @@ internal sealed class DomainGpoPilotReadiness
             return;
         }
         bool fresh = endpoint.IsFresh(now);
+        // Exact verified LDAP user SID must match the HKCU process SID.
+        // Name equality alone (SAM vs UPN, admin/elevation, RDS sessions)
+        // is not reliable. Legacy unsigned snapshots with no SID stay readable
+        // but MUST NOT produce findings attributed to the pilot AD user.
+        bool correlated = adScope is not null &&
+            adScope.Fresh(now) && adScope.Complete &&
+            adScope.RequestedUser.Length > 0 &&
+            PilotUserSidCorrelation.Matches(adScope.UserSid, endpoint.UserSid);
         Add(findings, "User HKCU snapshot",
-            fresh ? "Information" : "Not verified",
+            fresh && correlated ? "Information" : "Not verified",
             "Unsigned " + endpoint.Session + " HKCU snapshot for " +
             endpoint.User + " captured " + endpoint.CapturedUtc.ToString("u") +
             "; SHA-256 " + endpoint.Sha256 +
             (fresh ? "." : " [STALE: older than ten minutes]."),
-            "The JSON is operator-supplied. Computer/domain strings and SHA-256 " +
-            "do not authenticate the endpoint, user or winning Group Policy.");
+            "The JSON is operator-supplied. SID comparison does not authenticate " +
+            "the endpoint, user or winning Group Policy.");
+        if (!fresh || !correlated)
+        {
+            Add(findings, "User identity correlation", "Not verified",
+                !fresh
+                    ? "User HKCU snapshot is stale. Current policy values not verified."
+                    : adScope is null || !adScope.Fresh(now) || !adScope.Complete ||
+                        adScope.RequestedUser.Length == 0
+                        ? "No fresh complete AD scope for the exact selected user."
+                        : endpoint.UserSid.Length == 0 || adScope.UserSid.Length == 0
+                            ? "Selected AD user or local HKCU report has no verified SID."
+                            : "Local HKCU SID differs from selected AD user SID.",
+                "Select the exact pilot AD user, rerun Analyze AD scope (no XML) " +
+                "and capture HKCU as that interactive Windows user. Do not " +
+                "attribute another user's Screen Saver settings to this pilot.");
+            return;
+        }
+        Add(findings, "User identity correlation", "Information",
+            "Local HKCU SID matches the exact selected AD user objectSid " +
+            "(operator-imported unsigned evidence).",
+            "The SID match is a necessary correlation, not authentication " +
+            "of the JSON, live session or applied User GPO.");
         if (userXml is not null &&
             !userXml.UserPrincipal.Equals(endpoint.User,
                 StringComparison.OrdinalIgnoreCase))

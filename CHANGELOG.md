@@ -1,3 +1,10 @@
+## 0.4.0-preview.121 — fail-closed AD-user ↔ HKCU identity correlation (2026-11-15)
+
+1. Read exact selected AD user `objectSid` into the read-only GPO scope; include signed-in Windows process SID in newly captured private HKCU snapshots.
+2. Require fresh, complete selected AD scope, same exact user SID, and fresh HKCU snapshot before diagnosing selected-user Screen Saver registry settings.
+3. Keep legacy unsigned v1 HKCU reports importable but non-authoritative; reject malformed new SIDs/unknown JSON keys and suppress misattributed findings when user identities differ.
+4. Extend native and offline source regression, preserve no-XML workflow, EN/RU/HE labels, simulated HiDPI and Windows x86/x64 safety CI gates. No remote operations or policy writes.
+
 ## 0.4.0-preview.120 — local SYSTEM SYSVOL GPO access evidence (2026-11-14)
 
 1. Add an explicitly approved, local-only Windows SYSTEM SYSVOL canary to read one exact GPO's GPT.INI and optional User/Machine Registry.pol through selected DC UNC.

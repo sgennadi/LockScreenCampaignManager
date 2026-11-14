@@ -1674,8 +1674,21 @@ StartExecutePSFirst=true
                 values = readings
             });
         }
+        const string pilotSid = "S-1-5-21-1001-1002-1003-1105";
+        const string otherSid = "S-1-5-21-1001-1002-1003-2205";
+        static string WithSid(string json, string sid) =>
+            json.Replace("\"session\":", "\"userSid\":\"" + sid + "\",\"session\":",
+                StringComparison.Ordinal);
         string valid = Fixture(now, pc);
         var result = EndpointUserReadinessEvidence.ParseJson(valid, now);
+        var current = EndpointUserReadinessEvidence.ParseJson(
+            WithSid(valid, pilotSid), now);
+        Check(result.UserSid.Length == 0 && current.UserSid == pilotSid &&
+            PilotUserSidCorrelation.Matches(pilotSid, current.UserSid) &&
+            !PilotUserSidCorrelation.Matches(pilotSid, otherSid) &&
+            !PilotUserSidCorrelation.Matches(pilotSid, "") &&
+            !PilotUserSidCorrelation.ValidDomainAccountSid("S-1-5-18"),
+            "Only exact user SIDs can correlate pilot HKCU and AD; old JSON is unverified.");
         Check(result.Computer == pc && result.Domain == domain &&
             result.User == @"EXAMPLE\pilot" && result.Values.Count == 9 &&
             result.IsFresh(now) && !result.SignedByDomain &&
@@ -1702,6 +1715,8 @@ StartExecutePSFirst=true
             Reject(valid.Replace("\"computer\":\"pc01.example.com\"",
                 "\"computer\":\"pc01.other.com\"", StringComparison.Ordinal), now) &&
             Reject(Fixture(now.AddMinutes(4), pc), now) &&
+            Reject(WithSid(valid, "not-a-sid"), now) &&
+            Reject(WithSid(valid, "S-1-5-18"), now) &&
             Reject(new string('x', 65_536), now),
             "Endpoint JSON fails closed on extra/duplicate keys, scopes, states, " +
             "mismatched DNS identity, future timestamps and oversize input.");
@@ -1748,27 +1763,69 @@ StartExecutePSFirst=true
         });
         var report = DomainWideGpoReport.Parse(raw, domain,
             "dc01.example.com", [ou], []);
-        var readiness = DomainGpoPilotReadiness.Build(
-            report, pc, ou, 600, null, null, null, scanNow, result);
-        Check(readiness.EndpointUserImported &&
-            readiness.Findings.Any(x => x.Area == "User Screen Saver active" &&
+        var unselected = DomainGpoPilotReadiness.Build(
+            report, pc, ou, 600, null, null, null, scanNow, current);
+        Check(unselected.EndpointUserImported &&
+            unselected.Findings.Any(x => x.Area == "User identity correlation" &&
+                x.State == "Not verified") &&
+            !unselected.Findings.Any(x => x.Area == "User Screen Saver active"),
+            "HKCU from a signed-in user must not be attributed without selected AD scope.");
+
+        const string userOu = "OU=Users,DC=example,DC=com";
+        var scopedData = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain, dc = "dc01.example.com", computer = pc, computerOu = ou,
+            actualComputerOu = ou, requestedUser = "pilot",
+            user = "pilot", userSid = pilotSid, actualUserOu = userOu,
+            computerToken = "Read", userToken = "Read",
+            loopback = "Not configured", observedUtc = scanNow,
+            complete = true, provesWinningGpo = false,
+            provesClientApplication = false,
+            links = Array.Empty<object>(), limitations = Array.Empty<string>()
+        });
+        var scope = DomainGpoScopeEvidence.Parse(scopedData, report,
+            pc, ou, "pilot", scanNow);
+        Check(scope.UserSid == pilotSid, "AD-only scope preserves the exact LDAP objectSid.");
+        var matching = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, current, scope);
+        Check(matching.Findings.Any(x => x.Area == "User identity correlation" &&
+                x.State == "Information") &&
+            matching.Findings.Any(x => x.Area == "User Screen Saver active" &&
                 x.State == "Observed concern") &&
-            readiness.Findings.Any(x => x.Area == "User Screen Saver idle" &&
+            matching.Findings.Any(x => x.Area == "User Screen Saver idle" &&
                 x.State == "Observed concern") &&
-            readiness.Findings.Any(x => x.Area == "User Screen Saver secure" &&
+            matching.Findings.Any(x => x.Area == "User Screen Saver secure" &&
                 x.State == "Source candidate") &&
-            !readiness.ProvesScreenSaverDisplayed &&
-            !readiness.ProvesWinningGpo &&
-            !readiness.PermitsAutomaticRemediation,
-            "Manual HKCU snapshot flags disabled and late Screen Saver without claiming winner.");
+            !matching.ProvesScreenSaverDisplayed &&
+            !matching.ProvesWinningGpo && !matching.PermitsAutomaticRemediation,
+            "Fresh matching user SID permits bounded HKCU observations, never winning GPO claims.");
+
+        var wrongUser = EndpointUserReadinessEvidence.ParseJson(
+            WithSid(valid, otherSid), now);
+        var mismatch = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, wrongUser, scope);
+        Check(mismatch.Findings.Any(x => x.Area == "User identity correlation" &&
+                x.State == "Not verified" &&
+                x.Observation.Contains("differs", StringComparison.Ordinal)) &&
+            !mismatch.Findings.Any(x => x.Area == "User Screen Saver active") &&
+            !mismatch.Findings.Any(x => x.Area == "User Screen Saver idle"),
+            "Other user HKCU must never be diagnosed as the selected AD user.");
+
+        var legacy = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, result, scope);
+        Check(legacy.Findings.Any(x => x.Area == "User identity correlation" &&
+                x.State == "Not verified") &&
+            !legacy.Findings.Any(x => x.Area == "User Screen Saver active"),
+            "Legacy HKCU snapshots remain importable but cannot make user findings.");
 
         var past = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
-            null, null, null, scanNow, stale);
+            null, null, null, scanNow,
+            EndpointUserReadinessEvidence.ParseJson(
+                WithSid(Fixture(now.AddMinutes(-11), pc), pilotSid), now), scope);
         Check(past.Findings.Any(x => x.Area == "User HKCU snapshot" &&
                 x.State == "Not verified") &&
             !past.Findings.Any(x => x.Area == "User Screen Saver active" &&
                 x.State == "Observed concern"),
-            "Expired HKCU evidence never receives a current observed-concern verdict.");
+            "Expired HKCU evidence never receives current user policy findings.");
     }
 
 

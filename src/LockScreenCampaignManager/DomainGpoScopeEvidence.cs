@@ -21,6 +21,7 @@ internal sealed class DomainGpoScopeEvidence
     internal string ActualComputerOu { get; private init; } = "";
     internal string RequestedUser { get; private init; } = "";
     internal string User { get; private init; } = "";
+    internal string UserSid { get; private init; } = "";
     internal string ActualUserOu { get; private init; } = "";
     internal string Loopback { get; private init; } = "";
     internal string ComputerToken { get; private init; } = "";
@@ -53,6 +54,13 @@ internal sealed class DomainGpoScopeEvidence
         if (!NativeGpoConflictScan.Inside(actualComputerOu, computerOu))
             throw new InvalidDataException("AD computer object was not verified within selected OU.");
         string user = Read(data, "user", 256);
+        // Older AD-only JSON may not include userSid. Keep it readable but
+        // NEVER use an absent/empty SID to verify user HKCU identity.
+        string userSid = data.TryGetProperty("userSid", out var sidProp)
+            ? Read(data, "userSid", 184) : "";
+        if ((userSid.Length > 0 && !PilotUserSidCorrelation.ValidDomainAccountSid(userSid)) ||
+            (requestedUser.Length == 0 && userSid.Length > 0))
+            throw new InvalidDataException("Selected AD user SID is malformed or unexpected.");
         string actualUserOu = Read(data, "actualUserOu", 2048);
         string loopback = Read(data, "loopback", 40);
         if (loopback is not ("Not configured" or "Merge candidate" or
@@ -154,7 +162,8 @@ internal sealed class DomainGpoScopeEvidence
         {
             Domain = report.Domain, Dc = report.Dc, Computer = computer,
             ComputerOu = computerOu, ActualComputerOu = actualComputerOu,
-            RequestedUser = requestedUser, User = user, ActualUserOu = actualUserOu,
+            RequestedUser = requestedUser, User = user, UserSid = userSid,
+            ActualUserOu = actualUserOu,
             Loopback = loopback, ObservedUtc = observed.ToUniversalTime(),
             ComputerToken = computerToken, UserToken = userToken,
             Complete = done.GetBoolean(), Links = values,
