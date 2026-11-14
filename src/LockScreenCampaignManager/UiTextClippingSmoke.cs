@@ -84,6 +84,47 @@ internal static class UiTextClippingSmoke
                     "AD deployment title should wrap instead of ellipsis.");
         }
 
+        if (form is DomainDeploymentForm)
+        {
+            var connection = all.OfType<Panel>().FirstOrDefault(x =>
+                x.Name == "DeploymentConnectionPanel");
+            var layout = all.OfType<TableLayoutPanel>().FirstOrDefault(x =>
+                x.Name == "DeploymentConnectionContents");
+            var accounts = all.OfType<TableLayoutPanel>().FirstOrDefault(x =>
+                x.Name == "DeploymentAccountSection");
+            var buttons = all.OfType<FlowLayoutPanel>().FirstOrDefault(x =>
+                x.Name == "DeploymentAccountButtons");
+            var current = all.OfType<RadioButton>().FirstOrDefault(x =>
+                x.Name == "DeploymentCurrentAccount");
+            var alternate = all.OfType<RadioButton>().FirstOrDefault(x =>
+                x.Name == "DeploymentAlternateAccount");
+            var userField = all.OfType<TableLayoutPanel>().FirstOrDefault(x =>
+                x.Name == "DeploymentConnectionAdUserField");
+            var passwordField = all.OfType<TableLayoutPanel>().FirstOrDefault(x =>
+                x.Name == "DeploymentConnectionPasswordField");
+            if (connection is null || !connection.AutoScroll || layout is null ||
+                !layout.AutoSize || layout.RowStyles.Any(x =>
+                    x.SizeType != SizeType.AutoSize) ||
+                accounts is null || !accounts.AutoSize ||
+                accounts.RowStyles.Any(x => x.SizeType != SizeType.AutoSize) ||
+                buttons is null || !buttons.AutoSize || !buttons.WrapContents ||
+                current is null || alternate is null ||
+                !current.AutoSize || !alternate.AutoSize ||
+                userField is null || passwordField is null ||
+                userField.RowStyles.Any(x => x.SizeType != SizeType.AutoSize) ||
+                passwordField.RowStyles.Any(x => x.SizeType != SizeType.AutoSize))
+                throw new InvalidOperationException(
+                    "Current account / AD user / password / buttons must retain " +
+                    "scrollable, auto-sized layout: " + profile);
+            foreach (var field in new[] { userField, passwordField })
+            {
+                var label = field.Controls.OfType<Label>().FirstOrDefault();
+                if (label is null || !label.AutoSize || label.AutoEllipsis)
+                    throw new InvalidOperationException(
+                        "AD account field caption clipped: " + profile);
+            }
+        }
+
         var fields = all.OfType<TableLayoutPanel>()
             .FirstOrDefault(x => x.Name == "AssignmentScrollableFields");
         if (fields is not null)
