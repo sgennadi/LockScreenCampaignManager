@@ -476,8 +476,9 @@ internal sealed class DomainGpoPilotReadiness
             int notAssessed = userLinks.Count(x =>
                 x.ComputerRead == "Not assessed");
             findings.Add(new DomainPilotFinding("Computer GPO Read",
-                !complete || deniedRead > 0 || unknownRead > 0
-                    ? "Not verified" : "Information",
+                complete && deniedRead > 0 ? "Source candidate" :
+                    !complete || unknownRead > 0 ? "Not verified" :
+                    "Information",
                 readable + " User GPO links grant computer GPC Read; " +
                 deniedRead + " explicitly deny; " +
                 unknownRead + " unresolved; " +
