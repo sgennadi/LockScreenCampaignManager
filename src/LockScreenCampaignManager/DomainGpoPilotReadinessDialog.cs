@@ -76,7 +76,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Navy
         }, 0, 0);
         header.Controls.Add(new Label {
-            Text = UiLocale.Display("Correlates independent DC GPO, unsigned User/Computer gpresult XML and optional endpoint power. No automatic verdict or changes."),
+            Text = UiLocale.Display("AD-first: OU, nested groups, ACL, WMI candidates and loopback. gpresult XML and HKCU are optional; no policy changes."),
             Dock = DockStyle.Fill, AutoEllipsis = false,
             TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiStyle.Foreground
         }, 0, 1);
