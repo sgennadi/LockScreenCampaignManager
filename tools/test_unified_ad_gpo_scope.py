@@ -115,6 +115,7 @@ class UnifiedAdGpoContracts(unittest.TestCase):
             "test_manager_features.py").read_text(encoding="utf-8"))
         self.assertIn("0.4.0-preview.118",
             read("LockScreenCampaignManager.csproj"))
+        self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW118.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW117.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW115.md").is_file())
 
