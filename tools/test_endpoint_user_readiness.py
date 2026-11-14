@@ -90,7 +90,7 @@ class EndpointUserReadinessContracts(unittest.TestCase):
         tests = read("SelfTests.cs")
         for marker in ("ValidDomainAccountSid(", "Matches(",
                        "SecurityIdentifier(sid)", "string.Equals(adSid, endpointSid",
-                       'sid.Split(\'-\').Length != 8'):
+                       "sid.Split('-').Length != 8"):
             self.assertIn(marker, sid, marker)
         for marker in ("UserSid", "hasUserSid",
                        "currentIdentity.User?.Value", "CheckExactKeys(root",
@@ -110,10 +110,10 @@ class EndpointUserReadinessContracts(unittest.TestCase):
                        "if (!fresh || !correlated)", "return;"):
             self.assertIn(marker, readiness, marker)
         for marker in ("WithSid(valid, pilotSid)", "WithSid(valid, otherSid)",
-                       "validWithSid" if False else "var wrongUser",
+                       "var wrongUser",
                        "var unselected", "var legacy", "var past",
                        "User Screen Saver active",
-                       'No fresh complete AD scope' if False else "PilotUserSidCorrelation.Matches"):
+                       "PilotUserSidCorrelation.Matches"):
             self.assertIn(marker, tests, marker)
 
     def test_standalone_mode_tests_localization_and_release(self):
