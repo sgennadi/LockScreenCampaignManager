@@ -111,6 +111,7 @@ internal static partial class NativeGpoDomainAudit
                 data = new {
                     domain, dc = actualDc, computer, computerOu,
                     actualComputerOu = machineParent,
+                    requestedUser = userName,
                     user = user?.Name ?? "", actualUserOu,
                     computerToken = machine.TokenStatus,
                     userToken = user?.TokenStatus ?? "Not selected",
