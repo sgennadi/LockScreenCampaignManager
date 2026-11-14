@@ -108,9 +108,11 @@ internal sealed class DomainGpoPilotReadiness
                 "Review scripts, CSEs, GPP targeting, ACL/WMI and site links separately.");
 
         AddXml(findings, "Computer", computerXml?.ReadUtc,
-            computerXml?.IsHistorical, computerXml?.Sha256, computerXml?.UnidentifiedEntries);
+            computerXml?.IsHistorical, computerXml?.Sha256, computerXml?.UnidentifiedEntries,
+            adScope is not null);
         AddXml(findings, "User", userXml?.ReadUtc,
-            userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries);
+            userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries,
+            adScope is not null);
         AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
@@ -145,7 +147,11 @@ internal sealed class DomainGpoPilotReadiness
                 Add(findings, scope + " GPO source", "Not verified",
                     unknown + " linked candidate blocker setting(s) lack conclusive " +
                     scope + " gpresult GPO flags.",
-                    "Collect a fresh full " + scope + " gpresult XML in the correct context.");
+                    adScope is null
+                        ? "Run Analyze AD scope (no XML) to check target OU, nested " +
+                          "security groups, ACL and loopback."
+                        : "AD source applicability was independently analyzed. " +
+                          "Optional gpresult adds endpoint-session evidence.");
             if (reportedFiltered > 0)
                 Add(findings, scope + " GPO source", "Information",
                     reportedFiltered + " linked candidate blocker setting(s) are " +
@@ -509,14 +515,19 @@ internal sealed class DomainGpoPilotReadiness
     }
 
     private static void AddXml(List<DomainPilotFinding> findings, string scope,
-        DateTimeOffset? read, bool? historical, string? digest, int? unresolved)
+        DateTimeOffset? read, bool? historical, string? digest, int? unresolved,
+        bool adScopeAvailable = false)
     {
         if (read is null)
         {
-            findings.Add(new DomainPilotFinding(scope + " gpresult", "Not verified",
-                "No " + scope + " RSoP XML was imported.",
-                "Import a private local gpresult /scope " +
-                scope.ToLowerInvariant() + " /x XML from the intended pilot context."));
+            findings.Add(new DomainPilotFinding(scope + " gpresult",
+                adScopeAvailable ? "Information" : "Not verified",
+                "No " + scope + " RSoP XML was imported (OPTIONAL).",
+                adScopeAvailable
+                    ? "AD-only OU/group/ACL projection is available; import XML only if " +
+                      "you need extra endpoint-session evidence."
+                    : "Analyze AD scope (no XML) first, or optionally import " +
+                      "gpresult /scope " + scope.ToLowerInvariant() + " /x XML."));
             return;
         }
         findings.Add(new DomainPilotFinding(scope + " gpresult",
