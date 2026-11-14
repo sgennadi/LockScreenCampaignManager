@@ -332,9 +332,9 @@ internal sealed class ModernMessageDialog : Form
             if (ClientSize.Height < neededClientHeight &&
                 WindowState == FormWindowState.Normal)
             {
-                int available = Math.Max(MinimumSize.Height,
+                int screenLimit = Math.Max(MinimumSize.Height,
                     Screen.FromControl(this).WorkingArea.Height - 40);
-                Height = Math.Min(available,
+                Height = Math.Min(screenLimit,
                     Height + neededClientHeight - ClientSize.Height);
             }
         }
