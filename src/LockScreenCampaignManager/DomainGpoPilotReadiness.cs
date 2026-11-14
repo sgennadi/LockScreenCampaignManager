@@ -458,8 +458,9 @@ internal sealed class DomainGpoPilotReadiness
             " from User OU, " +
             links.Count(x => x.Origin == "Computer OU (loopback)") +
             " from Computer OU.",
-            "Merge/Replace candidates are NOT proven winners. Site, WMI, " +
-            "CSE processing and computer Read permission remain unverified."));
+            "Merge/Replace candidates are NOT proven winners. GPC computer " +
+            "Read is checked separately; site/WMI, SYSVOL access, endpoint " +
+            "token and CSE processing remain unverified."));
         if (scope.User.Length == 0)
             findings.Add(new DomainPilotFinding("User scope", "Not verified",
                 "No exact AD user specified; User OU, nested group security " +
