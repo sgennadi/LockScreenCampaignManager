@@ -103,16 +103,16 @@ internal static class UiTextClippingSmoke
             var passwordField = all.OfType<TableLayoutPanel>().FirstOrDefault(x =>
                 x.Name == "DeploymentConnectionPasswordField");
             if (connection is null || !connection.AutoScroll || layout is null ||
-                !layout.AutoSize || layout.RowStyles.Any(x =>
+                !layout.AutoSize || layout.RowStyles.Cast<RowStyle>().Any(x =>
                     x.SizeType != SizeType.AutoSize) ||
                 accounts is null || !accounts.AutoSize ||
-                accounts.RowStyles.Any(x => x.SizeType != SizeType.AutoSize) ||
+                accounts.RowStyles.Cast<RowStyle>().Any(x => x.SizeType != SizeType.AutoSize) ||
                 buttons is null || !buttons.AutoSize || !buttons.WrapContents ||
                 current is null || alternate is null ||
                 !current.AutoSize || !alternate.AutoSize ||
                 userField is null || passwordField is null ||
-                userField.RowStyles.Any(x => x.SizeType != SizeType.AutoSize) ||
-                passwordField.RowStyles.Any(x => x.SizeType != SizeType.AutoSize))
+                userField.RowStyles.Cast<RowStyle>().Any(x => x.SizeType != SizeType.AutoSize) ||
+                passwordField.RowStyles.Cast<RowStyle>().Any(x => x.SizeType != SizeType.AutoSize))
                 throw new InvalidOperationException(
                     "Current account / AD user / password / buttons must retain " +
                     "scrollable, auto-sized layout: " + profile);
