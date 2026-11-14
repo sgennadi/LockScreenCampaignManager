@@ -414,12 +414,13 @@ internal sealed class DomainGpoPilotReadiness
             StringComparison.Ordinal));
         int uncertain = links.Count - candidate - excluded;
         findings.Add(new DomainPilotFinding("AD applicability",
-            fresh ? "Information" : "Not verified",
+            complete ? "Information" : "Not verified",
             scope.Computer + " / " +
             (scope.User.Length > 0 ? scope.User : "[no user selected]") +
             " | DC " + scope.Dc + " | " +
-            candidate + " ACL+OU candidates, " + excluded + " excluded, " +
-            uncertain + " unknown/WMI-filtered | tokenGroups Computer=" +
+            candidate + " ACL+OU source candidates (not proven applied), " +
+            excluded + " excluded, " +
+            uncertain + " conditional/unknown | tokenGroups Computer=" +
             scope.ComputerToken + ", User=" + scope.UserToken + ".",
             "Domain object/ACL readings are not client policy application. " +
             "Missing sites, WMI and GPP targeting can change actual results."));
@@ -486,9 +487,11 @@ internal sealed class DomainGpoPilotReadiness
                     blockers.Add(new DomainPilotBlocker(row.Scope, link.Gpo,
                         link.GpoId, row.Key, row.Setting, row.Value,
                         row.Risk is ("High" or "Warning") ? row.Risk : "Warning",
-                        "AD-only (no XML)", active && complete
-                            ? "AD candidate (not applied)" :
-                            "AD conditional/unverified",
+                        "AD-only (no XML)", !fresh
+                            ? "Historical AD scope" :
+                            active && complete
+                                ? "AD candidate (not applied)" :
+                                "AD conditional/unverified",
                         row.Source, link.State,
                         "OU " + link.LinkedAt + " | " + link.Origin +
                         " | ACL " + link.Security + " | WMI " + link.Wmi +
