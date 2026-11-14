@@ -458,13 +458,36 @@ internal sealed class DomainGpoPilotReadiness
             " from User OU, " +
             links.Count(x => x.Origin == "Computer OU (loopback)") +
             " from Computer OU.",
-            "Merge/Replace candidates are NOT proven winners. Site, WMI, " +
-            "CSE processing and computer Read permission remain unverified."));
+            "Merge/Replace candidates are NOT proven winners. GPC computer " +
+            "Read is checked separately; site/WMI, SYSVOL access, endpoint " +
+            "token and CSE processing remain unverified."));
         if (scope.User.Length == 0)
             findings.Add(new DomainPilotFinding("User scope", "Not verified",
                 "No exact AD user specified; User OU, nested group security " +
                 "filters and loopback User-half applicability cannot be computed.",
                 "Enter test-user SAM/UPN and rerun Analyze AD scope (no XML)."));
+        else
+        {
+            var userLinks = links.Where(x => x.Scope == "User").ToArray();
+            int readable = userLinks.Count(x => x.ComputerRead == "Read");
+            int deniedRead = userLinks.Count(x =>
+                x.ComputerRead == "Deny");
+            int unknownRead = userLinks.Count(x =>
+                x.ComputerRead == "Unknown");
+            int notAssessed = userLinks.Count(x =>
+                x.ComputerRead == "Not assessed");
+            findings.Add(new DomainPilotFinding("Computer GPO Read",
+                complete && deniedRead > 0 ? "Source candidate" :
+                    !complete || unknownRead > 0 ? "Not verified" :
+                    "Information",
+                readable + " User GPO links grant computer GPC Read; " +
+                deniedRead + " explicitly deny; " +
+                unknownRead + " unresolved; " +
+                notAssessed + " not assessed (already excluded by another rule).",
+                "Read permission on the GPO container is checked against the " +
+                "selected computer token; SYSVOL/file access, the actual client " +
+                "token and User GPO application remain unverified."));
+        }
 
         var mapped = report.Matches.ToLookup(
             r => r.GpoId + "|" + r.Scope, StringComparer.OrdinalIgnoreCase);
@@ -500,7 +523,9 @@ internal sealed class DomainGpoPilotReadiness
                     row.Setting + " = " + row.Value + " / " +
                     link.State + "; link " + link.LinkedAt +
                     (link.Enforced ? " [Enforced]" : "") +
-                    "; ACL " + link.Security + "; WMI " + link.Wmi + ".";
+                    "; ACL " + link.Security + "; WMI " + link.Wmi +
+                    (link.Scope == "User" ? "; computer GPC Read " +
+                        link.ComputerRead : "") + ".";
                 if (details++ < 75)
                     findings.Add(new DomainPilotFinding(group, state,
                         description, "DC-only candidate, never a per-setting winner. " +
@@ -517,6 +542,8 @@ internal sealed class DomainGpoPilotReadiness
                         row.Source, link.State,
                         "OU " + link.LinkedAt + " | " + link.Origin +
                         " | ACL " + link.Security + " | WMI " + link.Wmi +
+                        (link.Scope == "User" ? " | computer GPC Read " +
+                            link.ComputerRead : "") +
                         ". Not proven applied or winning."));
             }
         }

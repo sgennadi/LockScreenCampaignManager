@@ -36,7 +36,12 @@ internal static partial class UiLocale
         ["Conditional: loopback Replace candidate"] = "Условно: возможен Loopback Replace",
         ["Conditional: loopback unknown"] = "Условно: режим Loopback не определён",
         ["Conditional: loopback not confirmed"] = "Условно: Loopback не подтверждён на клиенте",
-        ["Historical AD scope"] = "Устаревший снимок области AD"
+        ["Historical AD scope"] = "Устаревший снимок области AD",
+        ["Computer GPO Read"] = "GPO: чтение ПК",
+        ["Excluded: computer GPO Read denied"] =
+            "Исключено: компьютеру запрещено чтение GPO",
+        ["Conditional: computer Read not verified"] =
+            "Условно: право компьютера на чтение GPO не подтверждено"
     };
     private static readonly Dictionary<string, string> Power115Hebrew =
         new(StringComparer.Ordinal)
@@ -70,7 +75,12 @@ internal static partial class UiLocale
         ["Conditional: loopback Replace candidate"] = "מותנה: Loopback Replace אפשרי",
         ["Conditional: loopback unknown"] = "מותנה: מצב Loopback לא ידוע",
         ["Conditional: loopback not confirmed"] = "מותנה: Loopback לא אומת במחשב",
-        ["Historical AD scope"] = "צילום תחולת AD ישן"
+        ["Historical AD scope"] = "צילום תחולת AD ישן",
+        ["Computer GPO Read"] = "הרשאת קריאת GPO על ידי המחשב",
+        ["Excluded: computer GPO Read denied"] =
+            "לא חל: למחשב נדחתה הרשאת קריאת GPO",
+        ["Conditional: computer Read not verified"] =
+            "מותנה: הרשאת קריאת GPO של המחשב לא אומתה"
     };
     private static readonly Dictionary<string, string> Power115EnglishByRussian =
         Power115Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);

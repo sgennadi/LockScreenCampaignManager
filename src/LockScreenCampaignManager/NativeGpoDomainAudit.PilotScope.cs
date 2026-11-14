@@ -28,7 +28,8 @@ internal static partial class NativeGpoDomainAudit
     private sealed record ScopedLink(
         string Gpo, string GpoId, string Scope, string Origin,
         string LinkedAt, int Depth, int Order, bool Enforced,
-        string State, string Security, string Wmi, string LoopbackValue);
+        string State, string Security, string Wmi, string LoopbackValue,
+        string ComputerRead);
     private sealed record ScopedRows(
         IReadOnlyList<ScopedLink> Rows, bool Complete);
 
@@ -89,10 +90,11 @@ internal static partial class NativeGpoDomainAudit
                     throw new InvalidDataException("Missing user parent.");
                 var userLevels = ReadAncestry(ldap, actualUserOu, baseDn);
                 normalUserGpos = ReadScopedLinks(ldap, userLevels, user,
-                    actualDc, domain, baseDn, "User", "User OU");
+                    actualDc, domain, baseDn, "User", "User OU", machine);
                 if (loopback != "Not configured")
                     loopbackUserGpos = ReadScopedLinks(ldap, machineLevels, user,
-                        actualDc, domain, baseDn, "User", "Computer OU (loopback)");
+                        actualDc, domain, baseDn, "User", "Computer OU (loopback)",
+                        machine);
                 // Replace may skip User OU GPOs, but the endpoint's actual
                 // policy processing remains unverified by this DC scan.
                 normalUserGpos = normalUserGpos with {
@@ -114,8 +116,9 @@ internal static partial class NativeGpoDomainAudit
                 "AD-only expected applicability. Not endpoint RSoP or winning setting.",
                 "Site association/site GPOs, WMI evaluation, GPP item-level targeting, " +
                 "CSE execution, group membership refresh, replication and MDM remain unverified.",
-                "User GPO security is evaluated with the user's AD token; endpoint " +
-                "computer Read permissions for user policy processing are not verified.",
+                "User GPO ACL includes the user's Read+Apply and the selected computer's " +
+                "GPC Read checks (MS16-072). Client token, SYSVOL share/file " +
+                "access, live CSE processing and final precedence stay unverified.",
                 "Loopback Replace/Merge are candidates, not confirmed client modes. " +
                     "Normal User OU and computer-OU user policies can be conditional."
             ];
@@ -281,8 +284,11 @@ internal static partial class NativeGpoDomainAudit
 
     private static ScopedRows ReadScopedLinks(
         LdapConnection ldap, IReadOnlyList<ScopeLevel> levels, ScopeSubject identity,
-        string dc, string domain, string baseDn, string scope, string origin)
+        string dc, string domain, string baseDn, string scope, string origin,
+        ScopeSubject? computerForUser = null)
     {
+        if (scope == "User" && computerForUser is null)
+            throw new InvalidDataException("User GPO projection needs a computer read token.");
         var rows = new List<ScopedLink>();
         bool complete = true;
         foreach (var level in levels)
@@ -298,6 +304,7 @@ internal static partial class NativeGpoDomainAudit
                 string state = "Unknown: source unavailable";
                 string security = "Unknown";
                 string wmi = "Unknown";
+                string computerRead = scope == "User" ? "Not assessed" : "N/A";
                 string loopback = "";
                 bool enforced = (link.Flags & 2) != 0;
                 bool blocked = levels.Any(x => x.Depth > level.Depth && x.Block);
@@ -312,13 +319,23 @@ internal static partial class NativeGpoDomainAudit
                     string rawFlags = NativeAdDiscovery.Attr(policy, "flags");
                     if (!TryGpoFlags(rawFlags, out int flags))
                         throw new InvalidDataException(
-                            "Missing, malformed or unsupported GPO flags.");
+                            "Malformed or unsupported GPO flags.");
                     wmi = NativeAdDiscovery.Attr(policy, "gPCWQLFilter").Length > 0
                         ? "Unverified" : "None";
                     security = EvaluateSecurity(ldap, link.Dn, identity);
                     state = Classify(link.Flags, blocked, enforced,
                         NativeGpoConflictScan.IsPolicyPartDisabled(
                             flags, scope == "User"), security, wmi);
+                    if (scope == "User" && !state.StartsWith("Excluded:",
+                            StringComparison.Ordinal))
+                    {
+                        // Since MS16-072 Windows retrieves User GPOs in the
+                        // computer context. This checks GPC Read, not Apply.
+                        computerRead = EvaluateSecurity(
+                            ldap, link.Dn, computerForUser!, readOnly: true);
+                        state = QualifyComputerRead(state, computerRead);
+                        if (computerRead == "Unknown") complete = false;
+                    }
                     if (scope == "Computer" && !state.StartsWith("Excluded:",
                             StringComparison.Ordinal) &&
                         !NativeGpoConflictScan.IsPolicyPartDisabled(flags, false))
@@ -350,7 +367,7 @@ internal static partial class NativeGpoDomainAudit
                 rows.Add(new ScopedLink(Safe(display, 150), id.ToString("D"),
                     scope, origin, Safe(level.Dn, 2048),
                     level.Depth, level.Links.Count - i, enforced, state,
-                    security, wmi, loopback));
+                    security, wmi, loopback, computerRead));
             }
         }
         return new ScopedRows(rows, complete);
@@ -364,6 +381,19 @@ internal static partial class NativeGpoDomainAudit
         return raw.Length == 0 ||
             (int.TryParse(raw, NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out flags) && flags is >= 0 and <= 3);
+    }
+
+    // Read permission for the computer is required to retrieve User GPOs
+    // (MS16-072). Missing access evidence is conditional, not an applied GPO.
+    internal static string QualifyComputerRead(string state, string read)
+    {
+        if (state is not ("AD candidate" or "Conditional: WMI not evaluated"))
+            return state;
+        return read switch {
+            "Read" => state,
+            "Deny" => "Excluded: computer GPO Read denied",
+            _ => "Conditional: computer Read not verified"
+        };
     }
 
     // The selected DC never proves that the endpoint's loopback mode ran.
@@ -392,8 +422,16 @@ internal static partial class NativeGpoDomainAudit
         return wmi == "None" ? "AD candidate" : "Conditional: WMI not evaluated";
     }
 
+    // GPC Read needs directory property access; READ_CONTROL (0x20000)
+    // alone is NOT enough, even though it allows reading the descriptor.
+    internal static bool GrantsGpcReadFromAccessMask(int rights) =>
+        (rights & 0x10000000) != 0 ||
+        (rights & 0x80000000) != 0 ||
+        (rights & 0x00000010) != 0;
+
     private static string EvaluateSecurity(
-        LdapConnection ldap, string policyDn, ScopeSubject subject)
+        LdapConnection ldap, string policyDn, ScopeSubject subject,
+        bool readOnly = false)
     {
         if (subject.TokenStatus != "Read" || subject.TokenSids.Count == 0)
             return "Unknown";
@@ -410,7 +448,8 @@ internal static partial class NativeGpoDomainAudit
                 return "Unknown";
             var acl = new RawSecurityDescriptor(data, 0).DiscretionaryAcl;
             if (acl is null) return "Unknown";
-            bool readAllow = false, applyAllow = false, deny = false;
+            bool readAllow = false, applyAllow = false;
+            bool readDeny = false, applyDeny = false;
             foreach (GenericAce ace in acl)
             {
                 if ((ace.AceFlags & AceFlags.InheritOnly) != 0 ||
@@ -419,9 +458,8 @@ internal static partial class NativeGpoDomainAudit
                     continue;
                 int rights = q.AccessMask;
                 bool all = (rights & 0x10000000) != 0;
-                bool read = all || (rights & 0x80000000) != 0 ||
-                    (rights & 0x00020000) != 0 ||
-                    (rights & 0x00000010) != 0;
+                // READ_CONTROL alone only reads the ACL, not GPO attributes.
+                bool read = GrantsGpcReadFromAccessMask(rights);
                 bool apply = all || (rights & 0x00000100) != 0;
                 if (q is ObjectAce objectAce &&
                     (objectAce.ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
@@ -432,16 +470,20 @@ internal static partial class NativeGpoDomainAudit
                     read = false;
                 }
                 if (q.AceQualifier == AceQualifier.AccessDenied)
-                    deny |= read || apply;
+                {
+                    readDeny |= read;
+                    applyDeny |= apply;
+                }
                 if (q.AceQualifier == AceQualifier.AccessAllowed)
                 {
                     readAllow |= read;
                     applyAllow |= apply;
                 }
             }
-            return deny ? "Deny" :
-                readAllow && applyAllow ? "Read+Apply" :
-                "Unknown";
+            if (readOnly)
+                return readDeny ? "Deny" : readAllow ? "Read" : "Unknown";
+            return readDeny || applyDeny ? "Deny" :
+                readAllow && applyAllow ? "Read+Apply" : "Unknown";
         }
         catch (Exception e) when (e is DirectoryOperationException or
             LdapException or InvalidDataException or ArgumentException or

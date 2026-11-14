@@ -22,6 +22,8 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         self.assertIn('mode == "AllGpos"', router)
         self.assertIn("NativeGpoDomainAudit.Execute(", router)
         for x in ("ReadScopedLinks(", "NativeGpoConflictScan.ParseRegistryPol(",
+                  "QualifyComputerRead(", "computerForUser!", "readOnly: true",
+                  "computer GPO Read denied", "computer Read not verified",
                   "NativeGpoConflictScan.PolicyHalfHasConfiguredSettings("):
             self.assertIn(x, scoped)
         for forbidden in ("Process.Start(", "ModifyRequest(", "Registry.SetValue(",
@@ -61,11 +63,14 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         all_ui = read("DomainWideGpoReportDialog.cs")
         form = read("GpoOperationsForm.DomainAudit.cs")
         for key in ("DomainWideGpoReport report", "requestedUser",
+                    "computerRead", "Excluded: computer GPO Read denied",
+                    "Conditional: computer Read not verified",
                     "provesWinningGpo", "provesClientApplication",
                     "Fresh(DateTimeOffset now)", "GetArrayLength() > 750",
                     "NativeGpoConflictScan.Inside("):
             self.assertIn(key, scope, key)
         for key in ("AdScopeObserved", "AddAdScope(", "adScope is not null",
+                    "Computer GPO Read", "link.ComputerRead",
                     "bool currentAd = adScope is not null",
                     "BlockerEvidencePriority(",
                     "Historical AD scope", "UserXmlMatchesScope(",
@@ -100,15 +105,17 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "wrongIdentityRejected", "Expired", "AD-only (no XML)",
                     "defaultFlags", "bothDisabled", "computerOnly",
                     "incomplete", "combined",
-                    "foreignUserXml", "matchedUserXml"):
+                    "foreignUserXml", "matchedUserXml",
+                    "unknownRead", "deniedReview", "QualifyComputerRead"):
             if key == "Expired":
                 self.assertIn("var expired =", tests)
             else:
                 self.assertIn(key, tests)
         self.assertIn("UiLocale.Power115.cs", (ROOT / "tools" /
             "test_manager_features.py").read_text(encoding="utf-8"))
-        self.assertIn("0.4.0-preview.117",
+        self.assertIn("0.4.0-preview.118",
             read("LockScreenCampaignManager.csproj"))
+        self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW118.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW117.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW115.md").is_file())
 
