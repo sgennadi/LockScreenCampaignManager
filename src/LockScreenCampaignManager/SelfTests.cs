@@ -1925,7 +1925,7 @@ StartExecutePSFirst=true
                 x.State == "Excluded: computer GPO Read denied" &&
                 x.ComputerRead == "Deny") &&
             deniedReview.Findings.Any(x => x.Area == "Computer GPO Read" &&
-                x.State == "Not verified" &&
+                x.State == "Source candidate" &&
                 x.Observation.Contains("2 explicitly deny", StringComparison.Ordinal)),
             "Explicit computer Read deny must exclude User GPO source candidates.");
 
