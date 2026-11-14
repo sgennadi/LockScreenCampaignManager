@@ -319,7 +319,7 @@ internal static partial class NativeGpoDomainAudit
                     string rawFlags = NativeAdDiscovery.Attr(policy, "flags");
                     if (!TryGpoFlags(rawFlags, out int flags))
                         throw new InvalidDataException(
-                            "Missing, malformed or unsupported GPO flags.");
+                            "Malformed or unsupported GPO flags.");
                     wmi = NativeAdDiscovery.Attr(policy, "gPCWQLFilter").Length > 0
                         ? "Unverified" : "None";
                     security = EvaluateSecurity(ldap, link.Dn, identity);
