@@ -21,7 +21,7 @@ internal static partial class NativeGpoDomainAudit
 {
     private static readonly Guid ScopeApplyRight =
         new("edacfd8f-ffb3-11d1-b41d-00a0c968f939");
-    private sealed record ScopeSubject(string Dn, string Name,
+    private sealed record ScopeSubject(string Dn, string Name, string Sid,
         string TokenStatus, IReadOnlySet<string> TokenSids);
     private sealed record ScopeLevel(string Dn, int Depth, bool Block,
         IReadOnlyList<NativeGpoLifecycleList.ParsedLink> Links);
@@ -130,6 +130,7 @@ internal static partial class NativeGpoDomainAudit
                     actualComputerOu = machineParent,
                     requestedUser = userName,
                     user = user?.Name ?? "", actualUserOu,
+                    userSid = user?.Sid ?? "",
                     computerToken = machine.TokenStatus,
                     userToken = user?.TokenStatus ?? "Not selected",
                     loopback, observedUtc = DateTimeOffset.UtcNow.ToString("O",
@@ -218,26 +219,28 @@ internal static partial class NativeGpoDomainAudit
                     "(&(objectCategory=person)(objectClass=user))",
                 "objectSid", "tokenGroups");
             if (entry.Attributes["objectSid"] is not { Count: > 0 } sid ||
-                sid[0] is not byte[] sidBytes ||
-                entry.Attributes["tokenGroups"] is not { Count: > 0 } groups)
-                return new ScopeSubject(dn, name, "Unavailable", ids);
-            ids.Add(new SecurityIdentifier(sidBytes, 0).Value);
+                sid[0] is not byte[] sidBytes)
+                return new ScopeSubject(dn, name, "", "Unavailable", ids);
+            string objectSid = new SecurityIdentifier(sidBytes, 0).Value;
+            if (entry.Attributes["tokenGroups"] is not { Count: > 0 } groups)
+                return new ScopeSubject(dn, name, objectSid, "Unavailable", ids);
+            ids.Add(objectSid);
             foreach (object item in groups)
             {
                 if (item is not byte[] groupSid)
-                    return new ScopeSubject(dn, name, "Unavailable",
+                    return new ScopeSubject(dn, name, objectSid, "Unavailable",
                         new HashSet<string>(StringComparer.OrdinalIgnoreCase));
                 ids.Add(new SecurityIdentifier(groupSid, 0).Value);
             }
             ids.Add("S-1-1-0"); // Everyone
             ids.Add("S-1-5-11"); // Authenticated Users
-            return new ScopeSubject(dn, name, "Read", ids);
+            return new ScopeSubject(dn, name, objectSid, "Read", ids);
         }
         catch (Exception e) when (e is DirectoryOperationException or
             LdapException or UnauthorizedAccessException or
             ArgumentException or InvalidDataException)
         {
-            return new ScopeSubject(dn, name, "Unavailable",
+            return new ScopeSubject(dn, name, "", "Unavailable",
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         }
     }
