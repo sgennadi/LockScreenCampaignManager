@@ -65,8 +65,8 @@ $computer=[string]$raw.computer
 $id=[string]$raw.gpoId
 [Guid]$guid=[Guid]::Empty
 if ([string]$raw.schema -cne 'lscm-sysvol-system-config/v1' -or
-    $domain -cnotmatch '^(?=.{4,253}$)[a-zA-Z0-9-]+(\\.[a-zA-Z0-9-]+)+$' -or
-    $dc -cnotmatch '^(?=.{4,253}$)[a-zA-Z0-9-]+(\\.[a-zA-Z0-9-]+)+$' -or
+    $domain -cnotmatch '^(?=.{4,253}$)[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$' -or
+    $dc -cnotmatch '^(?=.{4,253}$)[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$' -or
     -not $dc.EndsWith('.'+$domain,[StringComparison]::OrdinalIgnoreCase) -or
     $computer -ine ($env:COMPUTERNAME+'.'+$domain) -or
     -not [Guid]::TryParseExact($id,'D',[ref]$guid)) {
@@ -78,13 +78,13 @@ if ([int]$os.ProductType -ne 1 -or [int]$os.BuildNumber -lt 10240 -or
     -not $pc.PartOfDomain -or [string]$pc.Domain -ine $domain) {
     throw 'Only the approved domain-joined Windows client is supported.'
 }
-$base='\\'+$dc+'\\SYSVOL\\'+$domain+'\\Policies\\{'+
+$base='\\'+$dc+'\SYSVOL\'+$domain+'\Policies\{'+
     $guid.ToString('D').ToUpperInvariant()+'}'
 # A UNC path can be redirected by DFS; this probe proves only that this
 # exact local SYSTEM process could read bytes through the requested path.
-$gpt=Read-Source ($base+'\\GPT.INI') 65536
-$userPol=Read-Source ($base+'\\User\\Registry.pol') 8388608
-$machinePol=Read-Source ($base+'\\Machine\\Registry.pol') 8388608
+$gpt=Read-Source ($base+'\GPT.INI') 65536
+$userPol=Read-Source ($base+'\User\Registry.pol') 8388608
+$machinePol=Read-Source ($base+'\Machine\Registry.pol') 8388608
 $result=if($gpt -eq 'Read'){'GPT_READ'}else{'GPT_NOT_READ'}
 $report=[ordered]@{
     schema='lscm-sysvol-system/v1'
