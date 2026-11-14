@@ -171,14 +171,14 @@ internal static class UiLayoutSmokeTests
         ("Domain-wide GPO audit - offline simulated layout",
             CreateAllDcGpoSmoke, new[] {
                 "Export filtered CSV...", "Compare GPO settings...",
-                "Compare gpresult XML...", "Close" }),
+                "Compare gpresult XML...", "Analyze AD scope (no XML)...", "Close" }),
         ("Domain GPO gpresult Computer/User comparison - offline simulated layout",
             CreateGpoRsopSmoke, new[] { "Import Computer XML...",
                 "Import User XML...", "Clear Computer", "Clear User",
                 "Pilot readiness...", "Close" }),
         ("Pilot readiness — offline simulated layout",
             CreateGpoPilotReadinessSmoke, new[] {
-                "Refresh review", "Verify power (PC)...", "Review GPO blockers...",
+                "Refresh review", "Verify power (PC)...", "Analyze AD scope (no XML)...", "Review GPO blockers...",
                 "Import user HKCU JSON...", "Clear HKCU evidence",
                 "Capture this PC's user HKCU...", "Close" }),
         ("Current user HKCU probe — offline simulated layout",
