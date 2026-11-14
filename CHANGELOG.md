@@ -1,3 +1,10 @@
+## 0.4.0-preview.120 — local SYSTEM SYSVOL GPO access evidence (2026-11-14)
+
+1. Add an explicitly approved, local-only Windows SYSTEM SYSVOL canary to read one exact GPO's GPT.INI and optional User/Machine Registry.pol through selected DC UNC.
+2. Import exact PC/domain/DC/GPO, fresh, unsigned JSON into existing Pilot Readiness as a scoped SYSVOL / LocalSystem finding, without claiming actual Group Policy application.
+3. Reject wrong identities, malformed/oversized/reparse-point evidence and inconsistent statuses; keep all source/network/ACL concerns conservative.
+4. Add EN/RU/HE buttons, 100–200% simulated UI regression, offline lab kit, Windows PowerShell 5.1 validation, source contracts, release documentation and Preview.120 version. No domain writes.
+
 ## 0.4.0-preview.119 — require complete GPO token evidence (2026-11-14)
 
 1. Require the selected computer and optional exact user tokenGroups before marking an AD-only GPO scope complete; zero links or entirely excluded links are not an exception.

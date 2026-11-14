@@ -41,7 +41,11 @@ internal static partial class UiLocale
         ["Excluded: computer GPO Read denied"] =
             "Исключено: компьютеру запрещено чтение GPO",
         ["Conditional: computer Read not verified"] =
-            "Условно: право компьютера на чтение GPO не подтверждено"
+            "Условно: право компьютера на чтение GPO не подтверждено",
+        ["SYSVOL / LocalSystem"] = "SYSVOL: чтение ПК",
+        ["Import SYSTEM SYSVOL JSON..."] = "Импорт отчёта SYSVOL...",
+        ["Clear SYSVOL evidence"] = "Очистить сведения SYSVOL",
+        ["Import private local SYSTEM SYSVOL report"] = "Импорт локального отчёта SYSTEM SYSVOL"
     };
     private static readonly Dictionary<string, string> Power115Hebrew =
         new(StringComparer.Ordinal)
@@ -80,7 +84,11 @@ internal static partial class UiLocale
         ["Excluded: computer GPO Read denied"] =
             "לא חל: למחשב נדחתה הרשאת קריאת GPO",
         ["Conditional: computer Read not verified"] =
-            "מותנה: הרשאת קריאת GPO של המחשב לא אומתה"
+            "מותנה: הרשאת קריאת GPO של המחשב לא אומתה",
+        ["SYSVOL / LocalSystem"] = "קריאת SYSVOL במחשב",
+        ["Import SYSTEM SYSVOL JSON..."] = "ייבוא JSON של SYSVOL...",
+        ["Clear SYSVOL evidence"] = "ניקוי נתוני SYSVOL",
+        ["Import private local SYSTEM SYSVOL report"] = "ייבוא דוח SYSVOL מקומי של SYSTEM"
     };
     private static readonly Dictionary<string, string> Power115EnglishByRussian =
         Power115Russian.ToDictionary(x => x.Value, x => x.Key, StringComparer.Ordinal);

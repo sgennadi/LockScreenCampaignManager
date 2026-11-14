@@ -30,6 +30,9 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     private readonly Button _importEndpoint;
     private readonly Button _clearEndpoint;
     private readonly Button _captureEndpoint;
+    private readonly Button _importSysvol;
+    private readonly Button _clearSysvol;
+    private DomainSysvolSystemEvidence? _sysvolSystem;
     private EndpointUserReadinessEvidence? _endpointUser;
     private EndpointPowerObservation? _observation;
     private bool _reading;
@@ -52,8 +55,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         Name = "DomainGpoPilotReadinessDialog";
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9.5f);
-        MinimumSize = new Size(1010, 710);
-        Size = new Size(1390, 900);
+        MinimumSize = new Size(1080, 790);
+        Size = new Size(1420, 960);
         StartPosition = FormStartPosition.CenterParent;
         BackColor = UiStyle.Canvas;
         var root = new TableLayoutPanel {
@@ -64,7 +67,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -155,9 +158,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.Controls.Add(_details, 0, 3);
 
         var footer = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4
         };
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _summary.Dock = DockStyle.Fill;
@@ -220,6 +224,22 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         };
         endpointActions.Controls.Add(_clearEndpoint);
         footer.Controls.Add(endpointActions, 0, 2);
+        var sysvolActions = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, AutoScroll = true
+        };
+        _importSysvol = Button("Import SYSTEM SYSVOL JSON...", 265);
+        _importSysvol.Name = "PilotImportSystemSysvol";
+        _importSysvol.Click += (_, _) => ImportSysvolSnapshot();
+        sysvolActions.Controls.Add(_importSysvol);
+        _clearSysvol = Button("Clear SYSVOL evidence", 195);
+        _clearSysvol.Name = "PilotClearSystemSysvol";
+        _clearSysvol.Enabled = false;
+        _clearSysvol.Click += (_, _) => {
+            _sysvolSystem = null; Review();
+        };
+        sysvolActions.Controls.Add(_clearSysvol);
+        footer.Controls.Add(sysvolActions, 0, 3);
         root.Controls.Add(footer, 0, 4);
 
         FormClosing += (_, e) => {
@@ -252,6 +272,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _observation = null;
         _endpointUser = null;
         _adScope = null;
+        _sysvolSystem = null;
+        _clearSysvol.Enabled = false;
         _clearEndpoint.Enabled = false;
         Review();
     }
@@ -292,7 +314,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         {
             _assessment = DomainGpoPilotReadiness.Build(_report, computer,
                 ou, _idle, _observation, _computerXml, _userXml,
-                DateTimeOffset.UtcNow, _endpointUser, _adScope);
+                DateTimeOffset.UtcNow, _endpointUser, _adScope, _sysvolSystem);
         }
         catch (Exception ex)
         {
@@ -333,6 +355,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         Details();
         _reviewNamedGpos.Enabled = _assessment.NamedBlockers.Count > 0;
         _clearEndpoint.Enabled = _endpointUser is not null;
+        _clearSysvol.Enabled = _sysvolSystem is not null;
         _summary.Text = _assessment.NamedBlockers.Count +
             UiLocale.Display(" named GPO candidates | ") +
             _assessment.Concerns +
@@ -394,6 +417,36 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     }
 
 
+    private void ImportSysvolSnapshot()
+    {
+        if (_reading) return;
+        string computer = _computer.Text.Trim();
+        if (!NativeGpoConflictScan.SafeComputerName(computer, _report.Domain) ||
+            !_report.ComputerOus.Contains(SelectedOu, StringComparer.OrdinalIgnoreCase))
+        {
+            Review();
+            return;
+        }
+        using var picker = new OpenFileDialog {
+            Title = UiLocale.Display("Import private local SYSTEM SYSVOL report"),
+            Filter = "JSON (*.json)|*.json", CheckFileExists = true,
+            Multiselect = false
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            _sysvolSystem = DomainSysvolSystemEvidence.LoadLocalJson(
+                picker.FileName, _report.Domain, _report.Dc, computer,
+                DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _sysvolSystem = null;
+            UiErrorDialog.Show(this, "Import SYSTEM SYSVOL evidence", ex);
+        }
+        Review();
+    }
+
     private async Task VerifyAdScopeAsync()
     {
         if (_reading || _readAdScope is null) return;
@@ -415,6 +468,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _review.Enabled = false;
         _reviewNamedGpos.Enabled = false;
         _importEndpoint.Enabled = false;
+        _importSysvol.Enabled = false;
+        _clearSysvol.Enabled = false;
         _captureEndpoint.Enabled = false;
         _clearEndpoint.Enabled = false;
         _computer.Enabled = false;
@@ -440,6 +495,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _reading = false;
             _review.Enabled = true;
             _importEndpoint.Enabled = true;
+            _importSysvol.Enabled = true;
             _captureEndpoint.Enabled = true;
             _computer.Enabled = true;
             _user.Enabled = true;
@@ -473,6 +529,8 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _review.Enabled = false;
         _reviewNamedGpos.Enabled = false;
         _importEndpoint.Enabled = false;
+        _importSysvol.Enabled = false;
+        _clearSysvol.Enabled = false;
         _clearEndpoint.Enabled = false;
         _captureEndpoint.Enabled = false;
         _computer.Enabled = false;
@@ -500,6 +558,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _reading = false;
             _review.Enabled = true;
             _importEndpoint.Enabled = true;
+            _importSysvol.Enabled = true;
             _captureEndpoint.Enabled = true;
             _computer.Enabled = true;
             _user.Enabled = true;

@@ -180,6 +180,7 @@ internal static class UiLayoutSmokeTests
             CreateGpoPilotReadinessSmoke, new[] {
                 "Refresh review", "Verify power (PC)...", "Analyze AD scope (no XML)...", "Review GPO blockers...",
                 "Import user HKCU JSON...", "Clear HKCU evidence",
+                "Import SYSTEM SYSVOL JSON...", "Clear SYSVOL evidence",
                 "Capture this PC's user HKCU...", "Close" }),
         ("Current user HKCU probe — offline simulated layout",
             () => new EndpointUserProbeDialog(), new[] {
