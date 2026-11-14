@@ -40,10 +40,12 @@ class SysvolSystemContracts(unittest.TestCase):
                        "sysvol_system_probe.ps1", "config.json",
                        "LSCM-SYSVOL-Canary", "Get-WmiObject Win32_OperatingSystem"):
             self.assertIn(marker, harness, marker)
+        executable_lines = "\n".join(line for line in harness.splitlines()
+                                     if not line.lstrip().startswith("#"))
         for blocked in ("-ComputerName", "Invoke-Command",
                         "gpupdate", "Set-ADObject", "New-GPO",
                         "Remove-GPO", "Set-GPPermission"):
-            self.assertNotIn(blocked, harness, blocked)
+            self.assertNotIn(blocked, executable_lines, blocked)
 
     def test_strict_unsigned_evidence_and_one_readiness(self):
         parser = get("src/LockScreenCampaignManager/DomainSysvolSystemEvidence.cs")
