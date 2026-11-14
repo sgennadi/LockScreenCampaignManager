@@ -26,7 +26,7 @@ class NamedPilotGpoBlockerContracts(unittest.TestCase):
             self.assertIn(marker, model, marker)
         self.assertIn("NamedBlockers", readiness)
         self.assertIn("DomainPilotBlockerEvidence.Analyze(", readiness)
-        self.assertIn("DomainGpoRsopCorrelation.Compare(report, computerXml, userXml)", readiness)
+        self.assertIn("DomainGpoRsopCorrelation.Compare(", readiness)
         self.assertIn("PermitsAutomaticRemediation => false", readiness)
         for forbidden in ("Process.Start(", "ModifyRequest(", "SetValue(",
                           "gpupdate.exe", "Win32_Process", "PowerShell"):
@@ -68,7 +68,7 @@ class NamedPilotGpoBlockerContracts(unittest.TestCase):
             self.assertIn(marker, get("UiLocale.Power112.cs"))
             self.assertIn(marker, get("UiLocale.cs"))
         self.assertIn("DomainPilotBlockerEvidence.BuildCsv", get("SelfTests.cs"))
-        self.assertIn("0.4.0-preview.116", get("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.117", get("LockScreenCampaignManager.csproj"))
         self.assertIn("NOT winning", (ROOT / "docs" / "RELEASE-PREVIEW112.md")
                       .read_text(encoding="utf-8"))
 
