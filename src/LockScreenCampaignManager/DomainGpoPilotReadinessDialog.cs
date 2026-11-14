@@ -15,6 +15,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     private readonly UserRsopEvidence? _userXml;
     private readonly Func<string, string, Task<EndpointPowerObservation>>? _readPower;
     private readonly int _idle;
+    private readonly Func<string, string, string, Task<DomainGpoScopeEvidence>>? _readAdScope;
+    private readonly TextBox _user = new() { Name = "PilotAdUserSamOrUpn" };
+    private DomainGpoScopeEvidence? _adScope;
+    private readonly Button _verifyAdScope;
     private readonly TextBox _computer = new() { Name = "PilotComputerFqdn" };
     private readonly ComboBox _ou = new() { Name = "PilotComputerOu" };
     private readonly DataGridView _findings = new() { Name = "PilotReadinessFindings" };
@@ -34,15 +38,17 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     internal DomainGpoPilotReadinessDialog(
         DomainWideGpoReport report, RsopEvidence? computerXml,
         UserRsopEvidence? userXml, string computerName, int saverIdleSeconds,
-        Func<string, string, Task<EndpointPowerObservation>>? readPower)
+        Func<string, string, Task<EndpointPowerObservation>>? readPower,
+        Func<string, string, string, Task<DomainGpoScopeEvidence>>? readAdScope = null)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _computerXml = computerXml;
         _userXml = userXml;
         _readPower = readPower;
+        _readAdScope = readAdScope;
         _idle = saverIdleSeconds;
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
-            " - " + UiLocale.Display("Pilot readiness review");
+            " - " + UiLocale.Display("Unified GPO readiness");
         Name = "DomainGpoPilotReadinessDialog";
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9.5f);
@@ -55,7 +61,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             Padding = new Padding(14)
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 145));
@@ -77,12 +83,12 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         root.Controls.Add(header, 0, 0);
 
         var entry = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3
         };
-        entry.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        entry.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 255));
         entry.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        entry.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        entry.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        for (int i = 0; i < 3; i++)
+            entry.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333f));
         entry.Controls.Add(new Label {
             Text = UiLocale.Display("Pilot computer (FQDN)"),
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
@@ -105,6 +111,15 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         if (_ou.Items.Count > 0) _ou.SelectedIndex = 0;
         _ou.SelectedIndexChanged += (_, _) => InvalidateObservation();
         entry.Controls.Add(_ou, 1, 1);
+        entry.Controls.Add(new Label {
+            Text = UiLocale.Display("Pilot AD user (SAM or UPN, optional)"),
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 2);
+        _user.Dock = DockStyle.Fill;
+        _user.RightToLeft = RightToLeft.No;
+        _user.PlaceholderText = "pilot.user@" + report.Domain;
+        _user.TextChanged += (_, _) => InvalidateObservation();
+        entry.Controls.Add(_user, 1, 2);
         root.Controls.Add(entry, 0, 1);
 
         _findings.Dock = DockStyle.Fill;
@@ -161,6 +176,11 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _verifyPower.Enabled = _readPower is not null && _ou.Items.Count > 0;
         _verifyPower.Click += async (_, _) => await VerifyPowerAsync();
         actions.Controls.Add(_verifyPower);
+        _verifyAdScope = Button("Analyze AD scope (no XML)...", 265);
+        _verifyAdScope.Name = "PilotVerifyAdScope";
+        _verifyAdScope.Enabled = _readAdScope is not null && _ou.Items.Count > 0;
+        _verifyAdScope.Click += async (_, _) => await VerifyAdScopeAsync();
+        actions.Controls.Add(_verifyAdScope);
         _review = Button("Refresh review", 160);
         _review.Name = "PilotRefreshReview";
         _review.Click += (_, _) => Review();
@@ -231,6 +251,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         // clearly labeled historical/unsigned evidence.
         _observation = null;
         _endpointUser = null;
+        _adScope = null;
         _clearEndpoint.Enabled = false;
         Review();
     }
@@ -249,6 +270,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
                 "Enter a full domain computer FQDN and a configured Screen Saver idle time.");
             _summary.Text = UiLocale.Display("Not verified — invalid pilot input");
             _verifyPower.Enabled = false;
+            _verifyAdScope.Enabled = false;
             _reviewNamedGpos.Enabled = false;
             return;
         }
@@ -260,15 +282,17 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
                 "No scanned Computer OU. Select a Computer OU in the campaign and rescan DC GPOs.");
             _summary.Text = UiLocale.Display("Not verified — Computer OU missing");
             _verifyPower.Enabled = false;
+            _verifyAdScope.Enabled = false;
             _reviewNamedGpos.Enabled = false;
             return;
         }
         _verifyPower.Enabled = _readPower is not null;
+        _verifyAdScope.Enabled = _readAdScope is not null;
         try
         {
             _assessment = DomainGpoPilotReadiness.Build(_report, computer,
                 ou, _idle, _observation, _computerXml, _userXml,
-                DateTimeOffset.UtcNow, _endpointUser);
+                DateTimeOffset.UtcNow, _endpointUser, _adScope);
         }
         catch (Exception ex)
         {
@@ -277,6 +301,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _summary.Text = UiLocale.Display("Not verified — evidence mismatch");
             _details.Text = ex.Message;
             _verifyPower.Enabled = false;
+            _verifyAdScope.Enabled = false;
             _reviewNamedGpos.Enabled = false;
             return;
         }
@@ -325,6 +350,12 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
                 Environment.NewLine + selected.Observation +
                 Environment.NewLine + "Next: " + selected.NextStep +
                 Environment.NewLine + Environment.NewLine +
+                (_adScope is null
+                    ? UiLocale.Display("AD-only scope not scanned.")
+                    : "AD-only scan: " + _adScope.ObservedUtc.ToString("u") +
+                      " | loopback " + _adScope.Loopback +
+                      " | source candidates only, NOT RSoP.") +
+                Environment.NewLine +
                 DomainGpoRsopCorrelation.EvidenceWarning(_computerXml, _userXml);
         else
             _details.Text = DomainGpoRsopCorrelation.EvidenceWarning(
@@ -362,6 +393,61 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         Review();
     }
 
+
+    private async Task VerifyAdScopeAsync()
+    {
+        if (_reading || _readAdScope is null) return;
+        string computer = _computer.Text.Trim();
+        string ou = SelectedOu;
+        string user = _user.Text.Trim();
+        if (!NativeGpoConflictScan.SafeComputerName(computer, _report.Domain) ||
+            !_report.ComputerOus.Contains(ou, StringComparer.OrdinalIgnoreCase) ||
+            user.Length > 256 || user.Any(char.IsControl) ||
+            user.Contains('\\') || user.Contains('/') ||
+            user.Contains('*') || user.Contains('(') || user.Contains(')'))
+        {
+            Review();
+            return;
+        }
+        _reading = true;
+        _verifyAdScope.Enabled = false;
+        _verifyPower.Enabled = false;
+        _review.Enabled = false;
+        _reviewNamedGpos.Enabled = false;
+        _importEndpoint.Enabled = false;
+        _captureEndpoint.Enabled = false;
+        _clearEndpoint.Enabled = false;
+        _computer.Enabled = false;
+        _user.Enabled = false;
+        _ou.Enabled = false;
+        _summary.Text = UiLocale.Display("Reading selected DC OU/group/ACL and loopback (read-only)...");
+        try
+        {
+            _adScope = await _readAdScope(computer, ou, user);
+            if (!_adScope.Computer.Equals(computer, StringComparison.OrdinalIgnoreCase) ||
+                !_adScope.ComputerOu.Equals(ou, StringComparison.OrdinalIgnoreCase) ||
+                !_adScope.RequestedUser.Equals(user, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "AD scope report does not match the currently selected pilot.");
+        }
+        catch (Exception ex)
+        {
+            _adScope = null;
+            UiErrorDialog.Show(this, "Analyze AD scope (read-only)", ex);
+        }
+        finally
+        {
+            _reading = false;
+            _review.Enabled = true;
+            _importEndpoint.Enabled = true;
+            _captureEndpoint.Enabled = true;
+            _computer.Enabled = true;
+            _user.Enabled = true;
+            _ou.Enabled = true;
+            Review();
+        }
+    }
+
     private async Task VerifyPowerAsync()
     {
         if (_reading || _readPower is null) return;
@@ -383,12 +469,14 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             return;
         _reading = true;
         _verifyPower.Enabled = false;
+        _verifyAdScope.Enabled = false;
         _review.Enabled = false;
         _reviewNamedGpos.Enabled = false;
         _importEndpoint.Enabled = false;
         _clearEndpoint.Enabled = false;
         _captureEndpoint.Enabled = false;
         _computer.Enabled = false;
+        _user.Enabled = false;
         _ou.Enabled = false;
         _summary.Text = UiLocale.Display("Reading endpoint power (read-only)...");
         try
@@ -414,6 +502,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             _importEndpoint.Enabled = true;
             _captureEndpoint.Enabled = true;
             _computer.Enabled = true;
+            _user.Enabled = true;
             _ou.Enabled = true;
             Review();
         }
