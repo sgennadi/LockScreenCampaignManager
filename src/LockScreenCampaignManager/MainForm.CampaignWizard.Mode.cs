@@ -228,6 +228,7 @@ public sealed partial class MainForm
             details.Controls.Add(password, 0, 7);
             var note = new Label
             {
+                Name = "WizardScreenSaverPilotNotice",
                 Text = "Built-in Windows .scr is GPO-ready. Choose Browse to select a " +
                     "custom .scr or compatible .exe for LOCAL PILOT ONLY; a regular EXE " +
                     "is not automatically a Windows Screen Saver. JPG slideshow can be " +
