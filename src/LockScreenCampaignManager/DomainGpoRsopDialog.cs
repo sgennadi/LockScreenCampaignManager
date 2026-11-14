@@ -13,6 +13,7 @@ internal sealed class DomainGpoRsopDialog : Form
 {
     private readonly DomainWideGpoReport _report;
     private readonly Func<string, string, Task<EndpointPowerObservation>>? _pilotPowerReader;
+    private readonly Func<string, string, string, Task<DomainGpoScopeEvidence>>? _pilotAdScopeReader;
     private readonly int _saverIdleSeconds;
     private RsopEvidence? _computer;
     private UserRsopEvidence? _user;
@@ -30,11 +31,13 @@ internal sealed class DomainGpoRsopDialog : Form
 
     internal DomainGpoRsopDialog(DomainWideGpoReport report,
         int saverIdleSeconds = 600,
-        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null)
+        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null,
+        Func<string, string, string, Task<DomainGpoScopeEvidence>>? pilotAdScopeReader = null)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _saverIdleSeconds = saverIdleSeconds;
         _pilotPowerReader = pilotPowerReader;
+        _pilotAdScopeReader = pilotAdScopeReader;
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
             " - " + UiLocale.Display("Compare gpresult XML");
         Name = "DomainGpoRsopDialog";
@@ -208,7 +211,7 @@ internal sealed class DomainGpoRsopDialog : Form
         pilot.Click += (_, _) => {
             using var window = new DomainGpoPilotReadinessDialog(
                 _report, _computer, _user, _computerName.Text.Trim(),
-                _saverIdleSeconds, _pilotPowerReader);
+                _saverIdleSeconds, _pilotPowerReader, _pilotAdScopeReader);
             window.ShowDialog(this);
         };
         actions.Controls.Add(pilot);

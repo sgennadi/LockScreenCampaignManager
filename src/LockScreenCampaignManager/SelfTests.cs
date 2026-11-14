@@ -70,6 +70,7 @@ internal static class SelfTests
         TestDomainWideGpoAudit();
         TestDomainPilotReadiness();
         TestEndpointUserReadinessEvidence();
+        TestUnifiedAdScopeApplicability();
         Console.Error.WriteLine("SELF-TEST checkpoint: before modern dialogs");
         TestModernMessageDialogs();
         Console.Error.WriteLine("SELF-TEST checkpoint: before custom saver");
@@ -1768,6 +1769,114 @@ StartExecutePSFirst=true
             !past.Findings.Any(x => x.Area == "User Screen Saver active" &&
                 x.State == "Observed concern"),
             "Expired HKCU evidence never receives a current observed-concern verdict.");
+    }
+
+
+    private static void TestUnifiedAdScopeApplicability()
+    {
+        const string domain = "example.com", dc = "dc01.example.com";
+        const string pc = "pc01.example.com";
+        const string ou = "OU=Computers,DC=example,DC=com";
+        const string userOu = "OU=Users,DC=example,DC=com";
+        const string gpo = "01234567-89ab-cdef-0123-456789abcdef";
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var data = System.Text.Json.JsonSerializer.SerializeToElement(new {
+            domain, dc, observedUtc = now,
+            computerOus = new[] { ou }, userOus = new[] { userOu },
+            gpoCount = 1, inspectedHalves = 2, emptyHalves = 0,
+            issueCount = 0, complete = true,
+            issues = Array.Empty<object>(), notes = Array.Empty<string>(),
+            matches = new[] {
+                new { gpo = "Pilot Restrictions", gpoId = gpo, scope = "Computer",
+                    source = "Registry.pol",
+                    key = @"Software\Policies\Microsoft\Windows\System",
+                    setting = "UserPolicyMode", value = "2", risk = "High",
+                    reason = "Possible loopback Replace", linkStatus = "Linked candidate",
+                    linkedAt = ou, applicability = "Source only" },
+                new { gpo = "Pilot Restrictions", gpoId = gpo, scope = "User",
+                    source = "Registry.pol",
+                    key = @"Software\Policies\Microsoft\Windows\Control Panel\Desktop",
+                    setting = "ScreenSaveActive", value = "0", risk = "High",
+                    reason = "Saver disabled", linkStatus = "Linked candidate",
+                    linkedAt = userOu, applicability = "Source only" }
+            },
+            count = 2, linkedCandidates = 2, highRisk = 2, warningsCount = 0
+        });
+        var report = DomainWideGpoReport.Parse(data, domain, dc, [ou], [userOu]);
+        static object Link(string id, string scope, string origin,
+            string linked, string state, string loopbackValue = "") => new {
+                gpo = "Pilot Restrictions", gpoId = id, scope, origin,
+                linkedAt = linked, depth = 1, order = 1, enforced = false,
+                state, security = "Read+Apply", wmi = "None", loopbackValue
+            };
+        System.Text.Json.JsonElement Json(DateTimeOffset at, string host,
+            string who) => System.Text.Json.JsonSerializer.SerializeToElement(new {
+                domain, dc, computer = host, computerOu = ou,
+                actualComputerOu = ou, requestedUser = who,
+                user = "pilot", actualUserOu = userOu,
+                computerToken = "Read", userToken = "Read",
+                loopback = "Replace candidate", observedUtc = at,
+                complete = true, provesWinningGpo = false,
+                provesClientApplication = false,
+                links = new[] {
+                    Link(gpo, "Computer", "Computer OU", ou,
+                        "AD candidate", "2"),
+                    Link(gpo, "User", "User OU", userOu,
+                        "AD candidate"),
+                    Link(gpo, "User", "Computer OU (loopback)", ou,
+                        "Conditional: WMI not evaluated")
+                },
+                limitations = new[] { "Site/WMI/GPP and client state unknown." }
+            });
+        var raw = Json(now, pc, "pilot");
+        var scope = DomainGpoScopeEvidence.Parse(raw, report, pc, ou,
+            "pilot", now);
+        Check(scope.Links.Count == 3 && scope.Fresh(now) &&
+            scope.Complete && scope.ComputerToken == "Read" &&
+            scope.UserToken == "Read" && scope.Loopback == "Replace candidate" &&
+            !scope.ProvesWinningGpo && !scope.ProvesClientApplication,
+            "AD-only nested-token/OU/ACL/loopback projection is never client attestation.");
+
+        var readiness = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, scope);
+        Check(readiness.AdScopeObserved &&
+            !readiness.ComputerXmlImported && !readiness.UserXmlImported &&
+            readiness.Findings.Any(x => x.Area == "AD applicability" &&
+                x.Observation.Contains("candidates", StringComparison.Ordinal)) &&
+            readiness.Findings.Any(x => x.Area == "AD loopback" &&
+                x.Observation.Contains("Replace candidate", StringComparison.Ordinal)) &&
+            readiness.Findings.Any(x => x.Area == "Computer gpresult" &&
+                x.State == "Information") &&
+            readiness.NamedBlockers.Any(x => x.GpoId == gpo &&
+                x.ReportedRsop == "AD-only (no XML)") &&
+            !readiness.ProvesWinningGpo && !readiness.ProvesScreenSaverDisplayed &&
+            !readiness.PermitsAutomaticRemediation,
+            "Unified GPO readiness works with no XML and conservatively flags AD-only sources.");
+
+        bool wrongIdentityRejected = false;
+        try { _ = DomainGpoScopeEvidence.Parse(raw, report,
+            "other.example.com", ou, "pilot", now); }
+        catch (InvalidDataException) { wrongIdentityRejected = true; }
+        Check(wrongIdentityRejected,
+            "AD scope must be bound to the selected Computer FQDN.");
+
+        wrongIdentityRejected = false;
+        try { _ = DomainGpoScopeEvidence.Parse(Json(now, pc, "pilot"),
+            report, pc, ou, "another", now); }
+        catch (InvalidDataException) { wrongIdentityRejected = true; }
+        Check(wrongIdentityRejected,
+            "AD scope must bind the explicitly queried User SAM/UPN.");
+
+        var expired = DomainGpoScopeEvidence.Parse(Json(now.AddMinutes(-7),
+            pc, "pilot"), report, pc, ou, "pilot", now);
+        Check(!expired.Fresh(now), "Old AD-only snapshot is never called current.");
+        var old = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, now, null, expired);
+        Check(old.Findings.Any(x => x.Area == "AD scope freshness" &&
+                x.State == "Not verified") &&
+            !old.Findings.Any(x => x.Area == "Computer / Computer OU" &&
+                x.State == "Source candidate"),
+            "Stale AD source does not promote any GPO to a current candidate.");
     }
 
     private static void TestDomainPilotReadiness()

@@ -72,6 +72,23 @@ internal sealed partial class GpoOperationsForm
                     return EndpointPowerObservation.Parse(observation,
                         report.Domain, report.Dc, computerOu, computer,
                         DateTimeOffset.UtcNow);
+                },
+                async (computer, computerOu, userName) => {
+                    // The verified DC is the sole source for OU links, GPO
+                    // ACLs, tokenGroups, block inheritance and loopback.
+                    // No Computer/User gpresult XML is required.
+                    if (!NativeGpoConflictScan.SafeComputerName(computer, report.Domain) ||
+                        !report.ComputerOus.Contains(computerOu,
+                            StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidDataException(
+                            "AD-only pilot computer must belong to the scanned Computer OU.");
+                    var scoped = await ExecuteAsync(DomainOperation.ConflictScan,
+                        "PilotScope", new {
+                            domain = report.Domain, dc = report.Dc,
+                            computer, computerOu, user = userName
+                        });
+                    return DomainGpoScopeEvidence.Parse(scoped, report,
+                        computer, computerOu, userName, DateTimeOffset.UtcNow);
                 });
             dialog.ShowDialog(this);
         }

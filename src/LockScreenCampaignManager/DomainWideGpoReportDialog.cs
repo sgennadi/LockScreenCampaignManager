@@ -14,6 +14,7 @@ internal sealed class DomainWideGpoReportDialog : Form
     private readonly DomainWideGpoReport _report;
     private readonly int _saverIdleSeconds;
     private readonly Func<string, string, Task<EndpointPowerObservation>>? _pilotPowerReader;
+    private readonly Func<string, string, string, Task<DomainGpoScopeEvidence>>? _pilotAdScopeReader;
     private readonly DataGridView _grid = new() { Name = "AllDcGpoFindingsGrid" };
     private readonly TextBox _details = new() { Name = "AllDcGpoDetails" };
     private readonly TextBox _search = new() { Name = "AllDcGpoSearch" };
@@ -28,11 +29,13 @@ internal sealed class DomainWideGpoReportDialog : Form
 
     internal DomainWideGpoReportDialog(DomainWideGpoReport report,
         int saverIdleSeconds = 600,
-        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null)
+        Func<string, string, Task<EndpointPowerObservation>>? pilotPowerReader = null,
+        Func<string, string, string, Task<DomainGpoScopeEvidence>>? pilotAdScopeReader = null)
     {
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _saverIdleSeconds = saverIdleSeconds;
         _pilotPowerReader = pilotPowerReader;
+        _pilotAdScopeReader = pilotAdScopeReader;
         Text = "LockScreen Campaign Manager " + AppVersion.Current +
             " - " + UiLocale.Display("All DC GPO conflict audit");
         Name = "DomainWideGpoReportDialog";
@@ -158,11 +161,22 @@ internal sealed class DomainWideGpoReportDialog : Form
             dialog.ShowDialog(this);
         };
         buttons.Controls.Add(compare);
+        var analyze = MakeButton("Analyze AD scope (no XML)...", 275);
+        analyze.Name = "AllDcGpoUnifiedPilotButton";
+        analyze.Enabled = _pilotAdScopeReader is not null &&
+            _saverIdleSeconds is >= 60 and <= 86400;
+        analyze.Click += (_, _) => {
+            using var dialog = new DomainGpoPilotReadinessDialog(
+                _report, null, null, "", _saverIdleSeconds,
+                _pilotPowerReader, _pilotAdScopeReader);
+            dialog.ShowDialog(this);
+        };
+        buttons.Controls.Add(analyze);
         var rsop = MakeButton("Compare gpresult XML...", 215);
         rsop.Name = "AllDcGpoRsopButton";
         rsop.Click += (_, _) => {
             using var dialog = new DomainGpoRsopDialog(
-                _report, _saverIdleSeconds, _pilotPowerReader);
+                _report, _saverIdleSeconds, _pilotPowerReader, _pilotAdScopeReader);
             dialog.ShowDialog(this);
         };
         buttons.Controls.Add(rsop);
