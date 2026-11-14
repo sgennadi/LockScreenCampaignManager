@@ -83,7 +83,9 @@ internal sealed class ModernMessageDialog : Form
             .Split('\n').Sum(x => Math.Max(1, (x.Length + 73) / 74));
         var display = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 800);
         int minWidth = Math.Min(590, Math.Max(460, display.Width - 70));
-        int minHeight = Math.Min(325, Math.Max(290, display.Height - 75));
+        // A 325px modal left almost no body when the two-line warning
+        // header and 3-button footer expanded at 200% scaling.
+        int minHeight = Math.Min(450, Math.Max(300, display.Height - 90));
         int width = Math.Clamp(720 + (text.Length > 850 ? 110 : 0),
             minWidth, Math.Max(minWidth, display.Width - 72));
         int height = Math.Clamp(265 + Math.Min(lines, 30) * 21,
