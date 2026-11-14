@@ -16,7 +16,7 @@ namespace LockScreenCampaignManager;
 /// OU conflict scans. "Linked candidate" never means winning GPO/RSoP.
 /// No remote execution, endpoint read, AD/GPO mutation or automatic repair.
 /// </summary>
-internal static class NativeGpoDomainAudit
+internal static partial class NativeGpoDomainAudit
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex GpLink = new(
@@ -31,8 +31,10 @@ internal static class NativeGpoDomainAudit
 
     internal static JsonElement Execute(string mode, object request, DomainCredentials credentials)
     {
+        if (mode == "PilotScope")
+            return ExecutePilotScope(request, credentials);
         if (mode != "AllGpos")
-            throw new ArgumentException("Only explicit read-only AllGpos is supported.");
+            throw new ArgumentException("Only explicit read-only AllGpos/PilotScope are supported.");
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Windows signed LDAP and SYSVOL are required.");
         var args = JsonSerializer.SerializeToElement(request, Json);
