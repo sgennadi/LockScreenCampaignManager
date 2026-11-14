@@ -21,7 +21,8 @@ class UnifiedAdGpoContracts(unittest.TestCase):
             self.assertIn(x, source)
         self.assertIn('mode == "AllGpos"', router)
         self.assertIn("NativeGpoDomainAudit.Execute(", router)
-        for x in ("ReadScopedLinks(", "NativeGpoConflictScan.ParseRegistryPol(",
+        for x in ("ReadScopedLinks(", "ScopeTokensVerified(",
+                  "NativeGpoConflictScan.ParseRegistryPol(",
                   "QualifyComputerRead(", "computerForUser!", "readOnly: true",
                   "computer GPO Read denied", "computer Read not verified",
                   "NativeGpoConflictScan.PolicyHalfHasConfiguredSettings("):
@@ -106,15 +107,17 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "defaultFlags", "bothDisabled", "computerOnly",
                     "incomplete", "combined",
                     "foreignUserXml", "matchedUserXml",
-                    "unknownRead", "deniedReview", "QualifyComputerRead"):
+                    "unknownRead", "deniedReview", "QualifyComputerRead",
+                    "missingTokenRejected", "ScopeTokensVerified"):
             if key == "Expired":
                 self.assertIn("var expired =", tests)
             else:
                 self.assertIn(key, tests)
         self.assertIn("UiLocale.Power115.cs", (ROOT / "tools" /
             "test_manager_features.py").read_text(encoding="utf-8"))
-        self.assertIn("0.4.0-preview.118",
+        self.assertIn("0.4.0-preview.119",
             read("LockScreenCampaignManager.csproj"))
+        self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW119.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW118.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW117.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW115.md").is_file())
