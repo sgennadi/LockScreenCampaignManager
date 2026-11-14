@@ -291,7 +291,8 @@ internal static partial class NativeGpoDomainAudit
                 {
                     var policy = ReadOne(ldap, link.Dn,
                         "(objectClass=groupPolicyContainer)", "displayName",
-                        "flags", "gPCWQLFilter");
+                        "flags", "versionNumber", "gPCMachineExtensionNames",
+                        "gPCWQLFilter");
                     display = NativeAdDiscovery.Attr(policy, "displayName");
                     if (display.Length == 0) display = id.ToString("D");
                     string rawFlags = NativeAdDiscovery.Attr(policy, "flags");
@@ -305,10 +306,22 @@ internal static partial class NativeGpoDomainAudit
                         NativeGpoConflictScan.IsPolicyPartDisabled(
                             flags, scope == "User"), security, wmi);
                     if (scope == "Computer" && !state.StartsWith("Excluded:",
-                            StringComparison.Ordinal))
+                            StringComparison.Ordinal) &&
+                        !NativeGpoConflictScan.IsPolicyPartDisabled(flags, false))
                     {
-                        loopback = ReadLoopbackFromSource(dc, domain, id, out bool read);
-                        if (!read) complete = false;
+                        string cse = NativeAdDiscovery.Attr(policy,
+                            "gPCMachineExtensionNames");
+                        string v = NativeAdDiscovery.Attr(policy, "versionNumber");
+                        if (!int.TryParse(v, NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out int version))
+                            version = 0;
+                        if (NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(
+                                version, cse, false))
+                        {
+                            loopback = ReadLoopbackFromSource(dc, domain, id,
+                                out bool read);
+                            if (!read) complete = false;
+                        }
                     }
                     if (state.StartsWith("Unknown:", StringComparison.Ordinal))
                         complete = false;
