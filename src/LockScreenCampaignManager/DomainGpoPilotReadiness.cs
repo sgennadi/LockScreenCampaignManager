@@ -122,11 +122,27 @@ internal sealed class DomainGpoPilotReadiness
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
 
+        // Imported UserResults must describe the same explicit AD user before
+        // they can elevate a candidate GPO for that AD scope. Domain/RSoP XML
+        // strings are unsigned, so equality is only a conservative correlation.
+        bool userXmlCorrelated = userXml is not null &&
+            (adScope is null || UserXmlMatchesScope(userXml, adScope));
+        if (userXml is not null && adScope is not null && !userXmlCorrelated)
+            Add(findings, "User XML identity correlation", "Not verified",
+                "Imported User gpresult principal '" + userXml.UserPrincipal +
+                "' is not linked to selected AD scope user '" +
+                (adScope.User.Length == 0 ? "[no user selected]" : adScope.User) +
+                "'. User XML will not elevate GPO review priority.",
+                "Select the same exact AD user/SAM/UPN or recapture User gpresult " +
+                "for the selected pilot. No match proves endpoint authenticity.");
+        var boundUserXml = userXmlCorrelated ? userXml : null;
+
         // A GPO being "Reported applied" only raises the priority for review.
         // This is NOT a per-setting winner and is never a confirmed policy block.
-        var correlated = DomainGpoRsopCorrelation.Compare(report, computerXml, userXml);
+        var correlated = DomainGpoRsopCorrelation.Compare(
+            report, computerXml, boundUserXml);
         var xmlBlockers = DomainPilotBlockerEvidence.Analyze(
-            correlated, report.ObservedUtc, now, computerXml, userXml);
+            correlated, report.ObservedUtc, now, computerXml, boundUserXml);
         var namedBlockers = xmlBlockers.Concat(adCandidates)
             .GroupBy(x => x.Scope + "|" + x.GpoId + "|" +
                 x.RegistryKey + "|" + x.Setting + "|" + x.Value,
@@ -509,6 +525,23 @@ internal sealed class DomainGpoPilotReadiness
                 (details - 75) + " additional matching GPO records omitted from grid.",
                 "Use the named blocker grid and source scan for details."));
         return blockers;
+    }
+
+    // UPNs must match the verified AD lookup request. An explicitly chosen
+    // SAM may match a DOMAIN\\sam gpresult name, but the XML is still unsigned.
+    // No selected AD user means that imported user XML cannot be scoped.
+    internal static bool UserXmlMatchesScope(
+        UserRsopEvidence imported, DomainGpoScopeEvidence scope)
+    {
+        if (scope.User.Length == 0) return false;
+        string principal = imported.UserPrincipal;
+        if (scope.RequestedUser.Contains('@'))
+            return principal.Equals(scope.RequestedUser,
+                StringComparison.OrdinalIgnoreCase);
+        int slash = principal.IndexOf('\\');
+        return slash > 0 && slash == principal.LastIndexOf('\\') &&
+            principal[(slash + 1)..].Equals(scope.User,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     // Preserve strong current user/computer RSoP evidence before AD-only
