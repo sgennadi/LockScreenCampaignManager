@@ -356,11 +356,15 @@ internal static partial class NativeGpoDomainAudit
         return new ScopedRows(rows, complete);
     }
 
-    // MS-GPOD defines valid GPC flags 0..3. Missing/corrupt flags
-    // must not silently become 0 (enabled).
-    internal static bool TryGpoFlags(string raw, out int flags) =>
-        int.TryParse(raw, NumberStyles.Integer,
-            CultureInfo.InvariantCulture, out flags) && flags is >= 0 and <= 3;
+    // AD permits an absent GPC flags attribute; it means both halves enabled.
+    // Explicit malformed or out-of-range values must never be read as 0.
+    internal static bool TryGpoFlags(string raw, out int flags)
+    {
+        flags = 0;
+        return raw.Length == 0 ||
+            (int.TryParse(raw, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out flags) && flags is >= 0 and <= 3);
+    }
 
     // The selected DC never proves that the endpoint's loopback mode ran.
     internal static string QualifyLoopbackUserRow(
