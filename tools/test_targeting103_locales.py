@@ -71,7 +71,8 @@ class Targeting103LocalisationTests(unittest.TestCase):
             '"Filter user groups by selected OU"',
             "UiLocale.Display(",
             "UiLocale.Display(userScope ? \"User\" : \"Computer\")",
-            "SizeType.AutoSize) // Long translated warning",
+            "fields.RowStyles.Add(i switch",
+            "caption.MaximumSize = new Size(width, 0)",
             "AssignmentModeHelp",
         ):
             self.assertIn(token, dialog)
