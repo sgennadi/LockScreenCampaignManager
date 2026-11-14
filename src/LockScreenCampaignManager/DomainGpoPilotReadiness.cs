@@ -20,6 +20,7 @@ internal sealed class DomainGpoPilotReadiness
     internal bool ComputerXmlImported { get; private init; }
     internal bool UserXmlImported { get; private init; }
     internal bool EndpointUserImported { get; private init; }
+    internal bool AdScopeObserved { get; private init; }
     internal IReadOnlyList<DomainPilotFinding> Findings { get; private init; } = [];
     internal IReadOnlyList<DomainPilotBlocker> NamedBlockers { get; private init; } = [];
     internal int Concerns => Findings.Count(x => x.State == "Observed concern");
@@ -33,7 +34,8 @@ internal sealed class DomainGpoPilotReadiness
         DomainWideGpoReport report, string computer, string selectedComputerOu,
         int saverIdleSeconds, EndpointPowerObservation? power,
         RsopEvidence? computerXml, UserRsopEvidence? userXml,
-        DateTimeOffset now, EndpointUserReadinessEvidence? endpointUser = null)
+        DateTimeOffset now, EndpointUserReadinessEvidence? endpointUser = null,
+        DomainGpoScopeEvidence? adScope = null)
     {
         ArgumentNullException.ThrowIfNull(report);
         if (saverIdleSeconds is < 60 or > 86400 ||
@@ -62,6 +64,14 @@ internal sealed class DomainGpoPilotReadiness
              endpointUser.CapturedUtc > now.AddMinutes(2)))
             throw new InvalidDataException(
                 "Local User HKCU snapshot belongs to another computer/domain or is future-dated.");
+        if (adScope is not null &&
+            (!adScope.Computer.Equals(computer, StringComparison.OrdinalIgnoreCase) ||
+             !adScope.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
+             !NativeGpoLifecycleList.SameController(adScope.Dc, report.Dc) ||
+             !adScope.ComputerOu.Equals(selectedComputerOu, StringComparison.OrdinalIgnoreCase) ||
+             adScope.ObservedUtc > now.AddMinutes(2)))
+            throw new InvalidDataException(
+                "AD-only scope reading belongs to another pilot PC/DC/OU or is future-dated.");
         if (power is not null &&
             (!power.Domain.Equals(report.Domain, StringComparison.OrdinalIgnoreCase) ||
              !NativeGpoLifecycleList.SameController(power.Dc, report.Dc) ||
@@ -102,12 +112,21 @@ internal sealed class DomainGpoPilotReadiness
         AddXml(findings, "User", userXml?.ReadUtc,
             userXml?.IsHistorical, userXml?.Sha256, userXml?.UnidentifiedEntries);
         AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now);
+        var adCandidates = AddAdScope(findings, report, adScope, now,
+            saverIdleSeconds);
 
         // A GPO being "Reported applied" only raises the priority for review.
         // This is NOT a per-setting winner and is never a confirmed policy block.
         var correlated = DomainGpoRsopCorrelation.Compare(report, computerXml, userXml);
-        var namedBlockers = DomainPilotBlockerEvidence.Analyze(
+        var xmlBlockers = DomainPilotBlockerEvidence.Analyze(
             correlated, report.ObservedUtc, now, computerXml, userXml);
+        var namedBlockers = xmlBlockers.Concat(adCandidates)
+            .GroupBy(x => x.Scope + "|" + x.GpoId + "|" +
+                x.RegistryKey + "|" + x.Setting + "|" + x.Value,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.OrderBy(y => y.ReviewState.StartsWith("AD ",
+                    StringComparison.Ordinal) ? 0 : 1).First())
+            .Take(6000).ToArray();
         foreach (string scope in new[] { "Computer", "User" })
         {
             var blockers = correlated.Where(x => x.Scope == scope &&
@@ -215,7 +234,8 @@ internal sealed class DomainGpoPilotReadiness
             PowerObserved = power is not null,
             ComputerXmlImported = computerXml is not null,
             UserXmlImported = userXml is not null,
-            EndpointUserImported = endpointUser is not null, Findings = findings,
+            EndpointUserImported = endpointUser is not null,
+            AdScopeObserved = adScope is not null, Findings = findings,
             NamedBlockers = namedBlockers
         };
     }
@@ -359,6 +379,133 @@ internal sealed class DomainGpoPilotReadiness
                 "NoDispScrSavPage = " + restriction.Value +
                 " (hides settings UI; not proof that the Screen Saver is disabled).",
                 "Inspect User GPO restrictions before troubleshooting the UI.");
+    }
+
+
+    /// <summary>
+    /// Add the DC's per-object AD applicability projection to the SAME
+    /// readiness report. No gpresult XML is needed. The projection is useful
+    /// for candidate/exclusion triage; it never reports a winning policy.
+    /// </summary>
+    private static IReadOnlyList<DomainPilotBlocker> AddAdScope(
+        List<DomainPilotFinding> findings, DomainWideGpoReport report,
+        DomainGpoScopeEvidence? scope, DateTimeOffset now, int idleSeconds)
+    {
+        if (scope is null)
+        {
+            findings.Add(new DomainPilotFinding("AD applicability", "Not verified",
+                "No exact computer/user ACL+OU+loopback scan was requested.",
+                "Use Analyze AD scope (no XML) to verify selected DC, computer, " +
+                "nested security groups and optional User SAM/UPN."));
+            return [];
+        }
+        bool fresh = scope.Fresh(now) &&
+            now - report.ObservedUtc <= TimeSpan.FromMinutes(15);
+        bool complete = scope.Complete && fresh;
+        var links = scope.Links;
+        int candidate = links.Count(x => x.State == "AD candidate");
+        int excluded = links.Count(x => x.State.StartsWith("Excluded:",
+            StringComparison.Ordinal));
+        int uncertain = links.Count - candidate - excluded;
+        findings.Add(new DomainPilotFinding("AD applicability",
+            fresh ? "Information" : "Not verified",
+            scope.Computer + " / " +
+            (scope.User.Length > 0 ? scope.User : "[no user selected]") +
+            " | DC " + scope.Dc + " | " +
+            candidate + " ACL+OU candidates, " + excluded + " excluded, " +
+            uncertain + " unknown/WMI-filtered | tokenGroups Computer=" +
+            scope.ComputerToken + ", User=" + scope.UserToken + ".",
+            "Domain object/ACL readings are not client policy application. " +
+            "Missing sites, WMI and GPP targeting can change actual results."));
+        if (!fresh || !scope.Complete)
+            findings.Add(new DomainPilotFinding("AD scope freshness",
+                "Not verified", "AD applicability is stale or incomplete.",
+                "Refresh all DC GPOs and repeat the explicit AD-only pilot scan."));
+        findings.Add(new DomainPilotFinding("AD loopback", scope.User.Length == 0 ||
+            scope.Loopback == "Unknown" ? "Not verified" : "Information",
+            "Computer-side UserPolicyMode: " + scope.Loopback +
+            ". User Configuration candidates: " +
+            links.Count(x => x.Scope == "User" && x.Origin == "User OU") +
+            " from User OU, " +
+            links.Count(x => x.Origin == "Computer OU (loopback)") +
+            " from Computer OU.",
+            "Merge/Replace candidates are NOT proven winners. Site, WMI, " +
+            "CSE processing and computer Read permission remain unverified."));
+        if (scope.User.Length == 0)
+            findings.Add(new DomainPilotFinding("User scope", "Not verified",
+                "No exact AD user specified; User OU, nested group security " +
+                "filters and loopback User-half applicability cannot be computed.",
+                "Enter test-user SAM/UPN and rerun Analyze AD scope (no XML)."));
+
+        var mapped = report.Matches.ToLookup(
+            r => r.GpoId + "|" + r.Scope, StringComparer.OrdinalIgnoreCase);
+        var blockers = new List<DomainPilotBlocker>();
+        int details = 0;
+        foreach (var link in links)
+        {
+            // Unknown scope and GPP filters can never become "applied".
+            bool active = link.State == "AD candidate";
+            bool unsure = !active && !link.State.StartsWith("Excluded:",
+                StringComparison.Ordinal);
+            string group = link.Scope + " / " + link.Origin;
+            var matches = mapped[link.GpoId + "|" + link.Scope].ToArray();
+            if (matches.Length == 0)
+            {
+                if (details++ < 75)
+                    findings.Add(new DomainPilotFinding(group,
+                        link.State.StartsWith("Excluded:", StringComparison.Ordinal)
+                            ? "Information" : "Not verified",
+                        link.Gpo + " [" + link.GpoId + "] " + link.State +
+                        "; no recognized source settings from this GPO.",
+                        "Review CSE settings/SYSVOL sources if this policy is relevant."));
+                continue;
+            }
+            foreach (var row in matches)
+            {
+                bool possible = IsAdBlockerCandidate(row, idleSeconds);
+                if (!possible) continue;
+                string state = active && complete ? "Source candidate" :
+                    unsure || !fresh || !scope.Complete ? "Not verified" :
+                    "Information";
+                string description = link.Gpo + " [" + link.GpoId + "] / " +
+                    row.Setting + " = " + row.Value + " / " +
+                    link.State + "; link " + link.LinkedAt +
+                    (link.Enforced ? " [Enforced]" : "") +
+                    "; ACL " + link.Security + "; WMI " + link.Wmi + ".";
+                if (details++ < 75)
+                    findings.Add(new DomainPilotFinding(group, state,
+                        description, "DC-only candidate, never a per-setting winner. " +
+                        "Confirm target GPO link order, WMI/GPP and actual user session."));
+                if ((active || unsure) && blockers.Count < 250)
+                    blockers.Add(new DomainPilotBlocker(row.Scope, link.Gpo,
+                        link.GpoId, row.Key, row.Setting, row.Value,
+                        row.Risk is ("High" or "Warning") ? row.Risk : "Warning",
+                        "AD-only (no XML)", active && complete
+                            ? "AD candidate (not applied)" :
+                            "AD conditional/unverified",
+                        row.Source, link.State,
+                        "OU " + link.LinkedAt + " | " + link.Origin +
+                        " | ACL " + link.Security + " | WMI " + link.Wmi +
+                        ". Not proven applied or winning."));
+            }
+        }
+        if (details > 75)
+            findings.Add(new DomainPilotFinding("AD source details", "Information",
+                (details - 75) + " additional matching GPO records omitted from grid.",
+                "Use the named blocker grid and source scan for details."));
+        return blockers;
+    }
+
+    private static bool IsAdBlockerCandidate(DomainGpoMatch row, int idle)
+    {
+        string name = row.Setting.ToLowerInvariant();
+        if (name == "screensaveactive") return row.Value.Trim() != "1";
+        if (name == "screensavetimeout")
+            return !long.TryParse(row.Value, out long value) ||
+                value != idle;
+        if (name is "scrnsave.exe" or "screensaverissecure" or
+            "userpolicymode" or "nolockscreen") return true;
+        return row.Risk is ("High" or "Warning");
     }
 
     private static void AddXml(List<DomainPilotFinding> findings, string scope,
