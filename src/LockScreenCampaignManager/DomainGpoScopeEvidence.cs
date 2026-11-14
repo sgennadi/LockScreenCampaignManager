@@ -80,6 +80,12 @@ internal sealed class DomainGpoScopeEvidence
         if (!data.TryGetProperty("complete", out var done) ||
             done.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             throw new InvalidDataException("Missing applicability completeness marker.");
+        // Never accept complete AD-only coverage when exact selected
+        // principal tokenGroups were not verified on the selected DC.
+        if (done.GetBoolean() && (computerToken != "Read" ||
+            (requestedUser.Length > 0 && userToken != "Read")))
+            throw new InvalidDataException(
+                "Complete AD scope requires verified computer and user tokens.");
         var array = data.GetProperty("links");
         var limitations = data.GetProperty("limitations");
         if (array.ValueKind != JsonValueKind.Array || array.GetArrayLength() > 750 ||
@@ -131,7 +137,13 @@ internal sealed class DomainGpoScopeEvidence
                     computerRead is not ("Read" or "Deny" or "Unknown" or "Not assessed"))) ||
                 (scope == "Computer" && (computerRead != "N/A" ||
                     lb is not ("" or "0" or "1" or "2"))) ||
-                (scope == "User" && state == "AD candidate" && computerRead != "Read") ||
+                (scope == "User" && computerToken != "Read" &&
+                    computerRead is ("Read" or "Deny")) ||
+                (state == "AD candidate" &&
+                    (security != "Read+Apply" || wmi != "None" ||
+                     computerToken != "Read" ||
+                     (scope == "User" &&
+                         (userToken != "Read" || computerRead != "Read")))) ||
                 (state == "Excluded: computer GPO Read denied" && computerRead != "Deny") ||
                 (state == "Conditional: computer Read not verified" && computerRead != "Unknown"))
                 throw new InvalidDataException("Unexpected AD link/scope/security classification.");

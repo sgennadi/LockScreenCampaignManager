@@ -1787,6 +1787,12 @@ StartExecutePSFirst=true
             !NativeGpoDomainAudit.TryGpoFlags("-1", out _) &&
             !NativeGpoDomainAudit.TryGpoFlags("4", out _),
             "GPC flags accept missing=0 but reject corrupt/unsupported values.");
+        Check(NativeGpoDomainAudit.ScopeTokensVerified("Computer", "Read", null) &&
+            NativeGpoDomainAudit.ScopeTokensVerified("User", "Read", "Read") &&
+            !NativeGpoDomainAudit.ScopeTokensVerified("Computer", "Unavailable", null) &&
+            !NativeGpoDomainAudit.ScopeTokensVerified("User", "Read", "Unavailable") &&
+            !NativeGpoDomainAudit.ScopeTokensVerified("User", "Unavailable", "Read"),
+            "Missing tokenGroups cannot verify empty/all-excluded GPO scope.");
         Check(!NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x00020000) &&
             NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x00000010) &&
             NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(
@@ -1805,7 +1811,16 @@ StartExecutePSFirst=true
                 "Conditional: WMI not evaluated" &&
             NativeGpoDomainAudit.QualifyComputerRead(
                 "Excluded: matching security deny", "Read") ==
-                "Excluded: matching security deny",
+                "Excluded: matching security deny" &&
+            NativeGpoDomainAudit.QualifyComputerRead(
+                "Unknown: security filtering", "Deny") ==
+                "Excluded: computer GPO Read denied" &&
+            NativeGpoDomainAudit.QualifyComputerRead(
+                "Unknown: security filtering", "Read") ==
+                "Unknown: security filtering" &&
+            NativeGpoDomainAudit.QualifyComputerRead(
+                "Excluded: link disabled", "Deny") ==
+                "Excluded: link disabled",
             "MS16-072 computer GPC Read permission never gives client attestation.");
         Check(NativeGpoDomainAudit.QualifyLoopbackUserRow(
                 "AD candidate", "Replace candidate", false) ==
@@ -1855,14 +1870,15 @@ StartExecutePSFirst=true
                 computerRead = scope == "User" ? computerRead : "N/A"
             };
         System.Text.Json.JsonElement Json(DateTimeOffset at, string host,
-            string who, bool complete = true, string computerRead = "Read") =>
+            string who, bool complete = true, string computerRead = "Read",
+            string computerTokenStatus = "Read", string userTokenStatus = "Read") =>
             System.Text.Json.JsonSerializer.SerializeToElement(new {
                 domain, dc, computer = host, computerOu = ou,
                 actualComputerOu = ou, requestedUser = who,
                 user = who.Length == 0 ? "" : "pilot",
                 actualUserOu = who.Length == 0 ? "" : userOu,
-                computerToken = "Read",
-                userToken = who.Length == 0 ? "Not selected" : "Read",
+                computerToken = computerTokenStatus,
+                userToken = who.Length == 0 ? "Not selected" : userTokenStatus,
                 loopback = "Replace candidate", observedUtc = at,
                 complete, provesWinningGpo = false,
                 provesClientApplication = false,
@@ -1948,6 +1964,21 @@ StartExecutePSFirst=true
                 x.State == "Not verified" &&
                 x.Observation.Contains("2 unresolved", StringComparison.Ordinal)),
             "Unavailable computer GPO Read must stay conditional and incomplete.");
+
+        bool missingTokenRejected = false;
+        try { _ = DomainGpoScopeEvidence.Parse(
+            Json(now, pc, "pilot", computerTokenStatus: "Unavailable"),
+            report, pc, ou, "pilot", now); }
+        catch (InvalidDataException) { missingTokenRejected = true; }
+        Check(missingTokenRejected,
+            "Complete AD scope cannot contain unavailable computer tokenGroups.");
+        missingTokenRejected = false;
+        try { _ = DomainGpoScopeEvidence.Parse(
+            Json(now, pc, "pilot", userTokenStatus: "Unavailable"),
+            report, pc, ou, "pilot", now); }
+        catch (InvalidDataException) { missingTokenRejected = true; }
+        Check(missingTokenRejected,
+            "Complete AD scope cannot contain unavailable user tokenGroups.");
 
         var withoutUser = DomainGpoScopeEvidence.Parse(Json(now, pc, ""),
             report, pc, ou, "", now);

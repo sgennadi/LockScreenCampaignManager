@@ -290,7 +290,10 @@ internal static partial class NativeGpoDomainAudit
         if (scope == "User" && computerForUser is null)
             throw new InvalidDataException("User GPO projection needs a computer read token.");
         var rows = new List<ScopedLink>();
-        bool complete = true;
+        // An empty result or independently excluded GPOs cannot prove that
+        // the selected user's/computer's security groups were read.
+        bool complete = ScopeTokensVerified(scope, identity.TokenStatus,
+            computerForUser?.TokenStatus);
         foreach (var level in levels)
         {
             for (int i = 0; i < level.Links.Count; i++)
@@ -383,17 +386,27 @@ internal static partial class NativeGpoDomainAudit
                 CultureInfo.InvariantCulture, out flags) && flags is >= 0 and <= 3);
     }
 
-    // Read permission for the computer is required to retrieve User GPOs
-    // (MS16-072). Missing access evidence is conditional, not an applied GPO.
+    // Read-only tokenGroups evidence is essential for an AD-only scope result.
+    // A zero-link or all-excluded scan is incomplete if either token is missing.
+    internal static bool ScopeTokensVerified(string scope, string identityToken,
+        string? computerToken) =>
+        identityToken == "Read" &&
+        (scope == "Computer" || (scope == "User" && computerToken == "Read"));
+
+    // MS16-072: a verified computer GPC Read deny blocks the User policy
+    // even when the selected user's Read+Apply rights are unresolved.
+    // An independently excluded link remains excluded for its original cause.
     internal static string QualifyComputerRead(string state, string read)
     {
+        if (state.StartsWith("Excluded:", StringComparison.Ordinal))
+            return state;
+        if (read == "Deny" && state is ("AD candidate" or
+                "Conditional: WMI not evaluated" or "Unknown: security filtering"))
+            return "Excluded: computer GPO Read denied";
         if (state is not ("AD candidate" or "Conditional: WMI not evaluated"))
             return state;
-        return read switch {
-            "Read" => state,
-            "Deny" => "Excluded: computer GPO Read denied",
-            _ => "Conditional: computer Read not verified"
-        };
+        return read == "Read" ? state :
+            "Conditional: computer Read not verified";
     }
 
     // The selected DC never proves that the endpoint's loopback mode ran.
