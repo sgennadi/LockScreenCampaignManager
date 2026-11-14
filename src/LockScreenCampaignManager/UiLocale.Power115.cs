@@ -37,7 +37,7 @@ internal static partial class UiLocale
         ["Conditional: loopback unknown"] = "Условно: режим Loopback не определён",
         ["Conditional: loopback not confirmed"] = "Условно: Loopback не подтверждён на клиенте",
         ["Historical AD scope"] = "Устаревший снимок области AD",
-        ["Computer GPO Read"] = "Чтение пользовательских GPO компьютером",
+        ["Computer GPO Read"] = "GPO: чтение ПК",
         ["Excluded: computer GPO Read denied"] =
             "Исключено: компьютеру запрещено чтение GPO",
         ["Conditional: computer Read not verified"] =
