@@ -1907,6 +1907,38 @@ StartExecutePSFirst=true
                 x.State == "Not verified"),
             "Partial AD security/source readings cannot count as verified evidence.");
 
+        string UserXmlFor(string identity) =>
+            "<Rsop xmlns=\"http://www.microsoft.com/GroupPolicy/Rsop\">" +
+            "<ReadTime>" + now.ToString("o") + "</ReadTime>" +
+            "<DataType>LoggedData</DataType><UserResults>" +
+            "<Name>" + identity + "</Name><Domain>EXAMPLE</Domain>" +
+            "<GPO><Identifier>{" + gpo + "}</Identifier>" +
+            "<Name>Pilot Restrictions</Name><Enabled>true</Enabled>" +
+            "<IsValid>true</IsValid><FilterAllowed>true</FilterAllowed>" +
+            "<AccessDenied>false</AccessDenied></GPO></UserResults></Rsop>";
+        const string ownLogin = "EXAMPLE\\pilot";
+        const string foreignLogin = "EXAMPLE\\other";
+        var matchedUserXml = UserRsopEvidence.ParseXml(
+            UserXmlFor(ownLogin), ownLogin, domain, now);
+        var foreignUserXml = UserRsopEvidence.ParseXml(
+            UserXmlFor(foreignLogin), foreignLogin, domain, now);
+        Check(DomainGpoPilotReadiness.UserXmlMatchesScope(matchedUserXml, scope) &&
+            !DomainGpoPilotReadiness.UserXmlMatchesScope(foreignUserXml, scope) &&
+            !DomainGpoPilotReadiness.UserXmlMatchesScope(matchedUserXml, withoutUser),
+            "User gpresult and selected AD user must share a verified account name.");
+        var foreign = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, foreignUserXml, now, null, scope);
+        Check(foreign.Findings.Any(x => x.Area == "User XML identity correlation" &&
+                x.State == "Not verified") &&
+            !foreign.NamedBlockers.Any(x => x.Scope == "User" &&
+                x.ReviewState == "Review first (GPO reported applied)"),
+            "Unrelated imported User gpresult cannot elevate this AD user's GPOs.");
+        var matching = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, matchedUserXml, now, null, scope);
+        Check(matching.NamedBlockers.Any(x => x.Scope == "User" &&
+                x.ReviewState == "Review first (GPO reported applied)"),
+            "Matching User gpresult adds source evidence without proving precedence.");
+
         bool wrongIdentityRejected = false;
         try { _ = DomainGpoScopeEvidence.Parse(raw, report,
             "other.example.com", ou, "pilot", now); }
