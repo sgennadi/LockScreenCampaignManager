@@ -36,6 +36,7 @@ internal sealed class EndpointUserReadinessEvidence
     internal string Domain { get; private init; } = "";
     internal string Computer { get; private init; } = "";
     internal string User { get; private init; } = "";
+    internal string UserSid { get; private init; } = "";
     internal string Session { get; private init; } = "";
     internal DateTimeOffset CapturedUtc { get; private init; }
     internal IReadOnlyList<EndpointUserSaverValue> Values { get; private init; } = [];
@@ -116,11 +117,17 @@ internal sealed class EndpointUserReadinessEvidence
         }
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        // The signed-in Windows SID is identity metadata, not evidence of
+        // domain authentication. Non-domain SID forms remain uncorrelated.
+        string userSid = currentIdentity.User?.Value ?? "";
+        if (!PilotUserSidCorrelation.ValidDomainAccountSid(userSid))
+            userSid = "";
         string json = JsonSerializer.Serialize(new
         {
             schema = Schema, capturedUtc = now.ToString("O", CultureInfo.InvariantCulture),
             domain = suffix.ToLowerInvariant(), computer = fqdn.ToLowerInvariant(),
-            user, session = System.Windows.Forms.SystemInformation.TerminalServerSession
+            user, userSid,
+            session = System.Windows.Forms.SystemInformation.TerminalServerSession
                 ? "RemoteDesktop" : "NonRemoteUnverified",
             values = values.Select(x => new
             {
@@ -148,14 +155,25 @@ internal sealed class EndpointUserReadinessEvidence
         JsonElement root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Endpoint evidence must be a JSON object.");
-        CheckExactKeys(root, ["schema", "capturedUtc", "domain", "computer",
-            "user", "session", "values"]);
+        // v1 without userSid remains importable for historical review,
+        // but its identity is unverified. Both versions reject extra keys.
+        bool hasUserSid = root.TryGetProperty("userSid", out _);
+        if (hasUserSid)
+            CheckExactKeys(root, ["schema", "capturedUtc", "domain", "computer",
+                "user", "userSid", "session", "values"]);
+        else
+            CheckExactKeys(root, ["schema", "capturedUtc", "domain", "computer",
+                "user", "session", "values"]);
         if (Field(root, "schema", 80) != Schema)
             throw new InvalidDataException("Unsupported endpoint snapshot schema.");
 
         string domain = Field(root, "domain", 253);
         string computer = Field(root, "computer", 253);
         string user = Field(root, "user", 256);
+        string userSid = hasUserSid ? Field(root, "userSid", 184) : "";
+        if (userSid.Length > 0 &&
+            !PilotUserSidCorrelation.ValidDomainAccountSid(userSid))
+            throw new InvalidDataException("Endpoint user SID is invalid.");
         string session = Field(root, "session", 30);
         if (!NativeGpoConflictScan.SafeComputerName(computer, domain) ||
             string.IsNullOrWhiteSpace(user) ||
@@ -195,7 +213,7 @@ internal sealed class EndpointUserReadinessEvidence
         return new EndpointUserReadinessEvidence
         {
             Domain = domain, Computer = computer, User = user,
-            Session = session, CapturedUtc = captured.ToUniversalTime(),
+            UserSid = userSid, Session = session, CapturedUtc = captured.ToUniversalTime(),
             Values = values, RawJson = json,
             Sha256 = Convert.ToHexString(SHA256.HashData(StrictUtf8.GetBytes(json)))
                 .ToLowerInvariant()
