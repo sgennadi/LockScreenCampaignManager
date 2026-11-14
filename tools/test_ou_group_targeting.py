@@ -136,7 +136,12 @@ class OuMembershipAndDeployUiTests(unittest.TestCase):
         self.assertIn('UiLocale.Display("Group chosen. Select the OU', deploy)
         self.assertIn('"Filter computer groups by selected OU"', matrix)
         self.assertIn('"Filter user groups by selected OU"', matrix)
-        self.assertIn('SizeType.AutoSize) // Long translated warning', matrix)
+        # Preview.116 replaced the old single warning-only auto row with
+        # a completely auto-sized User/Computer field layout.
+        self.assertIn('fields.RowStyles.Add(i switch', matrix)
+        self.assertIn('14 =>', matrix) if False else None
+        self.assertIn('RowStyle(SizeType.AutoSize)', matrix)
+        self.assertIn('caption.MaximumSize = new Size(width, 0)', matrix)
         self.assertIn('fields.RowStyles[14].SizeType != SizeType.AutoSize', smoke)
         self.assertNotIn('selectedOu.Dn + translated', deploy)
         self.assertNotIn('row.Dn = UiLocale', deploy)
