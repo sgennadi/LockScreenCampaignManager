@@ -10,7 +10,7 @@ namespace LockScreenCampaignManager;
 internal sealed record AdScopedGpoLink(
     string Gpo, string GpoId, string Scope, string Origin, string LinkedAt,
     int Depth, int Order, bool Enforced, string State, string Security,
-    string Wmi, string LoopbackValue);
+    string Wmi, string LoopbackValue, string ComputerRead);
 
 internal sealed class DomainGpoScopeEvidence
 {
@@ -103,6 +103,7 @@ internal sealed class DomainGpoScopeEvidence
             string security = Read(item, "security", 35);
             string wmi = Read(item, "wmi", 35);
             string lb = Read(item, "loopbackValue", 10);
+            string computerRead = Read(item, "computerRead", 20);
             if (!Guid.TryParseExact(guid, "D", out var id) || id == Guid.Empty ||
                 scope is not ("Computer" or "User") ||
                 origin is not ("Computer OU" or "User OU" or "Computer OU (loopback)") ||
@@ -116,22 +117,26 @@ internal sealed class DomainGpoScopeEvidence
                     "Conditional: loopback Replace candidate" or
                     "Conditional: loopback unknown" or
                     "Conditional: loopback not confirmed" or
-                    "Conditional: loopback not confirmed" or
-                    "Conditional: loopback Replace candidate" or
-                    "Conditional: loopback unknown" or
+                    "Conditional: computer Read not verified" or
                     "Excluded: link disabled" or "Excluded: block inheritance" or
                     "Excluded: policy half disabled" or
                     "Excluded: matching security deny" or
+                    "Excluded: computer GPO Read denied" or
                     "Unknown: security filtering" or
                     "Unknown: source unavailable" or
                     "Unknown: unreadable GPO/ACL") ||
                 security is not ("Unknown" or "Read+Apply" or "Deny") ||
                 wmi is not ("Unknown" or "Unverified" or "None") ||
-                (scope == "User" && lb.Length > 0) ||
-                (scope == "Computer" && lb is not ("" or "0" or "1" or "2")))
+                (scope == "User" && (lb.Length > 0 ||
+                    computerRead is not ("Read" or "Deny" or "Unknown" or "Not assessed"))) ||
+                (scope == "Computer" && (computerRead != "N/A" ||
+                    lb is not ("" or "0" or "1" or "2"))) ||
+                (scope == "User" && state == "AD candidate" && computerRead != "Read") ||
+                (state == "Excluded: computer GPO Read denied" && computerRead != "Deny") ||
+                (state == "Conditional: computer Read not verified" && computerRead != "Unknown"))
                 throw new InvalidDataException("Unexpected AD link/scope/security classification.");
             values.Add(new(gpo, guid, scope, origin, linkedAt, depth, order,
-                enforced, state, security, wmi, lb));
+                enforced, state, security, wmi, lb, computerRead));
         }
         return new DomainGpoScopeEvidence
         {
