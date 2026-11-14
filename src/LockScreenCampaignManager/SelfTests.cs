@@ -1787,6 +1787,13 @@ StartExecutePSFirst=true
             !NativeGpoDomainAudit.TryGpoFlags("-1", out _) &&
             !NativeGpoDomainAudit.TryGpoFlags("4", out _),
             "GPC flags accept missing=0 but reject corrupt/unsupported values.");
+        Check(!NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x00020000) &&
+            NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x00000010) &&
+            NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(
+                unchecked((int)0x80000000)) &&
+            NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x10000000) &&
+            !NativeGpoDomainAudit.GrantsGpcReadFromAccessMask(0x00000100),
+            "READ_CONTROL or Apply without ReadProperty cannot load GPC settings.");
         Check(NativeGpoDomainAudit.QualifyComputerRead("AD candidate",
                 "Read") == "AD candidate" &&
             NativeGpoDomainAudit.QualifyComputerRead("AD candidate",
