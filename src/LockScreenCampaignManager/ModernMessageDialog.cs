@@ -108,7 +108,7 @@ internal sealed class ModernMessageDialog : Form
             Padding = new Padding(15), ColumnCount = 1, RowCount = 4
         };
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 5));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
+        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         Controls.Add(outer);
@@ -156,7 +156,7 @@ internal sealed class ModernMessageDialog : Form
             Text = UiLocale.Display(string.IsNullOrWhiteSpace(caption)
                 ? "Notification" : caption),
             TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true,
+            AutoEllipsis = false,
             AccessibleRole = AccessibleRole.StaticText
         };
         var captionLine = new Label {
@@ -168,7 +168,7 @@ internal sealed class ModernMessageDialog : Form
                 question ? "Choose an action to continue." :
                 "Information from LockScreen Campaign Manager."),
             TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
+            AutoEllipsis = false
         };
         if (rtl) {
             heading.TextAlign = ContentAlignment.MiddleRight;
@@ -188,6 +188,7 @@ internal sealed class ModernMessageDialog : Form
         var body = new TextBox {
             Name = "ModernDialogBody", Dock = DockStyle.Fill,
             Multiline = true, ReadOnly = true,
+            TabStop = false,
             BorderStyle = BorderStyle.None,
             WordWrap = true, ScrollBars = ScrollBars.Vertical,
             BackColor = UiStyle.Surface, ForeColor = UiStyle.Foreground,
@@ -275,16 +276,76 @@ internal sealed class ModernMessageDialog : Form
         outer.Controls.Add(footer, 0, 3);
         UiStyle.Apply(this);
 
+        // Dialog headings, translated hints and negative actions must fit
+        // across every supported language and 100-200% font scaling. Growing
+        // only the inner label is insufficient: the outer header/footer also
+        // need enough height to show every line without ellipsis.
+        int lastMeasuredWidth = -1;
+        void FitTextChrome()
+        {
+            if (IsDisposed || outer.IsDisposed || headerText.IsDisposed) return;
+            int available = Math.Max(180, headerText.ClientSize.Width - 6);
+            if (available < 190) available = Math.Max(180,
+                ClientSize.Width - outer.Padding.Horizontal -
+                header.Padding.Horizontal - header.ColumnStyles[0].Width - 30);
+            static int WrappedHeight(Label label, int width, int extra)
+            {
+                string value = label.Text.Length == 0 ? "Agpqy" : label.Text;
+                return TextRenderer.MeasureText(value, label.Font,
+                    new Size(Math.Max(90, width), 4096),
+                    TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix)
+                    .Height + label.Padding.Vertical + label.Margin.Vertical + extra;
+            }
+            int headingHeight = Math.Max(53, WrappedHeight(heading, available, 13));
+            int hintHeight = Math.Max(38, WrappedHeight(captionLine, available, 11));
+            headerText.RowStyles[0].SizeType = SizeType.Absolute;
+            headerText.RowStyles[0].Height = headingHeight;
+            headerText.RowStyles[1].SizeType = SizeType.Absolute;
+            headerText.RowStyles[1].Height = hintHeight;
+            int requiredHeader = headingHeight + hintHeight +
+                header.Padding.Vertical + header.Margin.Vertical + 8;
+            outer.RowStyles[1].SizeType = SizeType.Absolute;
+            outer.RowStyles[1].Height = Math.Max(112, requiredHeader);
+
+            int requiredActions = actions.Controls.Cast<Control>().Select(x =>
+                Math.Max(x.PreferredSize.Height, x.MinimumSize.Height) +
+                x.Margin.Vertical).DefaultIfEmpty(43).Max();
+            int footWidth = Math.Max(110, footer.ClientSize.Width * 28 / 100 - 8);
+            int hintNeeded = WrappedHeight(
+                footer.Controls.OfType<Label>().Single(), footWidth, 7);
+            outer.RowStyles[3].SizeType = SizeType.Absolute;
+            outer.RowStyles[3].Height = Math.Max(76, Math.Max(
+                requiredActions + actions.Padding.Vertical + 11, hintNeeded + 12));
+        }
+        void FitOnWidthChange()
+        {
+            if (IsDisposed || outer.IsDisposed) return;
+            int width = headerText.ClientSize.Width;
+            if (width == lastMeasuredWidth) return;
+            lastMeasuredWidth = width;
+            FitTextChrome();
+        }
+        FitTextChrome();
+        headerText.SizeChanged += (_, _) => FitOnWidthChange();
+        heading.FontChanged += (_, _) => FitTextChrome();
+        captionLine.FontChanged += (_, _) => FitTextChrome();
+        heading.TextChanged += (_, _) => FitTextChrome();
+        captionLine.TextChanged += (_, _) => FitTextChrome();
+
         // Preserve the original default selection across localization/scaling.
         var primary = _actions.Single(x => x.DialogResult == DefaultAction);
-        Shown += (_, _) => primary.Focus();
+        Shown += (_, _) => {
+            FitTextChrome();
+            // Show the FIRST message line, even when this modal is restored
+            // on a high DPI screen with a previously focused scroll field.
+            body.SelectionStart = 0;
+            body.SelectionLength = 0;
+            body.ScrollToCaret();
+            primary.Focus();
+        };
         DpiChanged += (_, _) => {
             if (IsHandleCreated && !IsDisposed)
-                BeginInvoke(new Action(() =>
-                    outer.RowStyles[3].Height = Math.Max(76,
-                        actions.Controls.Cast<Control>().Max(x =>
-                            x.PreferredSize.Height + x.Margin.Vertical) +
-                        actions.Padding.Vertical + 16)));
+                BeginInvoke(new Action(FitTextChrome));
         };
     }
 
