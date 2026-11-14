@@ -1,3 +1,10 @@
+## 0.4.0-preview.118 — User GPO computer-context Read preflight (2026-11-14)
+
+1. Check selected computer's GPC Read against matching User GPO ACL separately from user's Read+Apply security filtering.
+2. Flag explicit computer Read denies as potential source-side blockers; unknown ACL/token grants remain conditional, not successful application.
+3. Show Computer GPO Read totals and per-GPO source evidence in the existing single Pilot Readiness report.
+4. Translate new states in Russian/Hebrew; extend native permission and strict-schema regressions. No domain writes.
+
 ## 0.4.0-preview.117 — conservative GPO flags, loopback and evidence precedence (2026-11-14)
 
 1. Distinguish conditional loopback Replace/Merge processing from normal User OU and computer-OU User GPO sources.
