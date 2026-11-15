@@ -7,8 +7,8 @@ public sealed partial class MainForm
 {
     private sealed partial class CampaignWizardDialog
     {
-        // CI-only verification: a user Screen Saver-only campaign goes from
-        // Type straight to Save, with zero JPEGs and no AD/LDAP access.
+        // CI-only verification: Screen Saver-only goes from Type straight to
+        // Review & Save, with zero JPEGs and no AD/LDAP access.
         internal void ExerciseScreenSaverSkipForSmokeTest()
         {
             _step = 1;
