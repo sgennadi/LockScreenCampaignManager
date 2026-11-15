@@ -143,6 +143,8 @@ internal static partial class UiLocale
             "«Далее» проверит кампанию и предложит сохранить .json.",
         ["Local .json save skipped"] = "Без сохранения .json",
         ["Local .json save optional"] = "Сохранение .json — необязательно",
+        ["Could not remember the local save choice for next time."] =
+            "Не удалось запомнить выбор сохранения для следующего запуска.",
 
         ["Campaign files"] = "Файлы кампании",
         ["Client type"] = "Тип клиента",
