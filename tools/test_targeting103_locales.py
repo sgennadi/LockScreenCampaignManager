@@ -62,6 +62,17 @@ class Targeting103LocalisationTests(unittest.TestCase):
         self.assertNotIn('row.Dn = UiLocale', deploy)
         self.assertNotIn('group.Dn = UiLocale', deploy)
 
+    def test_successful_connection_opens_target_selection_without_extra_next(self):
+        deploy = read("DomainDeploymentForm.cs")
+        self.assertIn("if (!_advancedMode && _wizardStep == 0 && _connectedWritable &&", deploy)
+        self.assertIn("_allOus.Count > 0 && _allGroups.Count > 0)", deploy)
+        self.assertIn("_wizardStep = 1;\n                UpdateDeploymentSteps();", deploy)
+        self.assertIn("_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen", deploy)
+        self.assertIn("BeginInvoke(new Action(() =>", deploy)
+        self.assertIn("OpenTargetAssignments();", deploy)
+        self.assertIn("if (!IsDisposed && !_running && !_advancedMode &&", deploy)
+        self.assertIn("if (_running) return;", deploy)
+
     def test_help_and_status_are_translated_without_touching_ad(self):
         dialog = read("CampaignAssignmentsDialog.cs")
         deploy = read("DomainDeploymentForm.cs")

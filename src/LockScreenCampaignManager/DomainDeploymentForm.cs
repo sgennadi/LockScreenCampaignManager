@@ -1206,6 +1206,33 @@ internal sealed partial class DomainDeploymentForm : Form
             SaveConnection();
             InvalidatePlan();
             UpdateDeploymentSteps();
+
+            // Successful wizard connection leads directly to target selection.
+            // Never auto-advance in Advanced mode, on a read-only/unknown DC,
+            // after a failed directory read, or while the user is editing a
+            // later wizard page. Existing selections and Back navigation remain intact.
+            if (!_advancedMode && _wizardStep == 0 && _connectedWritable &&
+                _allOus.Count > 0 && _allGroups.Count > 0)
+            {
+                _wizardStep = 1;
+                UpdateDeploymentSteps();
+                _progress.Text = UiLocale.Display(
+                    "Connected. Select the campaign OU and security groups; Preview is required before deployment.");
+
+                // Screen Saver targets users, while Both requires independent
+                // computer/user assignments. Skip the legacy computer-only
+                // target lists and open the exact OU/group selector immediately.
+                // Defer the modal dialog until the connection UI has finished
+                // updating. Never overwrite assignments already selected.
+                if (_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen &&
+                    _project.TargetAssignments.Count == 0 && IsHandleCreated)
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (!IsDisposed && !_running && !_advancedMode &&
+                            _wizardStep == 1 && _project.TargetAssignments.Count == 0)
+                            OpenTargetAssignments();
+                    }));
+            }
         }
         catch (Exception ex) { DisplayError(ex); }
     }
