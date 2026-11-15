@@ -28,7 +28,7 @@ public sealed partial class MainForm
                     .OfType<TextBox>()
                     .Any(x => x.Name == "WizardCampaignNameInput"))
                 throw new InvalidOperationException(
-                    "Screen Saver-only did not skip images/arrangement/schedule to Save.");
+                    "Screen Saver-only did not skip images/arrangement/schedule to Review.");
         }
 
         private static IEnumerable<Control> Walk(Control root)
