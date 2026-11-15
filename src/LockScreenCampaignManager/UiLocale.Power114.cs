@@ -38,6 +38,11 @@ internal static partial class UiLocale
         ["User Screen Saver active"] = "Включение заставки",
         ["User Screen Saver idle"] = "Ожидание заставки",
         ["User Screen Saver file"] = "Файл заставки",
+        ["User Screen Saver file access"] = "Доступ к файлу заставки",
+        ["User saver vs power"] = "Заставка и электропитание",
+        ["User saver vs display"] = "Заставка и отключение экрана",
+        ["User saver vs sleep"] = "Заставка и переход в сон",
+        ["User saver vs machine lock"] = "Заставка и блокировка компьютера",
         ["User Screen Saver secure"] = "Защита заставки",
         ["Screen Saver UI restriction"] = "Ограничение окна заставки"
     };
@@ -74,6 +79,11 @@ internal static partial class UiLocale
         ["User Screen Saver active"] = "הפעלת שומר המסך",
         ["User Screen Saver idle"] = "השהיית שומר המסך",
         ["User Screen Saver file"] = "קובץ שומר המסך",
+        ["User Screen Saver file access"] = "גישה לקובץ שומר המסך",
+        ["User saver vs power"] = "שומר מסך מול הגדרות חשמל",
+        ["User saver vs display"] = "שומר מסך מול כיבוי תצוגה",
+        ["User saver vs sleep"] = "שומר מסך מול מצב שינה",
+        ["User saver vs machine lock"] = "שומר מסך מול נעילת מחשב",
         ["User Screen Saver secure"] = "אבטחת שומר המסך",
         ["Screen Saver UI restriction"] = "הגבלת ממשק שומר המסך"
     };
