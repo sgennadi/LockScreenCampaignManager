@@ -1785,6 +1785,94 @@ StartExecutePSFirst=true
         var scope = DomainGpoScopeEvidence.Parse(scopedData, report,
             pc, ou, "pilot", scanNow);
         Check(scope.UserSid == pilotSid, "AD-only scope preserves the exact LDAP objectSid.");
+
+        // Preview.122: a private HKCU snapshot may optionally contain a local
+        // file byte-open observation. All file data is operator supplied and
+        // never proves execution, publisher signature or effective User GPO.
+        static string WithScr(string json, string status,
+            string source = "PolicyHKCU", string raw = "scrnsave.scr")
+        {
+            string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
+            string file = System.Text.Json.JsonSerializer.Serialize(new {
+                source, status, valueSha256 = hash
+            });
+            return json[..^1] + ",\"scrFile\":" + file + "}";
+        }
+        var fileReady = EndpointUserReadinessEvidence.ParseJson(
+            WithScr(WithSid(valid, pilotSid), "Readable"), now);
+        Check(fileReady.ScrFile is { Status: "Readable", Source: "PolicyHKCU" } &&
+            current.ScrFile is null &&
+            Reject(WithScr(WithSid(valid, pilotSid), "Executed"), now) &&
+            Reject(WithScr(WithSid(valid, pilotSid), "Readable", source: "DesktopHKCU"), now) &&
+            Reject(WithScr(WithSid(valid, pilotSid), "Readable", raw: "other.scr"), now) &&
+            Reject(WithScr(valid, "Readable"), now),
+            "Local SCR file evidence must match captured HKCU selection/hash; legacy is allowed.");
+
+        var withoutFile = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, current, scope);
+        var withFile = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow, fileReady, scope);
+        var deniedFile = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
+            null, null, null, scanNow,
+            EndpointUserReadinessEvidence.ParseJson(
+                WithScr(WithSid(valid, pilotSid), "Denied"), now), scope);
+        Check(withoutFile.Findings.Any(x => x.Area == "User Screen Saver file access" &&
+                x.State == "Not verified") &&
+            withFile.Findings.Any(x => x.Area == "User Screen Saver file access" &&
+                x.State == "Information") &&
+            deniedFile.Findings.Any(x => x.Area == "User Screen Saver file access" &&
+                x.State == "Observed concern") &&
+            !withFile.ProvesScreenSaverDisplayed && !deniedFile.PermitsAutomaticRemediation,
+            "Unsigned local byte-read is diagnostic only, never an applied SCR or remediation.");
+
+        var missingFileForOtherUser = DomainGpoPilotReadiness.Build(
+            report, pc, ou, 600, null, null, null, scanNow,
+            EndpointUserReadinessEvidence.ParseJson(
+                WithScr(WithSid(valid, otherSid), "Denied"), now), scope);
+        Check(!missingFileForOtherUser.Findings.Any(x =>
+                x.Area == "User Screen Saver file access" &&
+                x.State == "Observed concern"),
+            "Wrong SID must not make another user's SCR file look blocked.");
+
+        var unc = EndpointScrFileEvidence.Capture(
+            new EndpointUserSaverValue("PolicyHKCU", "SCRNSAVE.EXE",
+                "Present", @"\\server\private\screensaver.scr"),
+            new EndpointUserSaverValue("DesktopHKCU", "SCRNSAVE.EXE",
+                "Missing", ""));
+        var unsupported = EndpointScrFileEvidence.Capture(
+            new EndpointUserSaverValue("PolicyHKCU", "SCRNSAVE.EXE",
+                "Present", "powershell.exe -Command something"),
+            new EndpointUserSaverValue("DesktopHKCU", "SCRNSAVE.EXE",
+                "Missing", ""));
+        Check(unc.Status == "NonLocal" && unsupported.Status == "Unsupported",
+            "Local SCR probe never opens UNC paths or arbitrary command lines.");
+
+        var timerConflict = PilotSaverPowerComparison.CompareTimerSources(600, [
+            new EndpointPowerReading("Display", "AC", "ActivePlanWmi", "Present", 300),
+            new EndpointPowerReading("Display", "AC", "PolicyRegistry", "Present", 240)
+        ], true, "Available", "Readable");
+        var timerEarly = PilotSaverPowerComparison.CompareTimerSources(600, [
+            new EndpointPowerReading("Display", "AC", "ActivePlanWmi", "Present", 240),
+            new EndpointPowerReading("Display", "AC", "PolicyRegistry", "Absent", null)
+        ], true, "Available", "Readable");
+        var timerEqual = PilotSaverPowerComparison.CompareTimerSources(600, [
+            new EndpointPowerReading("Sleep", "DC", "ActivePlanWmi", "Present", 600)
+        ], true, "Available", "Unavailable");
+        var timerUnknown = PilotSaverPowerComparison.CompareTimerSources(600, [
+            new EndpointPowerReading("Display", "AC", "ActivePlanWmi", "Present", 240)
+        ], false, "Available", "Unavailable");
+        Check(timerConflict.Any(x => x.Area == "User saver vs display" &&
+                x.State == "Not verified") &&
+            !timerConflict.Any(x => x.State == "Observed concern") &&
+            timerEarly.Any(x => x.Area == "User saver vs display" &&
+                x.State == "Observed concern" && x.Observation.Contains("360 s earlier")) &&
+            timerEqual.Any(x => x.Area == "User saver vs sleep" &&
+                x.State == "Source candidate") &&
+            timerUnknown.All(x => x.State == "Not verified"),
+            "Actual HKCU power comparison handles AC/DC, source conflicts and equal timers.");
+
+
         var matching = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
             null, null, null, scanNow, current, scope);
         Check(matching.Findings.Any(x => x.Area == "User identity correlation" &&
