@@ -695,6 +695,16 @@ internal sealed partial class DomainDeploymentForm : Form
     // Show the existing OU / User / Group assignment editor inside the
     // target page instead of opening a second modal window. Its validation,
     // LDAP OU membership lookup and Preview safety checks are unchanged.
+    private void ResetInlineTargetEditor()
+    {
+        var editor = _inlineTargetEditor;
+        _inlineTargetEditor = null;
+        if (editor is not null && !editor.IsDisposed)
+            editor.Dispose();
+        if (_legacyTargetLists is not null)
+            _legacyTargetLists.Visible = true;
+    }
+
     private void EnsureInlineTargetEditor()
     {
         if (_advancedMode || _wizardStep != 1 ||
@@ -730,10 +740,6 @@ internal sealed partial class DomainDeploymentForm : Form
         {
             if (ReferenceEquals(_inlineTargetEditor, editor))
                 _inlineTargetEditor = null;
-            if (_legacyTargetLists is not null)
-                _legacyTargetLists.Visible = true;
-            if (!IsDisposed && !Disposing)
-                UpdateDeploymentSteps();
         };
         _inlineTargetEditor = editor;
         _targetSplit.Panel1.Controls.Add(editor);
@@ -1103,6 +1109,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _directComputerGroupDns.Clear();
         _computerCoverage = null;
         UpdateCoverageStatus();
+        ResetInlineTargetEditor();
         _allOus.Clear();
         _allGroups.Clear();
         FilterOus();
@@ -1208,6 +1215,7 @@ internal sealed partial class DomainDeploymentForm : Form
             _directComputerGroupDns.Clear();
             _computerCoverage = null;
             UpdateCoverageStatus();
+            ResetInlineTargetEditor();
             _allOus.Clear();
             var ouRows = ousResponse.GetProperty("data").EnumerateArray()
                 .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
