@@ -129,6 +129,8 @@ internal sealed class DomainGpoPilotReadiness
             currentAd && adScope?.User.Length > 0);
         AddEndpointUser(findings, endpointUser, userXml, saverIdleSeconds, now,
             adScope);
+        findings.AddRange(PilotSaverPowerComparison.Compare(
+            endpointUser, adScope, power, now));
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
         AddSysvolSystem(findings, sysvolSystem, adScope, now);
@@ -436,6 +438,31 @@ internal sealed class DomainGpoPilotReadiness
                     break;
             }
         }
+        // File availability comes from the selected user's own local read,
+        // not a manager-side path probe. Only an exact current AD SID-match
+        // makes this an observation about the selected pilot user.
+        if (endpoint.ScrFile is { } scr)
+        {
+            string state = scr.Status switch
+            {
+                "Readable" => "Information",
+                "Missing" or "Denied" => "Observed concern",
+                _ => "Not verified"
+            };
+            Add(findings, "User Screen Saver file access", state,
+                "Local user-context " + scr.Source + " file check: " + scr.Status +
+                ". Byte-open/read only; no execution, signature or GPO winner proof.",
+                scr.Status is "Missing" or "Denied"
+                    ? "Verify the referenced local SCR/EXE path, permissions " +
+                      "and selected user's effective Screen Saver policy."
+                    : "Check file signature, executable compatibility and " +
+                      "actual screen behavior on the pilot computer.");
+        }
+        else
+            Add(findings, "User Screen Saver file access", "Not verified",
+                "Legacy HKCU report has no local Screen Saver file check.",
+                "Recapture the private HKCU JSON as the exact selected Windows user.");
+
         var restriction = endpoint.Get("RestrictionHKCU", "NoDispScrSavPage");
         if (restriction.Status == "Unreadable")
             Add(findings, "Screen Saver UI restriction", "Not verified",
