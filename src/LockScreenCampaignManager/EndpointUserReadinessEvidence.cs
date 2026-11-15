@@ -12,7 +12,9 @@ namespace LockScreenCampaignManager;
 /// <summary>
 /// Explicit, unsigned snapshot of the CURRENT process user's HKCU on THIS
 /// Windows PC. No remote registry, commands, gpupdate, policy writes, agents
-/// or files are touched until the operator chooses a LOCAL export path.
+/// or policy files are executed. Only one explicitly selected local SCR/EXE
+/// may be opened read-only during Capture; nothing is written until the
+/// operator chooses a LOCAL export path.
 /// DNS suffix/user labels come from the local OS, NOT authenticated AD.
 /// </summary>
 internal sealed record EndpointUserSaverValue(
