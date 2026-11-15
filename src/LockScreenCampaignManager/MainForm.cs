@@ -1099,8 +1099,18 @@ public sealed partial class MainForm : Form
             string suggested = UiStyle.Preferences.LastProjectSaveDirectory;
             if (string.IsNullOrWhiteSpace(suggested) || !Directory.Exists(suggested))
                 suggested = DefaultProjectSaveDirectory();
-            // Documents may be redirected or unavailable; let the native dialog
-            // handle that gracefully rather than failing just by opening Save.
+            // Create only the application's project folder, never the Documents
+            // root. A redirected/unavailable folder falls back to the existing
+            // Windows Documents directory instead of blocking the save dialog.
+            if (!Directory.Exists(suggested))
+            {
+                try { Directory.CreateDirectory(suggested); }
+                catch
+                {
+                    suggested = Environment.GetFolderPath(
+                        Environment.SpecialFolder.MyDocuments);
+                }
+            }
             using var dialog = new SaveFileDialog {
                 Title = "Save campaign project",
                 Filter = "Campaign project (*.json)|*.json",
@@ -1127,7 +1137,7 @@ public sealed partial class MainForm : Form
             _projectDirty = false;
             // A preference write failure must not misreport a successful JSON save.
             try { UiStyle.RememberProjectSaveDirectory(directory); }
-            catch (Exception ex) { AppLog.Warning("Project directory preference: " + ex.Message); }
+            catch (Exception ex) { Debug.WriteLine("Project directory preference: " + ex.Message); }
             if (!_advancedMode && _workflowStep == 4) _workflowStep = 5;
             _status.Text = "Project saved. You may deploy through AD or finish offline.";
             UpdateWorkflow();
