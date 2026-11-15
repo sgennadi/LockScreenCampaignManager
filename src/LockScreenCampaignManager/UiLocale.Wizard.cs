@@ -111,6 +111,8 @@ internal static partial class UiLocale
             "הבא יבדוק את הקמפיין ויציע לשמור קובץ .json.",
         ["Local .json save skipped"] = "דילוג על שמירת .json",
         ["Local .json save optional"] = "שמירת .json אופציונלית",
+        ["Could not remember the local save choice for next time."] =
+            "לא ניתן לשמור את הבחירה לפעם הבאה.",
 
         ["Skip saving & continue"] = "דלג על שמירה והמשך",
         ["Project saved. Continue to Deploy or finish offline."] = "הפרויקט נשמר. המשך לפריסה או סיים ללא חיבור.",
