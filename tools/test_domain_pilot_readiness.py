@@ -25,7 +25,7 @@ class PilotReadinessContracts(unittest.TestCase):
             "now - power.ObservedUtc > TimeSpan.FromMinutes(5)",
             "power.SourceDisagreements()",
             "power.Assess(saverIdleSeconds)",
-            "recent && sourceComplete ? \"Observed concern\" : \"Not verified\""
+            "recent && sourceComplete && !sourceConflict"
         ):
             if marker == "now - power.ObservedUtc > TimeSpan.FromMinutes(5)":
                 self.assertIn("now - power.ObservedUtc", model)
@@ -87,7 +87,7 @@ class PilotReadinessContracts(unittest.TestCase):
                        "Power111EnglishByRussian", "Power111EnglishByHebrew"):
             self.assertIn(marker, get("UiLocale.Power111.cs"))
             self.assertIn(marker, get("UiLocale.cs"))
-        self.assertIn("0.4.0-preview.121", get("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.122", get("LockScreenCampaignManager.csproj"))
         self.assertIn("NOT", (ROOT / "docs" / "RELEASE-PREVIEW111.md")
                       .read_text(encoding="utf-8"))
 

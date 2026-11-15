@@ -12,7 +12,9 @@ namespace LockScreenCampaignManager;
 /// <summary>
 /// Explicit, unsigned snapshot of the CURRENT process user's HKCU on THIS
 /// Windows PC. No remote registry, commands, gpupdate, policy writes, agents
-/// or files are touched until the operator chooses a LOCAL export path.
+/// or policy files are executed. Only one explicitly selected local SCR/EXE
+/// may be opened read-only during Capture; nothing is written until the
+/// operator chooses a LOCAL export path.
 /// DNS suffix/user labels come from the local OS, NOT authenticated AD.
 /// </summary>
 internal sealed record EndpointUserSaverValue(
@@ -40,6 +42,7 @@ internal sealed class EndpointUserReadinessEvidence
     internal string Session { get; private init; } = "";
     internal DateTimeOffset CapturedUtc { get; private init; }
     internal IReadOnlyList<EndpointUserSaverValue> Values { get; private init; } = [];
+    internal EndpointScrFileEvidence? ScrFile { get; private init; }
     internal string Sha256 { get; private init; } = "";
     internal string RawJson { get; private init; } = "";
     internal bool SignedByDomain => false;
@@ -122,6 +125,9 @@ internal sealed class EndpointUserReadinessEvidence
         string userSid = currentIdentity.User?.Value ?? "";
         if (!PilotUserSidCorrelation.ValidDomainAccountSid(userSid))
             userSid = "";
+        var scrFile = EndpointScrFileEvidence.Capture(
+            values.Single(x => x.Source == "PolicyHKCU" && x.Setting == "SCRNSAVE.EXE"),
+            values.Single(x => x.Source == "DesktopHKCU" && x.Setting == "SCRNSAVE.EXE"));
         string json = JsonSerializer.Serialize(new
         {
             schema = Schema, capturedUtc = now.ToString("O", CultureInfo.InvariantCulture),
@@ -132,7 +138,11 @@ internal sealed class EndpointUserReadinessEvidence
             values = values.Select(x => new
             {
                 source = x.Source, setting = x.Setting, status = x.Status, value = x.Value
-            }).ToArray()
+            }).ToArray(),
+            scrFile = new {
+                source = scrFile.Source, status = scrFile.Status,
+                valueSha256 = scrFile.ValueSha256
+            }
         }, new JsonSerializerOptions { WriteIndented = true });
         return ParseJson(json, now);
     }
@@ -158,7 +168,15 @@ internal sealed class EndpointUserReadinessEvidence
         // v1 without userSid remains importable for historical review,
         // but its identity is unverified. Both versions reject extra keys.
         bool hasUserSid = root.TryGetProperty("userSid", out _);
-        if (hasUserSid)
+        bool hasScrFile = root.TryGetProperty("scrFile", out var scrProperty);
+        // New local observations require a captured user SID field, even if
+        // its value cannot establish a domain identity. Old v1 stays readable.
+        if (hasScrFile && !hasUserSid)
+            throw new InvalidDataException("SCR check requires user SID metadata.");
+        if (hasScrFile)
+            CheckExactKeys(root, ["schema", "capturedUtc", "domain", "computer",
+                "user", "userSid", "session", "values", "scrFile"]);
+        else if (hasUserSid)
             CheckExactKeys(root, ["schema", "capturedUtc", "domain", "computer",
                 "user", "userSid", "session", "values"]);
         else
@@ -210,11 +228,16 @@ internal sealed class EndpointUserReadinessEvidence
                 throw new InvalidDataException("Unknown/duplicate/invalid HKCU reading.");
             values.Add(new(source, setting, status, value));
         }
+        EndpointScrFileEvidence? scrFile = hasScrFile
+            ? EndpointScrFileEvidence.Parse(scrProperty,
+                values.Single(x => x.Source == "PolicyHKCU" && x.Setting == "SCRNSAVE.EXE"),
+                values.Single(x => x.Source == "DesktopHKCU" && x.Setting == "SCRNSAVE.EXE"))
+            : null;
         return new EndpointUserReadinessEvidence
         {
             Domain = domain, Computer = computer, User = user,
             UserSid = userSid, Session = session, CapturedUtc = captured.ToUniversalTime(),
-            Values = values, RawJson = json,
+            Values = values, ScrFile = scrFile, RawJson = json,
             Sha256 = Convert.ToHexString(SHA256.HashData(StrictUtf8.GetBytes(json)))
                 .ToLowerInvariant()
         };
