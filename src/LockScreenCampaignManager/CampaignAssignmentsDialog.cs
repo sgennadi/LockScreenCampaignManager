@@ -51,7 +51,7 @@ internal sealed class CampaignAssignmentsDialog : Form
     private Button? _saveButton;
     // The same validated editor can live directly inside the deployment Wizard.
     // Advanced mode still uses the original modal dialog.
-    internal Action? InlineSaved { get; set; }
+    internal Action? InlineSaved;
 
 
     internal CampaignAssignmentsDialog(CampaignProject project,
