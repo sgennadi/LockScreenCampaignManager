@@ -11,6 +11,7 @@ public sealed partial class MainForm : Form
     private CampaignProject _project = new();
     private CompanyProfile? _company;
     private bool _projectDirty;
+    private string? _projectFilePath;
     private readonly Label _companyLabel = new();
     private readonly Label _adConnectionStatus = new();
     private readonly ToolTip _connectionTooltip = new() { AutoPopDelay = 14000, InitialDelay = 300, ReshowDelay = 100 };
@@ -492,6 +493,7 @@ public sealed partial class MainForm : Form
             ("New campaign...", StartNewCampaign, null),
             ("Open project...", OpenProject, null),
             ("Save project...", SaveProject, null),
+            ("Save project as...", SaveProjectAs, null),
             ("Companies...", OpenCompanyProfiles, null),
             ("History...", OpenCampaignHistory, null)
         });
@@ -543,6 +545,7 @@ public sealed partial class MainForm : Form
             ("New campaign...", StartNewCampaign, null),
             ("Open project...", OpenProject, null),
             ("Save project...", SaveProject, null),
+            ("Save project as...", SaveProjectAs, null),
             ("Companies...", OpenCompanyProfiles, null)
         });
         AddActionMenu(_quickButtons, "Help / tools", new (string Label, Action Execute, Func<bool>? Allowed)[] {
@@ -802,6 +805,7 @@ public sealed partial class MainForm : Form
         try
         {
             _project = project;
+            _projectFilePath = null; // New/opened campaigns never inherit another project's save path.
             _name.Text = project.Name;
             _startDate.Value = project.StartLocal.Date;
             _startTime.Value = DateTime.Today.Add(project.StartLocal.TimeOfDay);
@@ -1074,20 +1078,66 @@ public sealed partial class MainForm : Form
 
     private void SaveProject() => TrySaveProject();
 
-    private bool TrySaveProject()
+    private void SaveProjectAs() => TrySaveProject(saveAs: true);
+
+    // Use the Windows Known Folder (MyDocuments), including OneDrive/GPO redirection.
+    // Keep the local JSON project independent of SYSVOL/SMB deployment assets.
+    private static string DefaultProjectSaveDirectory()
+    {
+        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (string.IsNullOrWhiteSpace(documents))
+            documents = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(documents, "LockScreen Campaign Manager");
+    }
+
+    private bool TrySaveProject(bool saveAs = false)
     {
         ReadControls();
-        using var dialog = new SaveFileDialog {
-            Title = "Save campaign project", Filter = "Campaign project (*.json)|*.json",
-            FileName = CampaignSchedule.BuildId(_project) + ".project.json"
-        };
-        if (dialog.ShowDialog(CampaignDialogOwner) != DialogResult.OK) return false;
+        string? path = !saveAs ? _projectFilePath : null;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            string suggested = UiStyle.Preferences.LastProjectSaveDirectory;
+            if (string.IsNullOrWhiteSpace(suggested) || !Directory.Exists(suggested))
+                suggested = DefaultProjectSaveDirectory();
+            // Create only the application's project folder, never the Documents
+            // root. A redirected/unavailable folder falls back to the existing
+            // Windows Documents directory instead of blocking the save dialog.
+            if (!Directory.Exists(suggested))
+            {
+                try { Directory.CreateDirectory(suggested); }
+                catch
+                {
+                    suggested = Environment.GetFolderPath(
+                        Environment.SpecialFolder.MyDocuments);
+                }
+            }
+            using var dialog = new SaveFileDialog {
+                Title = "Save campaign project",
+                Filter = "Campaign project (*.json)|*.json",
+                DefaultExt = "json",
+                AddExtension = true,
+                OverwritePrompt = true,
+                InitialDirectory = suggested,
+                FileName = _projectFilePath is not null
+                    ? Path.GetFileName(_projectFilePath)
+                    : CampaignSchedule.BuildId(_project) + ".project.json"
+            };
+            if (dialog.ShowDialog(CampaignDialogOwner) != DialogResult.OK) return false;
+            path = dialog.FileName;
+        }
         try
         {
-            File.WriteAllText(dialog.FileName,
+            string directory = Path.GetDirectoryName(path)
+                ?? throw new InvalidOperationException("Project save directory is missing.");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path,
                 JsonSerializer.Serialize(_project, CampaignExporter.JsonOptions) +
                 Environment.NewLine, new UTF8Encoding(false));
+            _projectFilePath = path;
             _projectDirty = false;
+            // A preference write failure must not misreport a successful JSON save.
+            try { UiStyle.RememberProjectSaveDirectory(directory); }
+            catch (Exception ex) { Debug.WriteLine("Project directory preference: " + ex.Message); }
             if (!_advancedMode && _workflowStep == 4) _workflowStep = 5;
             _status.Text = "Project saved. You may deploy through AD or finish offline.";
             UpdateWorkflow();
@@ -1136,6 +1186,7 @@ public sealed partial class MainForm : Form
             _company = newOwner;
             SetAdSnapshot(null);
             SetProject(model);
+            _projectFilePath = dialog.FileName;
             _status.Text = "Project opened";
         }
         catch (Exception ex) { UiErrorDialog.Show(this, "Campaign editor", ex); }

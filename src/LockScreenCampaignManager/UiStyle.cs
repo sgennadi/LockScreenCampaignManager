@@ -15,6 +15,8 @@ internal sealed class UiPreferences
     // Per-Windows-user Wizard preference; never written to campaign JSON.
     // False (default) offers a local project save on Next.
     public bool WizardSkipLocalProjectSave { get; set; }
+    // Last directory selected by this Windows user; never stored in campaign JSON.
+    public string LastProjectSaveDirectory { get; set; } = "";
     private static readonly string SettingsFile = Path.Combine(AppLog.DirectoryPath, "ui-settings.json");
     public UiPreferences Validate()
     {
@@ -107,6 +109,13 @@ internal static class UiStyle
         Preferences.WizardSkipLocalProjectSave = skip;
         Preferences.Save();
     }
+    public static void RememberProjectSaveDirectory(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        Preferences.LastProjectSaveDirectory = directory;
+        Preferences.Save();
+    }
+
     private static IEnumerable<Control> Descendants(Control root)
     {
         yield return root;
