@@ -2354,15 +2354,18 @@ StartExecutePSFirst=true
             domain, dc, ou, pc, now);
         var observed = DomainGpoPilotReadiness.Build(
             report, pc, ou, 600, power, computerXml, null, now);
-        Check(observed.PowerObserved && observed.Concerns >= 3 &&
+        Check(observed.PowerObserved && observed.Concerns >= 1 &&
             observed.Findings.Any(x => x.Area == "Display off" &&
+                x.State == "Not verified" &&
+                x.Observation.Contains("Power sources conflict", StringComparison.Ordinal)) &&
+            !observed.Findings.Any(x => x.Area == "Display off" &&
                 x.State == "Observed concern") &&
             observed.Findings.Any(x => x.Area == "Machine inactivity lock" &&
                 x.State == "Observed concern") &&
             observed.Findings.Any(x => x.Area == "Endpoint power" &&
                 x.Observation.Contains("source values disagree", StringComparison.Ordinal)) &&
             observed.NotVerified >= 2 && !observed.ProvesScreenSaverDisplayed,
-            "Current endpoint observations flag early display, machine lock and source mismatch.");
+            "Current pilot must flag contradictory power sources as unverified, not observed blockers.");
         var stale = DomainGpoPilotReadiness.Build(report, pc, ou, 600,
             power, computerXml, null, now.AddMinutes(16));
         Check(stale.NamedBlockers.Count == 1 &&
