@@ -98,7 +98,7 @@ class DpiTextClippingContracts(unittest.TestCase):
             '"Check target assignments"'
         ):
             self.assertIn(marker, smoke, marker)
-        self.assertIn("0.4.0-preview.122", read("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.123", read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW116.md").is_file())
 
 if __name__ == "__main__":
