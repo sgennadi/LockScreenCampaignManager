@@ -52,6 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_endpoint_user_readiness.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_endpoint_scr_and_timing.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_unified_ad_gpo_scope.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_sysvol_system_probe.py
