@@ -49,6 +49,8 @@ internal sealed partial class DomainDeploymentForm : Form
     private readonly Label _progress = new();
     private readonly ToolTip _directoryTooltip = new() { AutoPopDelay = 12000, InitialDelay = 450, ReshowDelay = 150 };
     private SplitContainer? _targetSplit;
+    private Control? _legacyTargetLists;
+    private CampaignAssignmentsDialog? _inlineTargetEditor;
     private TableLayoutPanel? _deploymentLayout;
     private Control? _connectionPanel;
     private TableLayoutPanel? _connectionContent;
@@ -553,6 +555,7 @@ internal sealed partial class DomainDeploymentForm : Form
         lists.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         lists.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         split.Panel1.Controls.Add(lists);
+        _legacyTargetLists = lists;
         _ouFilter.Dock = DockStyle.Fill;
         _ouFilter.PlaceholderText = UiLocale.Display("Search OU...");
         _ouFilter.RightToLeft = RightToLeft.No;
@@ -687,6 +690,63 @@ internal sealed partial class DomainDeploymentForm : Form
         _progress.Text = "No action taken in Active Directory.";
         footer.Controls.Add(_progress, 0, 1);
         layout.Controls.Add(footer, 0, 5);
+    }
+
+    // Show the existing OU / User / Group assignment editor inside the
+    // target page instead of opening a second modal window. Its validation,
+    // LDAP OU membership lookup and Preview safety checks are unchanged.
+    private void ResetInlineTargetEditor()
+    {
+        var editor = _inlineTargetEditor;
+        _inlineTargetEditor = null;
+        if (editor is not null && !editor.IsDisposed)
+            editor.Dispose();
+        if (_legacyTargetLists is not null)
+            _legacyTargetLists.Visible = true;
+    }
+
+    private void EnsureInlineTargetEditor()
+    {
+        if (_advancedMode || _wizardStep != 1 ||
+            _project.EffectiveCampaignMode == CampaignTargetMode.LockScreen ||
+            _allOus.Count == 0 || _allGroups.Count == 0 ||
+            _targetSplit is null || _inlineTargetEditor is { IsDisposed: false })
+            return;
+        var ous = _allOus.Select(x =>
+            new CampaignAssignmentsDialog.AdChoice(x.Name, x.Dn)).ToList();
+        var groups = _allGroups.Select(x =>
+            new CampaignAssignmentsDialog.AdChoice(x.Name, x.Dn)).ToList();
+        var editor = new CampaignAssignmentsDialog(_project,
+            ous, groups, (_ous.SelectedItem as DirectoryRow)?.Dn ?? "",
+            (_groups.SelectedItem as DirectoryRow)?.Dn ?? "",
+            FindScopedMemberGroupsAsync)
+        {
+            TopLevel = false,
+            FormBorderStyle = FormBorderStyle.None,
+            MinimumSize = Size.Empty,
+            Dock = DockStyle.Fill,
+            Visible = false
+        };
+        editor.PrepareInline();
+        editor.InlineSaved = () =>
+        {
+            InvalidatePlan();
+            _progress.Text = string.Format(UiLocale.Display(
+                "{0} group assignment(s) saved locally. Preview verifies Computer/User targets; no GPO changed."),
+                _project.TargetAssignments.Count);
+            UpdateDeploymentSteps();
+        };
+        editor.FormClosed += (_, _) =>
+        {
+            if (ReferenceEquals(_inlineTargetEditor, editor))
+                _inlineTargetEditor = null;
+        };
+        _inlineTargetEditor = editor;
+        _targetSplit.Panel1.Controls.Add(editor);
+        editor.Show();
+        editor.BringToFront();
+        if (_legacyTargetLists is not null)
+            _legacyTargetLists.Visible = false;
     }
 
     private void OpenTargetAssignments()
@@ -909,6 +969,18 @@ internal sealed partial class DomainDeploymentForm : Form
         // preview, instead of leaving half the window blank on each page.
         if (_targetSplit is not null)
         {
+            // Inline selection: keep the target page on one surface. Lock
+            // Screen uses the native OU/group lists, while Screen Saver/Both
+            // embeds the full independent computer/user assignment editor.
+            bool inlineAssignments = !_advancedMode && _wizardStep == 1 &&
+                _project.EffectiveCampaignMode != CampaignTargetMode.LockScreen;
+            if (inlineAssignments)
+                EnsureInlineTargetEditor();
+            if (_legacyTargetLists is not null)
+                _legacyTargetLists.Visible = !inlineAssignments ||
+                    _inlineTargetEditor is null;
+            if (_inlineTargetEditor is { IsDisposed: false } embedded)
+                embedded.Visible = inlineAssignments;
             _targetSplit.Panel1Collapsed = false;
             _targetSplit.Panel2Collapsed = false;
             if (!_advancedMode && _wizardStep == 1) _targetSplit.Panel2Collapsed = true;
@@ -943,7 +1015,9 @@ internal sealed partial class DomainDeploymentForm : Form
                 CampaignTargetMode.Both => "Computer + User groups...",
                 _ => "Group assignments..."
             });
-            _groupAssignmentsButton.Visible = _advancedMode || _wizardStep >= 1;
+            // No duplicate "open another window" action on the inline page.
+            _groupAssignmentsButton.Visible = _advancedMode ||
+                (_wizardStep >= 1 && _inlineTargetEditor is null);
             _groupAssignmentsButton.Enabled = !_running && _allOus.Count > 0 &&
                 _allGroups.Count > 0;
         }
@@ -1035,6 +1109,7 @@ internal sealed partial class DomainDeploymentForm : Form
         _directComputerGroupDns.Clear();
         _computerCoverage = null;
         UpdateCoverageStatus();
+        ResetInlineTargetEditor();
         _allOus.Clear();
         _allGroups.Clear();
         FilterOus();
@@ -1140,6 +1215,7 @@ internal sealed partial class DomainDeploymentForm : Form
             _directComputerGroupDns.Clear();
             _computerCoverage = null;
             UpdateCoverageStatus();
+            ResetInlineTargetEditor();
             _allOus.Clear();
             var ouRows = ousResponse.GetProperty("data").EnumerateArray()
                 .Select(item => new DirectoryRow(item.GetProperty("name").GetString()!,
@@ -1219,19 +1295,8 @@ internal sealed partial class DomainDeploymentForm : Form
                 _progress.Text = UiLocale.Display(
                     "Connected. Select the campaign OU and security groups; Preview is required before deployment.");
 
-                // Screen Saver targets users, while Both requires independent
-                // computer/user assignments. Skip the legacy computer-only
-                // target lists and open the exact OU/group selector immediately.
-                // Defer the modal dialog until the connection UI has finished
-                // updating. Never overwrite assignments already selected.
-                if (_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen &&
-                    _project.TargetAssignments.Count == 0 && IsHandleCreated)
-                    BeginInvoke(new Action(() =>
-                    {
-                        if (!IsDisposed && !_running && !_advancedMode &&
-                            _wizardStep == 1 && _project.TargetAssignments.Count == 0)
-                            OpenTargetAssignments();
-                    }));
+                // The target editor is embedded by UpdateDeploymentSteps.
+                // No extra modal dialog, even on the first connection.
             }
         }
         catch (Exception ex) { DisplayError(ex); }
