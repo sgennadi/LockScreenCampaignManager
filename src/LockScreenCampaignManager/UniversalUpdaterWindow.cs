@@ -333,8 +333,8 @@ internal sealed class UniversalUpdaterWindow : Form
         UiWindowPlacement.Attach(this, "updater");
         if (checkOnOpen)
         {
-            // Opening from the update notice performs a new read-only Check.
-            // Download, verification and Install still require user action.
+            // Any explicit Check updates entry opens with one read-only
+            // GitHub check. Never download or install from Shown.
             Shown += async (_, _) => await CheckAsync();
         }
     }
@@ -442,7 +442,11 @@ internal sealed class UniversalUpdaterWindow : Form
                 Environment.NewLine +
                 T("Check internet access and repository visibility in the browser.");
         }
-        finally { FinishWorking(); }
+        finally
+        {
+            _check.Text = T("Check again");
+            FinishWorking();
+        }
     }
 
     private async Task InstallSelectedAsync()
