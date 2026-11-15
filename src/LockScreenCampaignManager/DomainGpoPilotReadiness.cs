@@ -241,16 +241,25 @@ internal sealed class DomainGpoPilotReadiness
                     value.Kind == "Sleep" ? "Sleep" : "Machine inactivity lock";
                 bool sourceComplete = value.Source == "ActivePlanWmi"
                     ? power.PlanStatus == "Available" : power.RegistryStatus == "Readable";
+                // The active plan and HKLM policy are observations, not
+                // precedence. Contradictory sources must not both claim an
+                // observed early event for this same device and supply mode.
+                bool sourceConflict = disputes.Any(x =>
+                    x.Kind == value.Kind && x.Supply == value.Supply);
                 if (seconds < saverIdleSeconds)
                     Add(findings, area,
-                        recent && sourceComplete ? "Observed concern" : "Not verified",
+                        recent && sourceComplete && !sourceConflict
+                            ? "Observed concern" : "Not verified",
                         value.Source + " / " + value.Supply + " = " + seconds +
                         " s, earlier than configured Screen Saver " +
-                        saverIdleSeconds + " s.",
+                        saverIdleSeconds + " s." +
+                        (sourceConflict ? " Power sources conflict." : ""),
                         "Potential earlier power/lock event; verify active power plan, " +
                         "user policy and actual idle behavior. This is not screen-state proof.");
                 else if (seconds == saverIdleSeconds)
-                    Add(findings, area, "Source candidate",
+                    Add(findings, area,
+                        recent && sourceComplete && !sourceConflict
+                            ? "Source candidate" : "Not verified",
                         value.Source + " / " + value.Supply +
                         " matches configured Screen Saver threshold (" + seconds + " s).",
                         "Same threshold: order of execution and actual user Screen Saver are unknown.");
