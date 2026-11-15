@@ -51,6 +51,24 @@ class WizardReviewTests(unittest.TestCase):
         self.assertIn('"Campaign Wizard - Screen Saver-only review"', code)
         self.assertNotIn('"Save & Next", "Back"', code)
 
+    def test_documents_default_and_save_existing_without_second_dialog(self):
+        main = read("MainForm.cs")
+        ui = read("UiStyle.cs")
+        self.assertIn('Environment.SpecialFolder.MyDocuments', main)
+        self.assertIn('"LockScreen Campaign Manager"', main)
+        self.assertIn('private string? _projectFilePath;', main)
+        self.assertIn('string? path = !saveAs ? _projectFilePath : null;', main)
+        self.assertIn('InitialDirectory = suggested', main)
+        self.assertIn('_projectFilePath = dialog.FileName;', main)
+        self.assertIn('_projectFilePath = null;', main)
+        self.assertIn('private void SaveProjectAs() => TrySaveProject(saveAs: true);', main)
+        self.assertEqual(main.count('("Save project as...", SaveProjectAs, null)'), 2)
+        self.assertIn('LastProjectSaveDirectory', ui)
+        self.assertIn('Preferences.Save();', ui)
+        self.assertIn('RememberProjectSaveDirectory(directory)', main)
+        self.assertIn('File.WriteAllText(path,', main)
+        self.assertIn('OverwritePrompt = true', main)
+
     def test_ru_he_and_numbered_release(self):
         en = read("MainForm.CampaignWizard.cs")
         ru = read("UiLocale.Russian.cs")
