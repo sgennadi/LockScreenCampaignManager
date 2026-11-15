@@ -45,7 +45,7 @@ internal sealed class EndpointUserProbeDialog : Form
             AutoEllipsis = false,
             TextAlign = ContentAlignment.MiddleLeft,
             Text = UiLocale.Display(
-                "Run on the pilot PC as the actual signed-in user. Reads only this account's HKCU Screen Saver values. Administrator run-as reads the administrator's HKCU, not the target user's. No data is sent.")
+                "Run on the pilot PC as the signed-in user. Reads this user's HKCU and one local Screen Saver file without executing it. Another administrator account reads its own HKCU. Nothing is sent.")
         }, 0, 0);
 
         _preview.Dock = DockStyle.Fill;
@@ -107,7 +107,10 @@ internal sealed class EndpointUserProbeDialog : Form
         {
             var evidence = EndpointUserReadinessEvidence.CaptureLocal();
             _snapshot = evidence;
-            _preview.Text = evidence.RawJson;
+            _preview.Text = UiLocale.Display("Local Screen Saver file") + ": " +
+                (evidence.ScrFile?.Status ?? "Not verified") + " (" +
+                (evidence.ScrFile?.Source ?? "None") + ")" +
+                Environment.NewLine + Environment.NewLine + evidence.RawJson;
             _status.Text = UiLocale.Display("Captured locally — unsigned, not an effective GPO attestation.") +
                 "  SHA-256 " + evidence.Sha256;
             _save.Enabled = true;
