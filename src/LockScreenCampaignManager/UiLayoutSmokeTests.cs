@@ -104,7 +104,7 @@ internal static class UiLayoutSmokeTests
             new[] { "Skip saving a local project (.json)", "Next", "Back" }),
         ("Campaign Wizard - JPG pilot install", () => CreatePhotoWizardSave(),
             new[] { "Export JPG .scr pilot...", "Export GPO lab kit...",
-                "Install local JPG pilot...", "Validate campaign", "Back" }),
+                "Install local JPG pilot...", "Skip saving a local project (.json)", "Next", "Back" }),
         ("Campaign Wizard - images", () => CreateWizardPage(2),
             new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
         ("Campaign Wizard - arrange", () => CreateWizardPage(3),
