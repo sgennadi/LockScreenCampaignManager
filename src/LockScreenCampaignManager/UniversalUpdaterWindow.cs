@@ -508,22 +508,25 @@ internal sealed class UniversalUpdaterWindow : Form
         finally { FinishWorking(); }
     }
 
+    // Keep the actual approval readable without a scrolled-away first line
+    // at 125-200% DPI. Detailed publisher/backup evidence remains available
+    // in the updater results panel before the user presses Install.
+    internal static string BuildInstallApprovalText() =>
+        string.Join(Environment.NewLine, new[]
+        {
+            T("Archive and SHA-256 checks passed."),
+            T("Preview builds are unsigned; SHA-256 does not verify publisher identity."),
+            T("The portable EXE is backed up; a failed offline self-test restores it."),
+            T("gMSA tasks and administrator-owned installations are not replaced."),
+            T("Save the campaign first. Unsaved changes are confirmed on exit."),
+            T("Install this update now?")
+        });
+
     private void InstallAndRestart()
     {
         if (_operation is not null || _staged is null || _options is null) return;
-        string exe = Application.ExecutablePath;
         var answer = MessageBox.Show(this,
-            T("Install this verified update and restart LockScreen Campaign Manager?") +
-            Environment.NewLine + Environment.NewLine +
-            T("The current portable EXE will be saved as .bak. The updater waits " +
-            "until the manager exits, checks SHA-256, replaces the EXE, runs the " +
-            "offline self-test and restores the backup on failure.") +
-            Environment.NewLine + Environment.NewLine +
-            T("GitHub release hashes do NOT prove publisher identity. These preview builds " +
-            "are unsigned. Continue only if you trust the official project release.") +
-            Environment.NewLine + Environment.NewLine +
-            T("Existing gMSA tasks and administrator-owned installations are NOT updated. " +
-            "Save your campaign first; any unsaved changes will be confirmed on closing."),
+            BuildInstallApprovalText(),
             T("Install verified portable update?"), MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes) return;
