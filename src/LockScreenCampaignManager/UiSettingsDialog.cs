@@ -108,7 +108,9 @@ internal sealed class UiSettingsDialog : Form
                     },
                     Density = densities[Math.Clamp(density.SelectedIndex, 0, 2)],
                     UiScalePercent = int.Parse(((string)(scale.SelectedItem ?? "100%")).TrimEnd('%')),
-                    FontScalePercent = int.Parse(((string)(fonts.SelectedItem ?? "100%")).TrimEnd('%'))
+                    FontScalePercent = int.Parse(((string)(fonts.SelectedItem ?? "100%")).TrimEnd('%')),
+                    // Applying display settings must never reset the Wizard checkbox.
+                    WizardSkipLocalProjectSave = UiStyle.Preferences.WizardSkipLocalProjectSave
                 });
                 DialogResult = DialogResult.OK;
             }
