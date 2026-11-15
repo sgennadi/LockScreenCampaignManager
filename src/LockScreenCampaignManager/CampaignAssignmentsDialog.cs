@@ -47,6 +47,8 @@ internal sealed class CampaignAssignmentsDialog : Form
     private readonly Label _help = new();
     private int _editing = -1;
     private bool _loading;
+    private Button? _cancelButton;
+    private Button? _saveButton;
     // The same validated editor can live directly inside the deployment Wizard.
     // Advanced mode still uses the original modal dialog.
     internal Action? InlineSaved { get; set; }
@@ -409,8 +411,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
             AutoScroll = true, WrapContents = false, Padding = new Padding(5)
         };
-        footer.Controls.Add(Action("Cancel", Close, 116));
-        footer.Controls.Add(Action("Save assignments", Save, 195));
+        _cancelButton = Action("Cancel", Close, 116);
+        _saveButton = Action("Save assignments", Save, 195);
+        footer.Controls.Add(_cancelButton);
+        footer.Controls.Add(_saveButton);
         footer.Controls.Add(new Label {
             Text = "Read-only editing: no GPO/AD change until a separately previewed Deploy.",
             AutoSize = true, Margin = new Padding(5, 16, 25, 5),
@@ -776,6 +780,14 @@ internal sealed class CampaignAssignmentsDialog : Form
             " | idle " + _idle.Value + " sec | password " + _password.Checked);
         lines.Add("User GPO applies to the user group, not automatically to a computer group.");
         _preview.Text = string.Join(Environment.NewLine, lines);
+    }
+
+    // The parent Wizard supplies Back/Next/Close. Keep only one Apply action
+    // inside its embedded target editor and never close the parent page.
+    internal void PrepareInline()
+    {
+        if (_cancelButton is not null) _cancelButton.Visible = false;
+        if (_saveButton is not null) _saveButton.Text = "Apply targets";
     }
 
     private void Save()
