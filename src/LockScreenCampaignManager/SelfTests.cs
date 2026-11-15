@@ -493,14 +493,21 @@ internal static class SelfTests
     {
         var hebrew = new UiPreferences {
             Language = "Hebrew", Density = "Comfortable",
-            UiScalePercent = 200, FontScalePercent = 125
+            UiScalePercent = 200, FontScalePercent = 125,
+            WizardSkipLocalProjectSave = true
         }.Validate();
         Check(hebrew.Language == "Hebrew" && hebrew.UiScalePercent == 200,
             "Hebrew UI language and DPI preferences can coexist.");
         var saved = System.Text.Json.JsonSerializer.Deserialize<UiPreferences>(
             System.Text.Json.JsonSerializer.Serialize(hebrew));
-        Check(saved?.Validate().Language == "Hebrew",
-            "Hebrew language is persisted and loaded in per-user settings.");
+        Check(saved?.Validate().Language == "Hebrew" &&
+            saved.WizardSkipLocalProjectSave,
+            "Language/DPI and Wizard skip-save preference survive JSON serialization.");
+        var legacyPreferences = System.Text.Json.JsonSerializer.Deserialize<UiPreferences>(
+            "{\"Language\":\"English\"}");
+        Check(legacyPreferences is not null &&
+            !legacyPreferences.WizardSkipLocalProjectSave,
+            "Previous settings default to offering a local project save.");
         Check(new UiPreferences { Language = "Unknown" }.Validate().Language == "English",
             "Unsupported language settings must fail safely back to English.");
         Check(UiLocale.Translate("Wizard", "Hebrew") == "אשף" &&
