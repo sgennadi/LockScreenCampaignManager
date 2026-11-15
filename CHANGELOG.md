@@ -1,3 +1,10 @@
+## 0.4.0-preview.122 — local Screen Saver file/read and user timeout comparison (2026-11-15)
+
+1. Capture one read-only local .scr/.exe file availability status as the actual Windows user; disallow network paths, mapped drives and linked sources, with no execution or code signature claims.
+2. Add strict, backward-compatible optional `scrFile` evidence to private HKCU v1 JSON; show exact-SID-matched findings in unified Pilot Readiness and keep old reports importable.
+3. Compare actual selected-user ScreenSaveTimeOut to observed AC/DC display, sleep and machine lock timers, reporting early/equal thresholds and time differences; WMI/HKLM disagreements remain unverified.
+4. Add native and offline privacy/regression tests, EN/RU/HE result labels, Preview.122 What's New and CI gates; no AD/GPO/SYSVOL/endpoint registry changes.
+
 ## 0.4.0-preview.121 — fail-closed AD-user ↔ HKCU identity correlation (2026-11-15)
 
 1. Read exact selected AD user `objectSid` into the read-only GPO scope; include signed-in Windows process SID in newly captured private HKCU snapshots.
