@@ -79,6 +79,7 @@ internal static partial class UiLocale
         ["Check"] = "Проверить",
         ["Install"] = "Установить",
         ["1  Check"] = "1  Проверить",
+        ["Check again"] = "Проверить ещё раз",
         ["2  Install"] = "2  Установить",
         ["Software updates"] = "Обновления программы",
         ["Release channel"] = "Канал обновлений",
