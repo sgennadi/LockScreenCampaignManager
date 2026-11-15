@@ -11,8 +11,9 @@ internal static partial class UiLocale
     {
         ["Endpoint user Screen Saver probe"] = "Проверка заставки текущего пользователя",
         ["Endpoint user Screen Saver probe..."] = "Проверка заставки этого ПК...",
-        ["Run on the pilot PC as the actual signed-in user. Reads only this account's HKCU Screen Saver values. Administrator run-as reads the administrator's HKCU, not the target user's. No data is sent."] =
-            "Запустите на тестовом ПК от имени вошедшего пользователя. Читается только его HKCU. Запуск от другого администратора читает HKCU администратора. Ничего не отправляется.",
+        ["Run on the pilot PC as the signed-in user. Reads this user's HKCU and one local Screen Saver file without executing it. Another administrator account reads its own HKCU. Nothing is sent."] =
+            "Запустите от имени вошедшего пользователя. Читается HKCU и один локальный файл заставки без запуска. Другой администратор прочитает свой HKCU. Ничего не отправляется.",
+        ["Local Screen Saver file"] = "Локальный файл заставки",
         ["No HKCU snapshot yet. Click Capture this Windows user to read the current account."] =
             "Снимка HKCU ещё нет. Нажмите «Считать HKCU этого пользователя».",
         ["Local read only. No file has been created."] =
@@ -52,8 +53,9 @@ internal static partial class UiLocale
     {
         ["Endpoint user Screen Saver probe"] = "בדיקת שומר המסך של המשתמש הנוכחי",
         ["Endpoint user Screen Saver probe..."] = "בדיקת שומר המסך במחשב זה...",
-        ["Run on the pilot PC as the actual signed-in user. Reads only this account's HKCU Screen Saver values. Administrator run-as reads the administrator's HKCU, not the target user's. No data is sent."] =
-            "יש להפעיל במחשב הבדיקה בתור המשתמש המחובר בפועל. נקראים רק ערכי HKCU שלו. הפעלה כמשתמש מנהל אחר קוראת את HKCU של המנהל. לא נשלח מידע.",
+        ["Run on the pilot PC as the signed-in user. Reads this user's HKCU and one local Screen Saver file without executing it. Another administrator account reads its own HKCU. Nothing is sent."] =
+            "יש להפעיל כמשתמש המחובר. הכלי קורא HKCU וקובץ שומר מסך מקומי ללא הפעלה. מנהל אחר יקרא את ה-HKCU של עצמו. שום מידע לא נשלח.",
+        ["Local Screen Saver file"] = "קובץ שומר מסך מקומי",
         ["No HKCU snapshot yet. Click Capture this Windows user to read the current account."] =
             "טרם נאספו נתוני HKCU. יש ללחוץ על איסוף נתוני המשתמש הנוכחי.",
         ["Local read only. No file has been created."] =
