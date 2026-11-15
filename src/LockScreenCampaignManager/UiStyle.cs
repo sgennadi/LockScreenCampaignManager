@@ -12,6 +12,9 @@ internal sealed class UiPreferences
     public int UiScalePercent { get; set; } = 100;
     public int FontScalePercent { get; set; } = 100;
     public string Language { get; set; } = "English";
+    // Per-Windows-user Wizard preference; never written to campaign JSON.
+    // False (default) offers a local project save on Next.
+    public bool WizardSkipLocalProjectSave { get; set; }
     private static readonly string SettingsFile = Path.Combine(AppLog.DirectoryPath, "ui-settings.json");
     public UiPreferences Validate()
     {
@@ -95,6 +98,14 @@ internal static class UiStyle
         Preferences = value.Validate();
         Preferences.Save();
         foreach (var form in Application.OpenForms.Cast<Form>().ToArray()) Apply(form);
+    }
+
+    // A Wizard checkbox must persist without re-theming/rebuilding open forms.
+    // Reuses the existing atomic per-user ui-settings.json save path.
+    public static void RememberWizardSkipLocalProjectSave(bool skip)
+    {
+        Preferences.WizardSkipLocalProjectSave = skip;
+        Preferences.Save();
     }
     private static IEnumerable<Control> Descendants(Control root)
     {
