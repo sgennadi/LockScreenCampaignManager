@@ -98,6 +98,39 @@ internal sealed class EndpointUserProbeDialog : Form
         Margin = new Padding(4)
     };
 
+    // A missing HKCU value does not prove that Screen Saver will not work:
+    // Windows defaults, user preferences and actual User RSoP may differ.
+    // Keep source labels and technical registry key names untranslated.
+    internal static string BuildSnapshotSummary(EndpointUserReadinessEvidence evidence)
+    {
+        static string ReadValue(EndpointUserReadinessEvidence item, string setting)
+        {
+            var policy = item.Get("PolicyHKCU", setting);
+            var desktop = item.Get("DesktopHKCU", setting);
+            if (policy.Status == "Unreadable" || desktop.Status == "Unreadable")
+                return UiLocale.Display("Not verified (HKCU read failed)");
+            var chosen = policy.Status == "Present" ? policy : desktop;
+            return chosen.Status == "Present"
+                ? chosen.Value + " (" + chosen.Source + ")"
+                : UiLocale.Display("Not configured in captured HKCU");
+        }
+        string file = evidence.ScrFile?.Status == "NotSelected"
+            ? UiLocale.Display("No local SCR/EXE selected")
+            : (evidence.ScrFile?.Status ?? UiLocale.Display("Not verified")) +
+                " (" + (evidence.ScrFile?.Source ?? "None") + ")";
+        return string.Join(Environment.NewLine, new[]
+        {
+            UiLocale.Display("Screen Saver HKCU summary (read-only)"),
+            "ScreenSaveActive: " + ReadValue(evidence, "ScreenSaveActive"),
+            "ScreenSaveTimeOut: " + ReadValue(evidence, "ScreenSaveTimeOut"),
+            "SCRNSAVE.EXE: " + ReadValue(evidence, "SCRNSAVE.EXE"),
+            "ScreenSaverIsSecure: " + ReadValue(evidence, "ScreenSaverIsSecure"),
+            UiLocale.Display("Local Screen Saver file") + ": " + file,
+            UiLocale.Display("Missing HKCU settings do not prove Screen Saver failure."),
+            UiLocale.Display("Check actual User GPO and interactive session.")
+        });
+    }
+
     private void Capture()
     {
         _snapshot = null;
@@ -107,10 +140,9 @@ internal sealed class EndpointUserProbeDialog : Form
         {
             var evidence = EndpointUserReadinessEvidence.CaptureLocal();
             _snapshot = evidence;
-            _preview.Text = UiLocale.Display("Local Screen Saver file") + ": " +
-                (evidence.ScrFile?.Status ?? "Not verified") + " (" +
-                (evidence.ScrFile?.Source ?? "None") + ")" +
-                Environment.NewLine + Environment.NewLine + evidence.RawJson;
+            _preview.Text = BuildSnapshotSummary(evidence) +
+                Environment.NewLine + Environment.NewLine +
+                evidence.RawJson;
             _status.Text = UiLocale.Display("Captured locally — unsigned, not an effective GPO attestation.") +
                 "  SHA-256 " + evidence.Sha256;
             _save.Enabled = true;

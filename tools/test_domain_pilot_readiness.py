@@ -87,7 +87,7 @@ class PilotReadinessContracts(unittest.TestCase):
                        "Power111EnglishByRussian", "Power111EnglishByHebrew"):
             self.assertIn(marker, get("UiLocale.Power111.cs"))
             self.assertIn(marker, get("UiLocale.cs"))
-        self.assertIn("0.4.0-preview.122", get("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.123", get("LockScreenCampaignManager.csproj"))
         self.assertIn("NOT", (ROOT / "docs" / "RELEASE-PREVIEW111.md")
                       .read_text(encoding="utf-8"))
 

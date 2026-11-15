@@ -1612,9 +1612,16 @@ StartExecutePSFirst=true
             Values(MessageBoxButtons.AbortRetryIgnore) == "Abort,Retry,Ignore" &&
             Values(MessageBoxButtons.CancelTryContinue) == "Cancel,TryAgain,Continue",
             "Modern dialog preserves native MessageBox button/results semantics.");
+        string approval = UniversalUpdaterWindow.BuildInstallApprovalText();
+        Check(approval.Split(Environment.NewLine).Length == 6 &&
+            approval.Contains("SHA-256", StringComparison.Ordinal) &&
+            approval.Contains("unsigned", StringComparison.OrdinalIgnoreCase) &&
+            approval.Contains("gMSA", StringComparison.Ordinal) &&
+            approval.Contains("backed up", StringComparison.OrdinalIgnoreCase) &&
+            approval.Contains("unsaved", StringComparison.OrdinalIgnoreCase),
+            "Updater approval remains concise, explicit and truthful about unsigned previews.");
         using var update = new ModernMessageDialog(
-            "Unsigned EXE. SHA-256 does not prove publisher identity.",
-            "Install verified portable update?", MessageBoxButtons.YesNo,
+            approval, "Install verified portable update?", MessageBoxButtons.YesNo,
             MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         Check(update.SafeDismissal == DialogResult.No &&
             update.DefaultAction == DialogResult.No &&
@@ -1689,7 +1696,15 @@ StartExecutePSFirst=true
             !PilotUserSidCorrelation.Matches(pilotSid, "") &&
             !PilotUserSidCorrelation.ValidDomainAccountSid("S-1-5-18"),
             "Only exact user SIDs can correlate pilot HKCU and AD; old JSON is unverified.");
-        Check(result.Computer == pc && result.Domain == domain &&
+        string overview = EndpointUserProbeDialog.BuildSnapshotSummary(result);
+        Check(overview.Contains("ScreenSaveActive:", StringComparison.Ordinal) &&
+            overview.Contains("ScreenSaveTimeOut:", StringComparison.Ordinal) &&
+            overview.Contains("SCRNSAVE.EXE:", StringComparison.Ordinal) &&
+            overview.Contains("ScreenSaverIsSecure:", StringComparison.Ordinal) &&
+            overview.Contains(UiLocale.Display("Local Screen Saver file"), StringComparison.Ordinal) &&
+            overview.Contains(UiLocale.Display("Missing HKCU settings do not prove Screen Saver failure."), StringComparison.Ordinal),
+            "HKCU summary must report the raw settings and avoid false Screen Saver failure.");
+                Check(result.Computer == pc && result.Domain == domain &&
             result.User == @"EXAMPLE\pilot" && result.Values.Count == 9 &&
             result.IsFresh(now) && !result.SignedByDomain &&
             !result.ProvesWinningGpo && !result.ProvesScreenSaverDisplayed &&
