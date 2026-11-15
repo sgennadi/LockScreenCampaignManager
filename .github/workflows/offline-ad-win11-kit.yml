@@ -62,6 +62,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_modern_message_dialogs.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/test_campaign_wizard_review.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_targeting103_locales.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_native_ui_visual_acceptance.py
