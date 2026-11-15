@@ -60,6 +60,7 @@ internal static class PilotSaverPowerComparison
         bool recent, string planStatus, string registryStatus)
     {
         var findings = new List<DomainPilotFinding>();
+        bool comparedAny = false;
         if (saverSeconds is < 60 or > 86400 || !recent)
             return [new("User saver vs power", "Not verified",
                 "Actual selected-user timeout or current power readings unavailable.",
@@ -91,7 +92,7 @@ internal static class PilotSaverPowerComparison
                 continue;
             }
             var selected = wmi ?? policy;
-            if (selected?.Seconds is not long timer || timer == 0)
+            if (selected?.Seconds is not long timer)
                 continue;
             bool complete = selected.Source == "ActivePlanWmi" ?
                 planStatus == "Available" : registryStatus == "Readable";
@@ -103,6 +104,8 @@ internal static class PilotSaverPowerComparison
                     "Repeat the authorized endpoint power query."));
                 continue;
             }
+            comparedAny = true;
+            if (timer == 0) continue; // Never for this specific power source.
             if (timer < saverSeconds)
                 findings.Add(new(area, "Observed concern",
                     supply + ": " + selected.Source + " timeout " + timer +
@@ -118,9 +121,13 @@ internal static class PilotSaverPowerComparison
                     "Equal thresholds do not establish event order; test on Windows."));
         }
         if (findings.Count == 0)
-            findings.Add(new("User saver vs power", "Information",
-                "No earlier or equal timer in the available, supported power observations.",
-                "This does not verify display state, winning GPO or actual Screen Saver."));
+            findings.Add(comparedAny
+                ? new("User saver vs power", "Information",
+                    "No earlier or equal timer in the readable supported power observations.",
+                    "This does not verify display state, winning GPO or actual Screen Saver.")
+                : new("User saver vs power", "Not verified",
+                    "No complete current display, sleep or machine lock timer was available.",
+                    "Refresh the read-only power observation for the selected PC."));
         return findings;
     }
 }
