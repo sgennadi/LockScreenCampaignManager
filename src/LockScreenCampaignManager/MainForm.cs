@@ -1521,7 +1521,9 @@ public sealed partial class MainForm : Form
 
     private void OpenUniversalUpdater()
     {
-        using var form = new UniversalUpdaterWindow();
+        // Explicit Check updates must do the first read-only check on open.
+        // Download and install remain separate, user-approved actions.
+        using var form = new UniversalUpdaterWindow(checkOnOpen: true);
         form.ShowDialog(this);
     }
 

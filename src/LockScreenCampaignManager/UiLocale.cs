@@ -112,6 +112,7 @@ internal static partial class UiLocale
         ["Check"] = "בדוק",
         ["Install"] = "התקן",
         ["1  Check"] = "1  בדוק",
+        ["Check again"] = "בדוק שוב",
         ["2  Install"] = "2  התקן",
         ["Software updates"] = "עדכוני תוכנה",
         ["Release channel"] = "ערוץ הפצה",

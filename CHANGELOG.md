@@ -1,3 +1,13 @@
+## 0.4.0-preview.124 — single Next and optional project saving in wizard (2026-11-15)
+
+1. Replace Wizard Step 6 top Validate/Save/Skip buttons with the fixed bottom Next; validation runs regardless of local save choice.
+2. Add a Skip saving local .json project checkbox (off by default). Unchecked Next opens project Save if necessary; checked Next proceeds without a Save dialog.
+3. Separate campaign name and local JSON decision from SYSVOL/SMB deployment asset storage in clear stacked sections; collapse the empty actions strip.
+4. Translate the Review & save step into Russian and Hebrew; preserve JPG pilot tools; extend offline source, native and 100–200% WinForms layout regression without altering GPO deployment safeguards.
+
+5. Clicking Check updates from the main menu/indicator/Wizard immediately runs the read-only release check and leaves Install as an explicit user action; Check again is a manual retry.
+6. Remember the local JSON Skip-saving checkbox per Windows user across Wizard sessions and restarts using atomic UI settings, with old settings defaulting to saving, and with CI smoke tests prevented from writing the preference.
+
 ## 0.4.0-preview.123 — compact update warning and clear HKCU gaps (2026-11-15)
 
 1. Replace the hard-to-read long updater modal with a concise six-line, no-auto-approval confirmation preserving unsigned publisher and rollback disclosures.

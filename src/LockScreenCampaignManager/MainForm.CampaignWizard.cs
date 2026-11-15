@@ -60,7 +60,7 @@ public sealed partial class MainForm
     {
         if (!string.IsNullOrWhiteSpace(imagePath))
             _project.ImagePaths.Add(imagePath);
-        var wizard = new CampaignWizardDialog(this);
+        var wizard = new CampaignWizardDialog(this, persistWizardSaveOption: false);
         if (page == -1) wizard.ExerciseScreenSaverSkipForSmokeTest();
         else wizard.ShowPageForSmokeTest(page);
         return wizard;
@@ -74,7 +74,7 @@ public sealed partial class MainForm
         private static readonly string[] StepNames =
         [
             "1  AD connection", "2  Campaign type", "3  Images",
-            "4  Arrange", "5  Schedule", "6  Save / Skip", "7  Deploy"
+            "4  Arrange", "5  Schedule", "6  Review & save", "7  Deploy"
         ];
         private readonly MainForm _owner;
         private readonly TableLayoutPanel _root = new();
@@ -102,12 +102,17 @@ public sealed partial class MainForm
         // A previously saved JSON project may become stale if deployment options change.
         private bool _storageModifiedAfterSave;
         private bool _skipProjectSave;
+        private readonly bool _persistWizardSaveOption;
         private bool _editingPage;
         private bool _everConfiguredSchedule;
 
-        internal CampaignWizardDialog(MainForm owner)
+        internal CampaignWizardDialog(MainForm owner, bool persistWizardSaveOption = true)
         {
             _owner = owner;
+            _persistWizardSaveOption = persistWizardSaveOption;
+            // UI smoke must not write real per-user settings or inherit them.
+            _skipProjectSave = persistWizardSaveOption &&
+                UiStyle.Preferences.WizardSkipLocalProjectSave;
             Text = "LockScreen Campaign Manager " + AppVersion.Current + " - Campaign Wizard";
             Font = new Font("Segoe UI", 10f);
             StartPosition = FormStartPosition.CenterParent;
@@ -502,7 +507,7 @@ public sealed partial class MainForm
                     "Choose your campaign images",
                     "Arrange the image order",
                     "Choose days and times",
-                    "Save or skip saving",
+                    "Review and continue",
                     "Deploy or finish offline"
                 ];
                 string[] descriptions =
@@ -512,7 +517,7 @@ public sealed partial class MainForm
                     "Select multiple image files or import a complete folder. You can add more images before continuing.",
                     "Place images in the desired order. The first image is assigned to the first scheduled change.",
                     "Set the start date, weekdays, exact dates and change time. Review the schedule before saving.",
-                    "Save a project for reopening later, or skip saving and continue directly to deployment. No AD changes here.",
+                    "Check the campaign details, optionally save a local .json project, then continue. Deployment files use the separate storage choice below.",
                     "Deploy using the AD/GPO Wizard, or finish offline and deploy later. No automatic GPO changes."
                 ];
                 page.Controls.Add(new Label
@@ -595,11 +600,16 @@ public sealed partial class MainForm
                         RenderDeploy(actions, body, status);
                         break;
                 }
+                // A normal Save step has no separate action buttons. Reclaim
+                // the empty strip; specialized JPG pilot tools keep it.
+                if (_step == 5 && actions.Controls.Count == 0)
+                {
+                    page.RowStyles[2].Height = 0;
+                    actions.Visible = false;
+                }
                 _back.Enabled = _step > 0;
                 _next.Text = T(_step == 6 && _deployChoice?.Checked == true
                     ? "Deploy GPO..." : _step == 6 ? "Finish" :
-                    _step == 5 && _skipProjectSave ? "Continue (no save)" :
-                    _step == 5 && !_saved ? "Save & Next" :
                     _step == 0 ? "Continue" : "Next");
                 _next.Enabled = _step switch
                 {
@@ -607,7 +617,9 @@ public sealed partial class MainForm
                     0 or 6 => true,
                     _ => !NeedsLockImages || _owner._project.ImagePaths.Count > 0
                 };
-                _footnote.Text = T(_step == 0 ? "AD sign-in is optional" :
+                _footnote.Text = T(_step == 5
+                    ? _skipProjectSave ? "Local .json save skipped" : "Local .json save optional"
+                    : _step == 0 ? "AD sign-in is optional" :
                     !HasChosenCampaignType ? "Choose a campaign type first" :
                     !NeedsLockImages ? "Screen Saver: images not needed" :
                     _step >= 5 && _skipProjectSave && !_saved
@@ -1269,43 +1281,34 @@ public sealed partial class MainForm
                         UiErrorDialog.Show(this, "Remove local JPG Screen Saver pilot", ex);
                     }
                 }, 230, true);
-            Action(actions, "Validate campaign", () =>
-                _owner.ValidateCurrent(), 180);
-            Action(actions, "Save project...", () =>
+            // Review first; save-to-JSON is an option, not a second action
+            // competing with the single Next button in the footer.
+            body.BackColor = UiStyle.Canvas;
+            var stack = new TableLayoutPanel
             {
-                try
-                {
-                    _owner.ReadControls();
-                    CampaignSchedule.Validate(_owner._project, requireImages: true);
-                    if (_owner.TrySaveProject())
-                    {
-                        _saved = true;
-                        _skipProjectSave = false;
-                        _storageModifiedAfterSave = false;
-                    }
-                    RenderPage();
-                }
-                catch (CampaignValidationException ex)
-                {
-                    MessageBox.Show(this, ex.Message, "Check campaign",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                catch (Exception ex) { UiErrorDialog.Show(this, "Save campaign", ex); }
-            }, 190, true);
-            Action(actions, "Skip saving & continue", () =>
-            {
-                _skipProjectSave = true;
-                NextStep(); // Same validation as Save & Next; no SaveFileDialog
-            }, 230);
+                Name = "WizardSaveReviewLayout",
+                Dock = DockStyle.Top, AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1, RowCount = 2,
+                Padding = new Padding(6, 5, 6, 10)
+            };
+            stack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            stack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
             var group = new TableLayoutPanel
             {
                 Name = "WizardCampaignNameField",
-                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 3,
-                Height = 204, Padding = new Padding(10)
+                Dock = DockStyle.Top, ColumnCount = 1, RowCount = 4,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(0, 211),
+                BackColor = UiStyle.Surface,
+                Padding = new Padding(12, 12, 12, 12),
+                Margin = new Padding(0, 0, 0, 12)
             };
             group.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             group.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-            group.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            group.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            group.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var campaignName = Information("Campaign name", 10f);
             campaignName.Name = "WizardCampaignNameLabel";
             campaignName.Padding = new Padding(6, 5, 6, 5);
@@ -1327,9 +1330,6 @@ public sealed partial class MainForm
                     name.Margin.Vertical + 12;
                 group.RowStyles[0].Height = Math.Max(44, labelHeight);
                 group.RowStyles[1].Height = Math.Max(52, editorHeight);
-                int minimum = (int)Math.Ceiling(group.RowStyles[0].Height +
-                    group.RowStyles[1].Height) + 95 + group.Padding.Vertical;
-                if (group.Height < minimum) group.Height = minimum;
             }
             campaignName.FontChanged += (_, _) => FitCampaignName();
             name.FontChanged += (_, _) => FitCampaignName();
@@ -1341,35 +1341,78 @@ public sealed partial class MainForm
                 _saved = false;
             };
             group.Controls.Add(name, 0, 1);
-            group.Controls.Add(Information(
-                $"{_owner._project.ImagePaths.Count} image(s). " +
-                $"Time zone: {_owner._project.TimeZoneId}. " +
-                "Saving the local .json project is optional. If skipped, " +
-                "settings remain in the editor; deployment exports its " +
-                "own campaign package."), 0, 2);
-            body.Controls.Add(group);
+
+            // Explicit opt-out. Unchecked = validate then offer a SaveFileDialog.
+            // Checked = validate and proceed; no local project file is created.
+            // This setting belongs to the wizard, not serialized campaign JSON.
+            var skip = new CheckBox
+            {
+                Name = "WizardSkipLocalProjectSave",
+                Text = T("Skip saving a local project (.json)"),
+                Checked = _skipProjectSave,
+                AutoSize = true, Dock = DockStyle.Top,
+                Margin = new Padding(6, 15, 6, 8),
+                ForeColor = UiStyle.Foreground,
+                Font = new Font("Segoe UI", 10f)
+            };
+            skip.CheckedChanged += (_, _) =>
+            {
+                if (_editingPage) return;
+                _skipProjectSave = skip.Checked;
+                if (_persistWizardSaveOption)
+                {
+                    try { UiStyle.RememberWizardSkipLocalProjectSave(_skipProjectSave); }
+                    catch (Exception ex)
+                    {
+                        AppLog.Write(ex, "Remember Wizard local project save choice");
+                        status.Text = T("Could not remember the local save choice for next time.");
+                        return;
+                    }
+                }
+                status.Text = T(_skipProjectSave
+                    ? "Next validates and continues without a local .json file."
+                    : "Next validates the campaign and offers to save a .json file.");
+                _footnote.Text = T(_skipProjectSave
+                    ? "Local .json save skipped"
+                    : "Local .json save optional");
+            };
+            group.Controls.Add(skip, 0, 2);
+            group.Controls.Add(new Label
+            {
+                Text = T("The local project file is optional. It is separate from the deployment files location below."),
+                Dock = DockStyle.Top, AutoSize = true, AutoEllipsis = false,
+                MaximumSize = new Size(700, 0),
+                ForeColor = UiStyle.Muted,
+                Font = new Font("Segoe UI", 9f),
+                Margin = new Padding(6, 3, 6, 10)
+            }, 0, 3);
+
             var storage = new TableLayoutPanel
             {
                 Name = "CampaignWizardSaveStorageOptions",
                 Dock = DockStyle.Top, AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 1, RowCount = 4,
-                Padding = new Padding(12, 10, 12, 12)
+                BackColor = UiStyle.Surface,
+                Padding = new Padding(14, 13, 14, 12),
+                Margin = new Padding(0, 0, 0, 6)
             };
             for (int row = 0; row < 4; row++)
                 storage.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             AddStorageSelector(storage, 0, status);
-            body.Controls.Add(storage);
+            stack.Controls.Add(group, 0, 0);
+            stack.Controls.Add(storage, 0, 1);
+            body.Controls.Add(stack);
             FitCampaignName();
             status.Text = T(_saved
                 ? "Project saved. Continue to Deploy or finish offline."
                 : _skipProjectSave
-                    ? "Local save skipped. Continue to Deploy without a project file."
-                    : "Choose Save project or Skip saving & continue. Validation is required either way.");
+                    ? "Next validates and continues without a local .json file."
+                    : "Next validates the campaign and offers to save a .json file.");
         }
 
 
-        // Shared between step 6 (Save) and step 7 (Deploy): the storage
+        // Shared between step 6 (Review) and step 7 (Deploy): the storage
         // location must be chosen BEFORE the user saves a reusable JSON file.
         private void AddStorageSelector(TableLayoutPanel host, int firstRow,
             Label status, Button? gpoAction = null, bool gpoActionAllowed = true)
@@ -1505,7 +1548,8 @@ public sealed partial class MainForm
                     if (_owner.TrySaveProject())
                     {
                         _saved = true;
-                        _skipProjectSave = false;
+                        // Saving explicitly here does not change the remembered
+                        // checkbox; only its direct toggle changes the choice.
                         _storageModifiedAfterSave = false;
                         RenderPage();
                     }

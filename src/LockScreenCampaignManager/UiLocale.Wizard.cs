@@ -97,6 +97,23 @@ internal static partial class UiLocale
         ["Schedule not configured"] = "התזמון לא הוגדר",
         ["Client Health: DISABLED. No client reports until enabled."] = "מצב לקוחות: כבוי. לא יישלחו דוחות עד להפעלה.",
         ["Campaign name"] = "שם הקמפיין",
+        ["6  Review & save"] = "6  בדיקה / שמירה",
+        ["Review & save"] = "בדיקה / שמירה",
+        ["Review and continue"] = "בדיקה והמשך",
+        ["Check the campaign details, optionally save a local .json project, then continue. Deployment files use the separate storage choice below."] =
+            "בדוק את הקמפיין. שמירת קובץ פרויקט מקומי היא אופציונלית; מיקום קובצי הפריסה נבחר בנפרד בהמשך.",
+        ["Skip saving a local project (.json)"] = "דלג על שמירת פרויקט מקומי (.json)",
+        ["The local project file is optional. It is separate from the deployment files location below."] =
+            "קובץ הפרויקט אופציונלי ונפרד ממיקום קובצי הפריסה שלמטה.",
+        ["Next validates and continues without a local .json file."] =
+            "הבא יבדוק את הקמפיין וימשיך ללא קובץ .json מקומי.",
+        ["Next validates the campaign and offers to save a .json file."] =
+            "הבא יבדוק את הקמפיין ויציע לשמור קובץ .json.",
+        ["Local .json save skipped"] = "דילוג על שמירת .json",
+        ["Local .json save optional"] = "שמירת .json אופציונלית",
+        ["Could not remember the local save choice for next time."] =
+            "לא ניתן לשמור את הבחירה לפעם הבאה.",
+
         ["Skip saving & continue"] = "דלג על שמירה והמשך",
         ["Project saved. Continue to Deploy or finish offline."] = "הפרויקט נשמר. המשך לפריסה או סיים ללא חיבור.",
         ["Local save skipped. Continue to Deploy without a project file."] = "השמירה המקומית דולגה. המשך לפריסה ללא קובץ פרויקט.",
