@@ -15,6 +15,32 @@ class ModernTests(unittest.TestCase):
         u=read("UniversalUpdaterWindow.cs")
         self.assertIn("if (answer != DialogResult.Yes) return;",u)
         self.assertIn("MessageBoxDefaultButton.Button2",u)
+    def test_updater_approval_is_short_and_safely_declines(self):
+        updater=read("UniversalUpdaterWindow.cs")
+        self.assertIn("BuildInstallApprovalText()", updater)
+        self.assertIn('T("Archive and SHA-256 checks passed.")', updater)
+        self.assertIn('T("Preview builds are unsigned; SHA-256 does not verify publisher identity.")', updater)
+        self.assertIn('T("Install this update now?")', updater)
+        self.assertIn("MessageBoxDefaultButton.Button2", updater)
+        self.assertIn("if (answer != DialogResult.Yes) return;", updater)
+        approval = updater.split("internal static string BuildInstallApprovalText()", 1)[1].split("private void InstallAndRestart()", 1)[0]
+        self.assertEqual(approval.count('T("'), 6)
+
+    def test_hkcu_snapshot_shows_cautious_summary(self):
+        probe=read("EndpointUserProbeDialog.cs")
+        for value in ("BuildSnapshotSummary(evidence)",
+                      '"ScreenSaveActive"', '"ScreenSaveTimeOut"',
+                      '"SCRNSAVE.EXE"', '"ScreenSaverIsSecure"',
+                      "Missing HKCU settings do not prove Screen Saver failure.",
+                      "No local SCR/EXE selected"):
+            self.assertIn(value, probe, value)
+        locale=read("UiLocale.Power114.cs")
+        for key in ("Screen Saver HKCU summary (read-only)",
+                    "No local SCR/EXE selected",
+                    "Not configured in captured HKCU",
+                    "Missing HKCU settings do not prove Screen Saver failure."):
+            self.assertEqual(locale.count('["'+key+'"]'), 2, key)
+
     def test_custom_pilot_gpo_fail_closed(self):
         x=read("CustomSaverPilotFile.cs")
         for t in ("SHA256.HashData(stream)", "ReadExactly(dos)", "ReadExactly(pe)",
