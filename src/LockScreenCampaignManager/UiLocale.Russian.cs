@@ -128,6 +128,21 @@ internal static partial class UiLocale
         ["Finish offline - keep the campaign in the editor"] = "Завершить автономно — оставить кампанию в редакторе",
         ["Skip saving & continue"] = "Пропустить сохранение и продолжить",
         ["Save & Next"] = "Сохранить и далее",
+        ["6  Review & save"] = "6  Проверка / сохранение",
+        ["Review & save"] = "Проверка / сохранение",
+        ["Review and continue"] = "Проверьте кампанию и продолжите",
+        ["Check the campaign details, optionally save a local .json project, then continue. Deployment files use the separate storage choice below."] =
+            "Проверьте настройки кампании. При необходимости сохраните локальный проект .json. Место хранения файлов для развёртывания выбирается отдельно ниже.",
+        ["Skip saving a local project (.json)"] = "Не сохранять локальный проект (.json)",
+        ["The local project file is optional. It is separate from the deployment files location below."] =
+            "Файл проекта необязателен. Он не связан с папкой развёртывания ниже.",
+        ["Next validates and continues without a local .json file."] =
+            "«Далее» проверит кампанию и продолжит без сохранения .json.",
+        ["Next validates the campaign and offers to save a .json file."] =
+            "«Далее» проверит кампанию и предложит сохранить .json.",
+        ["Local .json save skipped"] = "Без сохранения .json",
+        ["Local .json save optional"] = "Сохранение .json — необязательно",
+
         ["Campaign files"] = "Файлы кампании",
         ["Client type"] = "Тип клиента",
         ["Domain"] = "Домен",
