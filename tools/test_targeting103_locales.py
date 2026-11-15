@@ -73,6 +73,25 @@ class Targeting103LocalisationTests(unittest.TestCase):
         self.assertIn("if (!IsDisposed && !_running && !_advancedMode &&", deploy)
         self.assertIn("if (_running) return;", deploy)
 
+    def test_user_group_selector_embedded_without_second_modal_window(self):
+        deploy = read("DomainDeploymentForm.cs")
+        editor = read("CampaignAssignmentsDialog.cs")
+        self.assertIn("private void EnsureInlineTargetEditor()", deploy)
+        self.assertIn("TopLevel = false", deploy)
+        self.assertIn("FormBorderStyle = FormBorderStyle.None", deploy)
+        self.assertIn("Dock = DockStyle.Fill", deploy)
+        self.assertIn("_targetSplit.Panel1.Controls.Add(editor);", deploy)
+        self.assertIn("_inlineTargetEditor is { IsDisposed: false } embedded", deploy)
+        self.assertIn("embedded.Visible = inlineAssignments;", deploy)
+        self.assertIn("editor.InlineSaved = () =>", deploy)
+        self.assertIn("private bool HasSelectedTargets =>", deploy)
+        self.assertIn("await CheckRightsAsync();", deploy)
+        self.assertIn("if (InlineSaved is { } callback)", editor)
+        self.assertIn("CampaignTargetAssignments.Validate(checker);", editor)
+        self.assertIn("else\\n                DialogResult = DialogResult.OK;", editor)
+        # The old automatic modal after connection must not return.
+        self.assertNotIn("BeginInvoke(new Action(() =>\\n                    {\\n                        if (!IsDisposed", deploy)
+
     def test_help_and_status_are_translated_without_touching_ad(self):
         dialog = read("CampaignAssignmentsDialog.cs")
         deploy = read("DomainDeploymentForm.cs")
