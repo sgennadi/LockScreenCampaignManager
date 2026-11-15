@@ -14,6 +14,14 @@ internal static partial class UiLocale
         ["Run on the pilot PC as the signed-in user. Reads this user's HKCU and one local Screen Saver file without executing it. Another administrator account reads its own HKCU. Nothing is sent."] =
             "Запустите от имени вошедшего пользователя. Читается HKCU и один локальный файл заставки без запуска. Другой администратор прочитает свой HKCU. Ничего не отправляется.",
         ["Local Screen Saver file"] = "Локальный файл заставки",
+        ["Screen Saver HKCU summary (read-only)"] = "Настройки заставки в HKCU (только чтение)",
+        ["Not configured in captured HKCU"] = "Не задано в считанном HKCU",
+        ["Not verified (HKCU read failed)"] = "Не проверено (ошибка чтения HKCU)",
+        ["No local SCR/EXE selected"] = "Локальная заставка SCR/EXE не выбрана",
+        ["Missing HKCU settings do not prove Screen Saver failure."] =
+            "Отсутствие параметров HKCU не доказывает сбой заставки.",
+        ["Check actual User GPO and interactive session."] =
+            "Проверьте действующие User GPO и интерактивный сеанс.",
         ["No HKCU snapshot yet. Click Capture this Windows user to read the current account."] =
             "Снимка HKCU ещё нет. Нажмите «Считать HKCU этого пользователя».",
         ["Local read only. No file has been created."] =
@@ -56,6 +64,14 @@ internal static partial class UiLocale
         ["Run on the pilot PC as the signed-in user. Reads this user's HKCU and one local Screen Saver file without executing it. Another administrator account reads its own HKCU. Nothing is sent."] =
             "יש להפעיל כמשתמש המחובר. הכלי קורא HKCU וקובץ שומר מסך מקומי ללא הפעלה. מנהל אחר יקרא את ה-HKCU של עצמו. שום מידע לא נשלח.",
         ["Local Screen Saver file"] = "קובץ שומר מסך מקומי",
+        ["Screen Saver HKCU summary (read-only)"] = "סיכום הגדרות שומר מסך ב-HKCU (קריאה בלבד)",
+        ["Not configured in captured HKCU"] = "לא הוגדר ב-HKCU שנקרא",
+        ["Not verified (HKCU read failed)"] = "לא אומת (כשל בקריאת HKCU)",
+        ["No local SCR/EXE selected"] = "לא נבחר קובץ SCR/EXE מקומי",
+        ["Missing HKCU settings do not prove Screen Saver failure."] =
+            "היעדר ערכי HKCU אינו מוכיח כשל של שומר המסך.",
+        ["Check actual User GPO and interactive session."] =
+            "יש לבדוק GPO של המשתמש ואת ההפעלה בהפעלה אינטראקטיבית.",
         ["No HKCU snapshot yet. Click Capture this Windows user to read the current account."] =
             "טרם נאספו נתוני HKCU. יש ללחוץ על איסוף נתוני המשתמש הנוכחי.",
         ["Local read only. No file has been created."] =
