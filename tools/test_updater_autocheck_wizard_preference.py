@@ -46,7 +46,7 @@ class OneClickAndPreferenceTests(unittest.TestCase):
         self.assertIn("persistWizardSaveOption: false", wizard)
         self.assertIn("WizardSkipLocalProjectSave = UiStyle.Preferences.WizardSkipLocalProjectSave", settings)
         self.assertIn("Could not remember the local save choice for next time.", wizard)
-        self.assertNotIn("WizardSkipLocalProjectSave", read("CampaignProject.cs"))
+        self.assertNotIn("WizardSkipLocalProjectSave", read("CampaignModels.cs"))
 
     def test_ui_translations_and_native_legacy_roundtrip(self):
         ru = read("UiLocale.Russian.cs")
