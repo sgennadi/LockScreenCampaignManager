@@ -60,7 +60,7 @@ public sealed partial class MainForm
     {
         if (!string.IsNullOrWhiteSpace(imagePath))
             _project.ImagePaths.Add(imagePath);
-        var wizard = new CampaignWizardDialog(this);
+        var wizard = new CampaignWizardDialog(this, persistWizardSaveOption: false);
         if (page == -1) wizard.ExerciseScreenSaverSkipForSmokeTest();
         else wizard.ShowPageForSmokeTest(page);
         return wizard;
@@ -102,12 +102,17 @@ public sealed partial class MainForm
         // A previously saved JSON project may become stale if deployment options change.
         private bool _storageModifiedAfterSave;
         private bool _skipProjectSave;
+        private readonly bool _persistWizardSaveOption;
         private bool _editingPage;
         private bool _everConfiguredSchedule;
 
-        internal CampaignWizardDialog(MainForm owner)
+        internal CampaignWizardDialog(MainForm owner, bool persistWizardSaveOption = true)
         {
             _owner = owner;
+            _persistWizardSaveOption = persistWizardSaveOption;
+            // UI smoke must not write real per-user settings or inherit them.
+            _skipProjectSave = persistWizardSaveOption &&
+                UiStyle.Preferences.WizardSkipLocalProjectSave;
             Text = "LockScreen Campaign Manager " + AppVersion.Current + " - Campaign Wizard";
             Font = new Font("Segoe UI", 10f);
             StartPosition = FormStartPosition.CenterParent;
@@ -1354,6 +1359,16 @@ public sealed partial class MainForm
             {
                 if (_editingPage) return;
                 _skipProjectSave = skip.Checked;
+                if (_persistWizardSaveOption)
+                {
+                    try { UiStyle.RememberWizardSkipLocalProjectSave(_skipProjectSave); }
+                    catch (Exception ex)
+                    {
+                        AppLog.Write(ex, "Remember Wizard local project save choice");
+                        status.Text = T("Could not remember the local save choice for next time.");
+                        return;
+                    }
+                }
                 status.Text = T(_skipProjectSave
                     ? "Next validates and continues without a local .json file."
                     : "Next validates the campaign and offers to save a .json file.");
@@ -1533,7 +1548,8 @@ public sealed partial class MainForm
                     if (_owner.TrySaveProject())
                     {
                         _saved = true;
-                        _skipProjectSave = false;
+                        // Saving explicitly here does not change the remembered
+                        // checkbox; only its direct toggle changes the choice.
                         _storageModifiedAfterSave = false;
                         RenderPage();
                     }
