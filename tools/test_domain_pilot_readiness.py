@@ -25,7 +25,7 @@ class PilotReadinessContracts(unittest.TestCase):
             "now - power.ObservedUtc > TimeSpan.FromMinutes(5)",
             "power.SourceDisagreements()",
             "power.Assess(saverIdleSeconds)",
-            "recent && sourceComplete ? \"Observed concern\" : \"Not verified\""
+            "recent && sourceComplete && !sourceConflict"
         ):
             if marker == "now - power.ObservedUtc > TimeSpan.FromMinutes(5)":
                 self.assertIn("now - power.ObservedUtc", model)
