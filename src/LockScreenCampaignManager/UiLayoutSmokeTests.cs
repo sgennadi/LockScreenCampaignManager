@@ -100,8 +100,8 @@ internal static class UiLayoutSmokeTests
             new[] { "AD Connection Wizard...", "Continue offline", "Continue", "Back", "Close Wizard" }),
         ("Campaign Wizard - campaign type", () => CreateWizardPage(1),
             new[] { "Lock Screen / Screen Saver / Both", "Next", "Back" }),
-        ("Campaign Wizard - Screen Saver-only save", () => CreateWizardPage(-1),
-            new[] { "Validate campaign", "Save project...", "Back" }),
+        ("Campaign Wizard - Screen Saver-only review", () => CreateWizardPage(-1),
+            new[] { "Skip saving a local project (.json)", "Next", "Back" }),
         ("Campaign Wizard - JPG pilot install", () => CreatePhotoWizardSave(),
             new[] { "Export JPG .scr pilot...", "Export GPO lab kit...",
                 "Install local JPG pilot...", "Validate campaign", "Back" }),
@@ -111,9 +111,8 @@ internal static class UiLayoutSmokeTests
             new[] { "Move up", "Move down", "Sort by filename", "Auto match names", "Next", "Back" }),
         ("Campaign Wizard - schedule", () => CreateWizardPage(4),
             new[] { "Edit schedule...", "Next", "Back" }),
-        ("Campaign Wizard - save", () => CreateWizardPage(5),
-            new[] { "Validate campaign", "Save project...",
-                "Skip saving & continue", "Save & Next", "Back" }),
+        ("Campaign Wizard - review and save", () => CreateWizardPage(5),
+            new[] { "Skip saving a local project (.json)", "Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(6),
             new[] { "Open GPO Deployment Wizard...", "Save project changes...", "Finish offline", "Finish", "Back" }),
         ("Agent Management - read-only desktop layout", () =>
@@ -442,6 +441,23 @@ internal static class UiLayoutSmokeTests
                 catch (UnauthorizedAccessException) { }
             }
         };
+        if (page is 5 or -1)
+        {
+            var skip = Descendants(wizard).OfType<CheckBox>()
+                .Single(x => x.Name == "WizardSkipLocalProjectSave");
+            var next = Descendants(wizard).OfType<Button>()
+                .Single(x => x.Name == "CampaignWizardContinueAction");
+            if (skip.Checked || next.Text != "Next" ||
+                !MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: skip.Checked))
+                throw new InvalidOperationException(
+                    "Wizard review must offer Save on Next, without upper Save/Skip buttons.");
+            skip.Checked = true;
+            if (!skip.Checked || next.Text != "Next" ||
+                MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: skip.Checked))
+                throw new InvalidOperationException(
+                    "Optional skip checkbox must bypass local SaveFileDialog without changing navigation.");
+            skip.Checked = false;
+        }
         if (page is 5 or 6)
         {
             var source = Descendants(wizard).OfType<ComboBox>()
