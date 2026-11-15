@@ -451,12 +451,16 @@ internal static class UiLayoutSmokeTests
                 !MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: skip.Checked))
                 throw new InvalidOperationException(
                     "Wizard review must offer Save on Next, without upper Save/Skip buttons.");
+            bool persistedBefore = UiStyle.Preferences.WizardSkipLocalProjectSave;
             skip.Checked = true;
             if (!skip.Checked || next.Text != "Next" ||
                 MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: skip.Checked))
                 throw new InvalidOperationException(
                     "Optional skip checkbox must bypass local SaveFileDialog without changing navigation.");
             skip.Checked = false;
+            if (UiStyle.Preferences.WizardSkipLocalProjectSave != persistedBefore)
+                throw new InvalidOperationException(
+                    "CI UI smoke must never modify real Wizard save preferences.");
         }
         if (page is 5 or 6)
         {
