@@ -47,6 +47,10 @@ internal sealed class CampaignAssignmentsDialog : Form
     private readonly Label _help = new();
     private int _editing = -1;
     private bool _loading;
+    // The same validated editor can live directly inside the deployment Wizard.
+    // Advanced mode still uses the original modal dialog.
+    internal Action? InlineSaved { get; set; }
+
 
     internal CampaignAssignmentsDialog(CampaignProject project,
         IEnumerable<AdChoice> ous, IEnumerable<AdChoice> groups,
@@ -795,7 +799,10 @@ internal sealed class CampaignAssignmentsDialog : Form
             CampaignTargetAssignments.Validate(checker);
             _project.TargetAssignments = checker.TargetAssignments;
             _project.ScreenSaver = settings;
-            DialogResult = DialogResult.OK;
+            if (InlineSaved is { } callback)
+                callback();
+            else
+                DialogResult = DialogResult.OK;
         }
         catch (CampaignValidationException ex)
         {
