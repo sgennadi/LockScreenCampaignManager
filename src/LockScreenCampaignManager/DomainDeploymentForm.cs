@@ -717,6 +717,7 @@ internal sealed partial class DomainDeploymentForm : Form
             Dock = DockStyle.Fill,
             Visible = false
         };
+        editor.PrepareInline();
         editor.InlineSaved = () =>
         {
             InvalidatePlan();
