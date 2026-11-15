@@ -103,7 +103,7 @@ class LocalSaverAndPowerContracts(unittest.TestCase):
         ):
             self.assertEqual(locale.count(f'["{key}"]'), 2, key)
         csproj = code("LockScreenCampaignManager.csproj")
-        self.assertIn("0.4.0-preview.123", csproj)
+        self.assertIn("0.4.0-preview.124", csproj)
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW122.md").is_file())
         self.assertTrue((ROOT / "docs" / "SCR-READ-ONLY-PILOT.md").is_file())
         for workflow in (".github/workflows/build.yml",
