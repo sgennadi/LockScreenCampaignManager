@@ -101,10 +101,10 @@ internal static class UiLayoutSmokeTests
         ("Campaign Wizard - campaign type", () => CreateWizardPage(1),
             new[] { "Lock Screen / Screen Saver / Both", "Next", "Back" }),
         ("Campaign Wizard - Screen Saver-only review", () => CreateWizardPage(-1),
-            new[] { "Skip saving a local project (.json)", "Next", "Back" }),
+            new[] { "Next", "Back" }),
         ("Campaign Wizard - JPG pilot install", () => CreatePhotoWizardSave(),
             new[] { "Export JPG .scr pilot...", "Export GPO lab kit...",
-                "Install local JPG pilot...", "Skip saving a local project (.json)", "Next", "Back" }),
+                "Install local JPG pilot...", "Next", "Back" }),
         ("Campaign Wizard - images", () => CreateWizardPage(2),
             new[] { "Add image files...", "Choose image folder...", "Remove selected", "Next", "Back" }),
         ("Campaign Wizard - arrange", () => CreateWizardPage(3),
@@ -112,7 +112,7 @@ internal static class UiLayoutSmokeTests
         ("Campaign Wizard - schedule", () => CreateWizardPage(4),
             new[] { "Edit schedule...", "Next", "Back" }),
         ("Campaign Wizard - review and save", () => CreateWizardPage(5),
-            new[] { "Skip saving a local project (.json)", "Next", "Back" }),
+            new[] { "Next", "Back" }),
         ("Campaign Wizard - deploy", () => CreateWizardPage(6),
             new[] { "Open GPO Deployment Wizard...", "Save project changes...", "Finish offline", "Finish", "Back" }),
         ("Agent Management - read-only desktop layout", () =>
@@ -724,8 +724,26 @@ internal static class UiLayoutSmokeTests
         bool isDeploy = all.OfType<Label>()
             .Any(x => x.Text == "Deploy or finish offline");
         bool isSave = all.OfType<Label>()
-            .Any(x => x.Text == "Save or skip saving");
+            .Any(x => x.Text == "Review and continue");
         if (!isDeploy && !isSave) return;
+        if (isSave)
+        {
+            // A checkbox is not a button; assert its real role, layout and
+            // order above deployment storage rather than counting as an action.
+            var skip = all.OfType<CheckBox>()
+                .SingleOrDefault(x => x.Name == "WizardSkipLocalProjectSave");
+            var review = all.OfType<TableLayoutPanel>()
+                .SingleOrDefault(x => x.Name == "WizardSaveReviewLayout");
+            var nameCard = all.OfType<TableLayoutPanel>()
+                .SingleOrDefault(x => x.Name == "WizardCampaignNameField");
+            if (skip is null || skip.Checked || review is null ||
+                nameCard is null || skip.Parent != nameCard ||
+                review.GetControlFromPosition(0, 0) != nameCard ||
+                review.GetControlFromPosition(0, 1)?.Name != "CampaignWizardSaveStorageOptions" ||
+                !skip.AutoSize || !skip.Enabled)
+                throw new InvalidOperationException(
+                    $"Wizard optional JSON checkbox or review order invalid at {profile}.");
+        }
         var source = all.OfType<ComboBox>()
             .SingleOrDefault(x => x.Name == "CampaignWizardContentSource");
         var folder = all.OfType<TextBox>()
@@ -1320,7 +1338,8 @@ internal static class UiLayoutSmokeTests
                             $"style={selector?.DropDownStyle}.");
                 }
                 if (form is MainForm || form.Text.Contains("Campaign Wizard",
-                        StringComparison.OrdinalIgnoreCase) && window.Name.EndsWith("save"))
+                        StringComparison.OrdinalIgnoreCase) &&
+                    window.Name.Contains("review", StringComparison.OrdinalIgnoreCase))
                     CheckCampaignNameLayout(form, profile.Name);
                 var controls = Descendants(form).ToArray();
                 var actual = controls.OfType<Button>().ToArray();
