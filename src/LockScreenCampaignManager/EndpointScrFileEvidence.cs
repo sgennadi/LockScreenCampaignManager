@@ -22,11 +22,11 @@ internal sealed record EndpointScrFileEvidence(
 
     private static EndpointUserSaverValue Selected(
         EndpointUserSaverValue policy, EndpointUserSaverValue desktop) =>
-        policy.Status == "Present" ? policy :
-        desktop.Status == "Present" ? desktop :
         policy.Status == "Unreadable" || desktop.Status == "Unreadable"
             ? new EndpointUserSaverValue("None", "SCRNSAVE.EXE", "Unreadable", "")
-            : new EndpointUserSaverValue("None", "SCRNSAVE.EXE", "Missing", "");
+            : policy.Status == "Present" ? policy :
+              desktop.Status == "Present" ? desktop :
+                new EndpointUserSaverValue("None", "SCRNSAVE.EXE", "Missing", "");
 
     internal static EndpointScrFileEvidence Capture(
         EndpointUserSaverValue policy, EndpointUserSaverValue desktop)
@@ -103,6 +103,10 @@ internal sealed record EndpointScrFileEvidence(
                 return "NonLocal";
             value = Environment.ExpandEnvironmentVariables(value);
             if (value.Contains('%')) return "Unresolved";
+            if (value.StartsWith(@"\\", StringComparison.Ordinal) ||
+                value.StartsWith("//", StringComparison.Ordinal) ||
+                value.StartsWith(@"\", StringComparison.Ordinal))
+                return "NonLocal";
             string extension = Path.GetExtension(value);
             if (!extension.Equals(".scr", StringComparison.OrdinalIgnoreCase) &&
                 !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
