@@ -68,9 +68,9 @@ class Targeting103LocalisationTests(unittest.TestCase):
         self.assertIn("_allOus.Count > 0 && _allGroups.Count > 0)", deploy)
         self.assertIn("_wizardStep = 1;\n                UpdateDeploymentSteps();", deploy)
         self.assertIn("_project.EffectiveCampaignMode != CampaignTargetMode.LockScreen", deploy)
-        self.assertIn("BeginInvoke(new Action(() =>", deploy)
-        self.assertIn("OpenTargetAssignments();", deploy)
-        self.assertIn("if (!IsDisposed && !_running && !_advancedMode &&", deploy)
+        self.assertIn("private void EnsureInlineTargetEditor()", deploy)
+        self.assertIn("editor.PrepareInline();", deploy)
+        self.assertIn("ResetInlineTargetEditor();", deploy)
         self.assertIn("if (_running) return;", deploy)
 
     def test_user_group_selector_embedded_without_second_modal_window(self):
@@ -88,7 +88,7 @@ class Targeting103LocalisationTests(unittest.TestCase):
         self.assertIn("await CheckRightsAsync();", deploy)
         self.assertIn("if (InlineSaved is { } callback)", editor)
         self.assertIn("CampaignTargetAssignments.Validate(checker);", editor)
-        self.assertIn("else\\n                DialogResult = DialogResult.OK;", editor)
+        self.assertIn("else\n                DialogResult = DialogResult.OK;", editor)
         # The old automatic modal after connection must not return.
         self.assertNotIn("BeginInvoke(new Action(() =>\\n                    {\\n                        if (!IsDisposed", deploy)
 
