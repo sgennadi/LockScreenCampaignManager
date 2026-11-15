@@ -1617,7 +1617,7 @@ StartExecutePSFirst=true
             approval.Contains("SHA-256", StringComparison.Ordinal) &&
             approval.Contains("unsigned", StringComparison.OrdinalIgnoreCase) &&
             approval.Contains("gMSA", StringComparison.Ordinal) &&
-            approval.Contains("backup", StringComparison.OrdinalIgnoreCase) &&
+            approval.Contains("backed up", StringComparison.OrdinalIgnoreCase) &&
             approval.Contains("unsaved", StringComparison.OrdinalIgnoreCase),
             "Updater approval remains concise, explicit and truthful about unsigned previews.");
         using var update = new ModernMessageDialog(
@@ -1701,8 +1701,8 @@ StartExecutePSFirst=true
             overview.Contains("ScreenSaveTimeOut:", StringComparison.Ordinal) &&
             overview.Contains("SCRNSAVE.EXE:", StringComparison.Ordinal) &&
             overview.Contains("ScreenSaverIsSecure:", StringComparison.Ordinal) &&
-            overview.Contains("Local Screen Saver file", StringComparison.Ordinal) &&
-            overview.Contains("Missing HKCU settings do not prove", StringComparison.Ordinal),
+            overview.Contains(UiLocale.Display("Local Screen Saver file"), StringComparison.Ordinal) &&
+            overview.Contains(UiLocale.Display("Missing HKCU settings do not prove Screen Saver failure."), StringComparison.Ordinal),
             "HKCU summary must report the raw settings and avoid false Screen Saver failure.");
                 Check(result.Computer == pc && result.Domain == domain &&
             result.User == @"EXAMPLE\pilot" && result.Values.Count == 9 &&
