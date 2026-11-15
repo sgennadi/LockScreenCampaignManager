@@ -8,6 +8,9 @@
 4. **Consistent layout and translations.** Rename step six **Review & save**, use the same bottom Back/Next/Close navigation, and translate new captions into Russian and Hebrew. Retain specialist JPG pilot tools without removing their explicit safety confirmations.
 5. **Regression gates.** Test Screen Saver-only mode with no images, normal campaign and JPG pilot flows; verify checkbox state/Next semantics and layout at simulated high DPI. Add fail-closed offline source checks and Windows x64/x86 build gates.
 
+6. **One-click update check.** Every explicit **Check updates** entry (main menu, visible status button, or Wizard notice) opens the updater and immediately performs one read-only GitHub release check. After the response, **Check again** offers a manual retry. Only the separate **Install** button can download/verify and ask for approval; nothing installs automatically.
+7. **Remember the Save checkbox.** The Wizard's local .json skip choice persists per Windows user in the existing atomic `ui-settings.json`, even after closing the Wizard or restarting the app. Applying language/DPI settings preserves the choice. Existing settings default to unchecked. CI-only UI smoke tests never persist their toggle operations.
+
 ## How it works
 
 On **Step 6 of 7 — Review & save**, set a campaign name, decide whether to skip a local **.json** file, choose the deployment content location (SYSVOL or an existing SMB UNC share), then click **Next** in the bottom navigation. No extra Save/Skip buttons are necessary. Saving a local project is separate from exporting/deploying the campaign package.
