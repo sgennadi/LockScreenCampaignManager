@@ -289,6 +289,11 @@ internal static class SelfTests
         catch (CampaignValidationException) { missingImages = true; }
         Check(missingImages, "Old Lock Screen requires images.");
 
+        Check(MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: false) &&
+            !MainForm.ShouldSaveCampaignProject(saved: false, skipSaving: true) &&
+            !MainForm.ShouldSaveCampaignProject(saved: true, skipSaving: false),
+            "Wizard Next prompts for JSON only when not saved and skip is unchecked.");
+
         var userOnly = new CampaignProject {
             Name = "Screen Saver user-only",
             TimeZoneId = "UTC",
