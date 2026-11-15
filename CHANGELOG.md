@@ -1,3 +1,10 @@
+## 0.4.0-preview.123 — compact update warning and clear HKCU gaps (2026-11-15)
+
+1. Replace the hard-to-read long updater modal with a concise six-line, no-auto-approval confirmation preserving unsigned publisher and rollback disclosures.
+2. Add read-only current-user HKCU Screen Saver settings overview above private diagnostic JSON, with sources and correct `NotSelected` meaning.
+3. Localize new summary lines into Russian/Hebrew; absent HKCU values do not establish a failed Screen Saver/GPO.
+4. Add native and offline regression gates without changing AD, SYSVOL, GPO, client settings or portable-update validation.
+
 ## 0.4.0-preview.122 — local Screen Saver file/read and user timeout comparison (2026-11-15)
 
 1. Capture one read-only local .scr/.exe file availability status as the actual Windows user; disallow network paths, mapped drives and linked sources, with no execution or code signature claims.
