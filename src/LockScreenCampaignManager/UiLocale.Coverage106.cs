@@ -6,6 +6,7 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string, string> Coverage106Russian = new(StringComparer.Ordinal)
     {
+        ["Feedback source changed. Refresh SMB reports before reviewing or exporting."] = "Источник отчётов изменён. Обновите SMB-отчёты перед просмотром или экспортом.",
         ["AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status."] =
             "Область AD не загружена. Отчёты агентов — непроверенные сведения, не доказательство работы компьютера в сети.",
         ["AD inventory not verified. Refresh AD before Repair or coverage comparisons."] =
@@ -26,6 +27,7 @@ internal static partial class UiLocale
 
     private static readonly Dictionary<string, string> Coverage106Hebrew = new(StringComparer.Ordinal)
     {
+        ["Feedback source changed. Refresh SMB reports before reviewing or exporting."] = "מקור הדוחות השתנה. יש לרענן את דוחות SMB לפני סקירה או ייצוא.",
         ["AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status."] =
             "תחום ה-AD לא נטען. דוחות הסוכנים הם מידע לא מאומת, ואינם הוכחה לחיבור מקוון.",
         ["AD inventory not verified. Refresh AD before Repair or coverage comparisons."] =

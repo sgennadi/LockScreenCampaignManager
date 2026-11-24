@@ -35,6 +35,7 @@ internal sealed class ClientFeedbackPanel : UserControl
     private ClientHealthAdInventory? _adInventory;
     private ClientHealthSnapshot? _snapshot;
     private bool _busy;
+    private readonly ClientFeedbackReadGate _sourceGate = new();
 
     public ClientFeedbackPanel(string domain, string dc, string ouDn, string groupDn,
         DomainCredentials credentials, CampaignProject project,
@@ -53,6 +54,8 @@ internal sealed class ClientFeedbackPanel : UserControl
         Dock = DockStyle.Fill;
         BackColor = UiStyle.Canvas;
         Build();
+        _root.TextChanged += (_, _) => InvalidateFeedbackSource();
+        _campaignId.TextChanged += (_, _) => InvalidateFeedbackSource();
         _timer.Interval = 15_000;
         _timer.Tick += async (_, _) =>
         {
@@ -78,11 +81,21 @@ internal sealed class ClientFeedbackPanel : UserControl
             !string.Equals(_campaignId.Text, campaignId, StringComparison.Ordinal))
         {
             _campaignId.Text = campaignId;
-            _snapshot = null;
-            _alertEngine.Reset();
-            _grid.Rows.Clear();
             _message.Text = UiLocale.Display("Campaign changed. Load its reports and refresh the AD computer list.");
         }
+    }
+
+    private void InvalidateFeedbackSource()
+    {
+        _sourceGate.Invalidate();
+        _snapshot = null;
+        _alertEngine.Reset();
+        _grid.Rows.Clear();
+        _totals.Text = UiLocale.Display("Expected (AD): ") +
+            (_adInventory is not null && _adInventory.IsFresh(DateTimeOffset.UtcNow)
+                ? _expected.Count.ToString(CultureInfo.InvariantCulture) : UiLocale.Display("not loaded"));
+        UpdateAdReportCoverage();
+        _message.Text = UiLocale.Display("Feedback source changed. Refresh SMB reports before reviewing or exporting.");
     }
 
     private static Button Action(string text, Action action, int width)
@@ -120,6 +133,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         };
         _root.Text = _project.FeedbackShare;
         _root.PlaceholderText = @"\\fileserver\LockScreenReports$";
+        _campaignId.Name = "ClientHealthCampaignId";
         _campaignId.Width = 305;
         _campaignId.Text = CampaignSchedule.BuildId(_project);
         config.Controls.Add(new Label { Text = "SMB Share", AutoSize = true, Margin = new Padding(0, 17, 8, 0) });
@@ -278,6 +292,7 @@ internal sealed class ClientFeedbackPanel : UserControl
     {
         if (_busy) return;
         _busy = true;
+        long sourceRevision = _sourceGate.Capture();
         try
         {
             string root = FeedbackPath.ValidateRoot(_root.Text);
@@ -287,7 +302,7 @@ internal sealed class ClientFeedbackPanel : UserControl
             int maxAge = Math.Clamp(_project.FeedbackIntervalMinutes * 3, 45, 180);
             var snapshot = await Task.Run(() => ClientFeedbackReader.Read(root, id, names,
                 DateTimeOffset.UtcNow, maxAge, expectedScopeVerified: verified));
-            if (IsDisposed) return;
+            if (IsDisposed || !_sourceGate.IsCurrent(sourceRevision)) return;
             _snapshot = snapshot;
             _grid.SuspendLayout();
             try
@@ -326,7 +341,8 @@ internal sealed class ClientFeedbackPanel : UserControl
         }
         catch (Exception ex)
         {
-            if (!IsDisposed) _message.Text = UiLocale.Display("Could not read client feedback: ") +
+            if (!IsDisposed && _sourceGate.IsCurrent(sourceRevision))
+                _message.Text = UiLocale.Display("Could not read client feedback: ") +
                 UniversalDiagnosticsEmbedded.Clean(ex.Message, 240);
         }
         finally { _busy = false; }
@@ -437,27 +453,31 @@ internal sealed class ClientFeedbackPanel : UserControl
 
     private void ExportFinalReport()
     {
-        if (_snapshot is null) { _message.Text = UiLocale.Display("Refresh SMB feedback first."); return; }
-        if (_snapshot.Expected == 0)
+        var snapshot = _snapshot;
+        long sourceRevision = _sourceGate.Capture();
+        if (snapshot is null) { _message.Text = UiLocale.Display("Refresh SMB feedback first."); return; }
+        if (snapshot.Expected == 0)
         {
             MessageBox.Show(FindForm(), UiLocale.Display("Load the AD scope before exporting the final report, " +
                 "otherwise the total number of target computers is unknown."), UiLocale.Display("Final report"),
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        int unresolved = _snapshot.Errors + _snapshot.Stale + _snapshot.NoReport + _snapshot.Ready + _snapshot.Healthy;
+        int unresolved = snapshot.Errors + snapshot.Stale + snapshot.NoReport + snapshot.Ready + snapshot.Healthy;
         if (unresolved > 0 && MessageBox.Show(FindForm(),
             UiLocale.Display("There are ") + unresolved +
             UiLocale.Display(" computers without a completion report. Save a final report snapshot as of now? This does NOT confirm full completion."),
             UiLocale.Display("Final report confirmation"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
             MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        if (!_sourceGate.IsCurrent(sourceRevision) || IsDisposed) return;
         using var dialog = new SaveFileDialog { Filter = "HTML (*.html)|*.html",
             Title = UiLocale.Display("Save final report"), FileName =
-            $"LSCM-Final-{_snapshot.CampaignId}-{DateTime.Now:yyyyMMdd-HHmm}.html" };
+            $"LSCM-Final-{snapshot.CampaignId}-{DateTime.Now:yyyyMMdd-HHmm}.html" };
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
+        if (!_sourceGate.IsCurrent(sourceRevision) || IsDisposed) return;
         try
         {
-            var record = CampaignHistoryStore.SaveHealth(_snapshot, _domain, _ouDn, _groupDn, final: true);
+            var record = CampaignHistoryStore.SaveHealth(snapshot, _domain, _ouDn, _groupDn, final: true);
             File.WriteAllText(dialog.FileName, CampaignHistoryStore.HtmlReport(record), new UTF8Encoding(true));
             _message.Text = UiLocale.Display("Final snapshot saved to history and exported as HTML.");
         }
@@ -487,19 +507,23 @@ internal sealed class ClientFeedbackPanel : UserControl
 
     private void ExportCsv()
     {
-        if (_snapshot is null) return;
+        var snapshot = _snapshot;
+        long sourceRevision = _sourceGate.Capture();
+        if (snapshot is null) return;
+        if (!_sourceGate.IsCurrent(sourceRevision) || IsDisposed) return;
         using var dialog = new SaveFileDialog { Filter = "CSV UTF-8 (*.csv)|*.csv", FileName =
-            "LSCM-ClientHealth-" + _snapshot.CampaignId + "-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".csv" };
+            "LSCM-ClientHealth-" + snapshot.CampaignId + "-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".csv" };
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
+        if (!_sourceGate.IsCurrent(sourceRevision) || IsDisposed) return;
         try
         {
             var builder = new StringBuilder("Computer,Condition,Stage,Image,LastSeen,Files,Registry,Task,AgentVersion,ClientType\r\n");
-            foreach (var row in _snapshot.Rows)
+            foreach (var row in snapshot.Rows)
                 builder.AppendLine(string.Join(",", new[] { row.Computer, row.Condition, row.Stage,
                     row.Image, row.LastSeen, row.Files, row.Registry, row.Task, row.Version, row.ClientType }
                     .Select(CsvValue)));
             File.WriteAllText(dialog.FileName, builder.ToString(), new UTF8Encoding(true));
-            _message.Text = UiLocale.Display("Exported: ") + _snapshot.Rows.Count + UiLocale.Display(" rows.");
+            _message.Text = UiLocale.Display("Exported: ") + snapshot.Rows.Count + UiLocale.Display(" rows.");
         }
         catch (Exception ex) { UiErrorDialog.Show(FindForm(), "Export Client Health", ex); }
     }
@@ -509,4 +533,13 @@ internal sealed class ClientFeedbackPanel : UserControl
         if (value.Length > 0 && "=+-@\t\r".Contains(value[0])) value = "'" + value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
+}
+
+/// <summary>UI-thread revision stamp; even A-to-B-to-A edits invalidate pending reads.</summary>
+internal sealed class ClientFeedbackReadGate
+{
+    private long _revision;
+    internal long Capture() => _revision;
+    internal void Invalidate() => _revision++;
+    internal bool IsCurrent(long captured) => captured == _revision;
 }
