@@ -351,11 +351,12 @@ internal static partial class NativeGpoDomainAudit
                         string v = NativeAdDiscovery.Attr(policy, "versionNumber");
                         if (!int.TryParse(v, NumberStyles.Integer,
                                 CultureInfo.InvariantCulture, out int version))
-                            version = 0;
+                            throw new InvalidDataException("Unverified GPO versionNumber.");
                         if (NativeGpoConflictScan.PolicyHalfHasConfiguredSettings(
                                 version, cse, false))
                         {
                             loopback = ReadLoopbackFromSource(dc, domain, id,
+                                NativeGpoConflictScan.RegistryCseAdvertised(cse),
                                 out bool read);
                             if (!read) complete = false;
                         }
@@ -543,7 +544,8 @@ internal static partial class NativeGpoDomainAudit
     /// <summary>Only the loopback setting in MACHINE Registry.pol is consulted;
     /// the complete known-setting scanner is still NativeGpoDomainAudit.AllGpos.</summary>
     private static string ReadLoopbackFromSource(
-        string dc, string domain, Guid id, out bool reliable)
+        string dc, string domain, Guid id, bool registryAdvertised,
+        out bool reliable)
     {
         reliable = false;
         string directory = Path.Combine(@"\\", dc, "SYSVOL", domain,
@@ -554,33 +556,23 @@ internal static partial class NativeGpoDomainAudit
         string file = Path.Combine(directory, "Registry.pol");
         if (!NativeGpoConflictScan.FileExistsSafe(file))
         {
-            reliable = true;
+            reliable = !registryAdvertised;
             return "";
         }
-        var hits = NativeGpoConflictScan.ParseRegistryPol(
-            File.ReadAllBytes(file), false).Where(x =>
-                x.key.Equals(@"Software\Policies\Microsoft\Windows\System",
-                    StringComparison.OrdinalIgnoreCase) &&
-                x.name.Equals("UserPolicyMode", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        reliable = hits.Length <= 1;
-        return hits.Length == 1 ? hits[0].value.Trim() : "";
+        string value = LoopbackPolicyProjection.ReadRegistryPol(
+            File.ReadAllBytes(file), out reliable);
+        // An orphan Registry.pol with a loopback instruction cannot be
+        // treated as an active Registry CSE setting.
+        if (value.Length > 0 && !registryAdvertised) reliable = false;
+        return reliable ? value : "";
     }
 
     private static string DecideLoopback(IReadOnlyList<ScopedLink> machine,
         bool complete)
     {
-        var rows = machine.Where(x => x.LoopbackValue.Length > 0 &&
-            !x.State.StartsWith("Excluded:", StringComparison.Ordinal)).ToArray();
-        if (!complete || rows.Any(x => x.State != "AD candidate"))
-            return "Unknown";
-        if (rows.Length == 0) return "Not configured";
-        // Without a proven setting precedence never choose one of mixed modes.
-        string[] values = rows.Select(x => x.LoopbackValue)
-            .Distinct(StringComparer.Ordinal).ToArray();
-        if (values.Length != 1) return "Unknown";
-        return values[0] switch { "0" => "Not configured", "1" => "Merge candidate",
-            "2" => "Replace candidate", _ => "Unknown" };
+        return LoopbackPolicyProjection.Decide(machine.Select(x =>
+            new LoopbackLinkCandidate(x.LinkedAt, x.Depth, x.Order,
+                x.Enforced, x.State, x.LoopbackValue)), complete);
     }
 
     private static SearchResultEntry ReadOne(

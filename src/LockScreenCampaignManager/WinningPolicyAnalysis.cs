@@ -58,17 +58,9 @@ internal sealed class WinningPolicyAnalysis
 
     // The AD scanner only records the actual OU/domain chain; site membership
     // is never inferred. Same-container links obey GPMC Link Order 1 first.
-    private static int ComparePolicies(EffectiveGpoPolicy a, EffectiveGpoPolicy b)
-    {
-        if (string.Equals(a.LinkedAt, b.LinkedAt,
-            StringComparison.OrdinalIgnoreCase))
-            return a.LinkOrder.CompareTo(b.LinkOrder);
-        if (a.Enforced && b.Enforced)
-            return a.ScopeDepth.CompareTo(b.ScopeDepth);
-        if (a.Enforced != b.Enforced)
-            return a.Enforced ? -1 : 1;
-        return b.ScopeDepth.CompareTo(a.ScopeDepth);
-    }
+    private static int ComparePolicies(EffectiveGpoPolicy a, EffectiveGpoPolicy b) =>
+        GpoLinkPriority.Compare(a.Enforced, a.ScopeDepth, a.LinkedAt, a.LinkOrder,
+            b.Enforced, b.ScopeDepth, b.LinkedAt, b.LinkOrder);
 
     private static string NormalKey(string input)
     {
