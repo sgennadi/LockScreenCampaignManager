@@ -133,6 +133,7 @@ internal sealed class DomainGpoPilotReadiness
             endpointUser, adScope, power, now));
         var adCandidates = AddAdScope(findings, report, adScope, now,
             saverIdleSeconds);
+        findings.AddRange(AdPilotTimerProjection.Build(report, adScope, saverIdleSeconds, now));
         AddSysvolSystem(findings, sysvolSystem, adScope, now);
 
         // Imported UserResults must describe the same explicit AD user before
@@ -632,8 +633,8 @@ internal sealed class DomainGpoPilotReadiness
             }
             foreach (var row in matches)
             {
-                bool possible = IsAdBlockerCandidate(row, idleSeconds);
-                if (!possible) continue;
+                string risk = AdBlockerRisk(row, idleSeconds);
+                if (risk is not ("High" or "Warning")) continue;
                 string state = active && complete ? "Source candidate" :
                     unsure || !complete ? "Not verified" :
                     "Information";
@@ -651,7 +652,7 @@ internal sealed class DomainGpoPilotReadiness
                 if ((active || unsure) && blockers.Count < 250)
                     blockers.Add(new DomainPilotBlocker(row.Scope, link.Gpo,
                         link.GpoId, row.Key, row.Setting, row.Value,
-                        row.Risk is ("High" or "Warning") ? row.Risk : "Warning",
+                        risk,
                         "AD-only (no XML)", !fresh
                             ? "Historical AD scope" :
                             active && complete
@@ -703,16 +704,26 @@ internal sealed class DomainGpoPilotReadiness
         _ => 8
     };
 
-    private static bool IsAdBlockerCandidate(DomainGpoMatch row, int idle)
+    // The all-domain scan's risk was calculated against its initial OU
+    // selection. Once exact per-principal links have been resolved, recalculate
+    // timer/RDS risk without reusing that coarse applicability verdict.
+    internal static string AdBlockerRisk(DomainGpoMatch row, int idle)
     {
         string name = row.Setting.ToLowerInvariant();
-        if (name == "screensaveactive") return row.Value.Trim() != "1";
+        if (name == "screensaveactive")
+            return row.Value.Trim() switch { "1" => "Info", "0" => "High", _ => "Warning" };
         if (name == "screensavetimeout")
-            return !long.TryParse(row.Value, out long value) ||
-                value != idle;
-        if (name is "scrnsave.exe" or "screensaverissecure" or
-            "userpolicymode" or "nolockscreen") return true;
-        return row.Risk is ("High" or "Warning");
+            return !long.TryParse(row.Value, out long value) || value != idle
+                ? "Warning" : "Info";
+        if ((row.Scope == "Computer" && AdPilotTimerProjection.TimerName(row) is not null) ||
+            RdsSessionPolicyBlockers.Recognize(row.Key, row.Setting, row.Value) is not null)
+            return NativeGpoDomainAudit.AssessRisk(
+                new NativeGpoConflictScan.Hit(row.Key, row.Setting, row.Value,
+                    "Warning", row.Reason), row.Scope == "User", "Both", idle, "",
+                "Linked candidate");
+        if (name is "scrnsave.exe" or "screensaverissecure" or "userpolicymode" or "nolockscreen")
+            return row.Risk == "High" ? "High" : "Warning";
+        return row.Risk is ("High" or "Warning") ? row.Risk : "Info";
     }
 
     private static void AddXml(List<DomainPilotFinding> findings, string scope,
