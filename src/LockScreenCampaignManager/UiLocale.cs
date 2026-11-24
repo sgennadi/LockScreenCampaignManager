@@ -320,6 +320,7 @@ internal static partial class UiLocale
             "Effective GPO candidates", "Winning Policy Analysis",
             "Screen Saver power audit", "All DC GPO conflict audit",
             "Compare GPO settings", "Compare gpresult XML", "Pilot readiness review",
+            "Unified GPO readiness",
             "Review candidate GPO blockers", "Endpoint user Screen Saver probe",
             "Campaign closure audit", "Repair history" })
         {
@@ -423,7 +424,7 @@ internal static partial class UiLocale
                     "RepairHistoryGrid" or "CampaignClosureGrid" or
                     "ImageFolderMappingGrid" or "EndpointPowerReadingsGrid" or
                     "EndpointPowerCandidateGrid" or "GmsaReadinessGrid" or
-                    "DeviceRepairGrid"))
+                    "DeviceRepairGrid" or "PilotReadinessFindings"))
             {
                 foreach (DataGridViewColumn column in healthGrid.Columns)
                 {
@@ -458,6 +459,8 @@ internal static partial class UiLocale
                  "ClientHealthAdActivityWindow"))
                 ApplyComboLocalization(combo, language);
         }
+        if (form is DomainGpoPilotReadinessDialog pilot)
+            pilot.ApplyReviewLanguage(language);
     }
 
     private static void ApplyComboLocalization(ComboBox combo, string language)

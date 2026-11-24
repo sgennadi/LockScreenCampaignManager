@@ -38,7 +38,7 @@ internal static class Program
 
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
-            try { SelfTests.Run(); UpdateArchiveBindingTests.Run(); GpoScopeAclTests.Run(); LoopbackPolicyProjectionTests.Run(); AdPilotTimerProjectionTests.Run(); return 0; }
+            try { SelfTests.Run(); UpdateArchiveBindingTests.Run(); GpoScopeAclTests.Run(); LoopbackPolicyProjectionTests.Run(); AdPilotTimerProjectionTests.Run(); PilotReadinessPresentationTests.Run(); return 0; }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
 
