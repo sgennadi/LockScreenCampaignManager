@@ -1882,6 +1882,14 @@ internal static class UiLayoutSmokeTests
     {
         // CI-only synthetic data: never Show() a dialog; Shown would start a
         // readiness probe. No AD, RPC, SMB write, gMSA installation or JSON export.
+        var sourceGate = new ClientFeedbackReadGate();
+        long firstSource = sourceGate.Capture();
+        sourceGate.Invalidate();
+        long secondSource = sourceGate.Capture();
+        sourceGate.Invalidate();
+        if (sourceGate.IsCurrent(firstSource) || sourceGate.IsCurrent(secondSource) ||
+            !sourceGate.IsCurrent(sourceGate.Capture()))
+            throw new InvalidOperationException("Stale Client Health source accepted.");
         foreach (var profile in Profiles)
         {
             UiPreferences Style(string lang) => new() {
@@ -2202,6 +2210,16 @@ internal static class UiLayoutSmokeTests
                 shareText.Text != share)
                 throw new InvalidOperationException(
                     "Preview.97 language switching changed Client Health evidence.");
+            health.Rows.Add("SYNTHETIC-PC");
+            shareText.Text = @"\\example.com\OtherReports$";
+            if (health.Rows.Count != 0)
+                throw new InvalidOperationException("Client Health retained old-source rows.");
+            health.Rows.Add("SYNTHETIC-PC");
+            var campaign = Descendants(host).OfType<TextBox>()
+                .Single(x => x.Name == "ClientHealthCampaignId");
+            campaign.Text = "different-campaign";
+            if (health.Rows.Count != 0)
+                throw new InvalidOperationException("Client Health retained old-campaign rows.");
         }
     }
 
