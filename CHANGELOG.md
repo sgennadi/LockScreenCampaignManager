@@ -1,3 +1,17 @@
+## 0.4.0-preview.126 — update integrity and exact-scope GPO analysis (2026-11-24)
+
+1. **Safer portable updates.** Bind the extracted EXE to the verified release ZIP, verify installed bytes before the self-test, and retain the previous rollback checkpoint until the new process starts.
+2. **More accurate GPO security filtering.** Handle conditional and property-specific ACL entries conservatively; preserve the selected computer's Read check for User GPOs.
+3. **Loopback and policy precedence.** Rank Merge/Replace candidates using OU/domain depth, Enforced and link order; reject ambiguous or malformed Registry.pol mode settings.
+4. **Screen Saver and power conflicts.** Rank supported AD/SYSVOL timer sources for the selected computer/user, compare Screen Saver with display-off, sleep and inactivity lock, and recalculate power/RDS blocker risk for the exact scope.
+5. **Regression tests and UI.** Add native offline tests for update integrity, ACLs, loopback and timer precedence, plus Russian and Hebrew timer-review labels.
+
+## 0.4.0-preview.125 — direct AD targets and simpler project saving (2026-11-15)
+
+1. Open target selection directly after a writable-DC connection and embed OU/User/Computer group assignments in the deployment Wizard.
+2. Default new projects to Documents/LockScreen Campaign Manager, save existing projects in place and remember the last folder.
+3. Preserve explicit deployment preview/approval and clear the embedded editor when the AD connection changes.
+
 ## 0.4.0-preview.124 — single Next and optional project saving in wizard (2026-11-15)
 
 1. Replace Wizard Step 6 top Validate/Save/Skip buttons with the fixed bottom Next; validation runs regardless of local save choice.
