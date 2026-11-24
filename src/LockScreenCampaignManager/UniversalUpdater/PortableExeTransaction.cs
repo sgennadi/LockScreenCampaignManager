@@ -56,10 +56,17 @@ public sealed class PortableExeTransaction
         if (!actualStageHash.Equals(staged.ExtractedExecutableSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Staged executable changed after validation.");
         PeSafety.ValidateArchitecture(stageFile, options.Architecture);
-        if (!string.Equals(await UpdateDownloader.HashFileAsync(staged.ArchivePath, cancellationToken),
-                staged.Release.Sha256, StringComparison.OrdinalIgnoreCase) ||
+        var archivePath = Path.GetFullPath(staged.ArchivePath);
+        if (!string.Equals(Path.GetDirectoryName(archivePath), expectedParent, comparison) ||
+            !string.Equals(Path.GetFileName(archivePath), staged.Release.Rule.AssetName, StringComparison.Ordinal) ||
             !string.Equals(staged.ArchiveSha256, staged.Release.Sha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Release archive changed since it was verified.");
+            throw new InvalidDataException("Release archive is outside the approved staging package.");
+        RejectReparsePoint(archivePath);
+        cancellationToken.ThrowIfCancellationRequested();
+        SingleExeArchiveBinding.Verify(archivePath, staged.Release.Sha256,
+            stageFile, actualStageHash, staged.Release.Rule,
+            options.MaxArchiveBytes, options.MaxExpandedBytes);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var state = new UpdateStateStore(options);
         if (state.Read().FailureHold)

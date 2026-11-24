@@ -31,9 +31,8 @@ internal static class PortableUpdateCoordinator
         string archive = Path.GetFullPath(package.ArchivePath);
         string stagingRoot = Path.GetFullPath(UpdateStateStore.GetStagingRoot(options));
         VerifyPaths(target, source, archive, stagingRoot);
-        VerifyDigest(source, package.ExtractedExecutableSha256);
-        VerifyDigest(archive, package.Release.Sha256);
-        PeSafety.ValidateArchitecture(source, options.Architecture);
+        VerifyPackage(options, source, package.ExtractedExecutableSha256,
+            archive, package.Release.Sha256);
 
         // The helper deliberately executes the installed version, not the
         // new EXE, until integrity and post-replacement health checks pass.
@@ -78,9 +77,7 @@ internal static class PortableUpdateCoordinator
             // Another user, SYSTEM, or a scheduled service cannot be updated
             // through an elevated helper; this remains the interactive user.
             WaitForExit(parentPid, TimeSpan.FromSeconds(75));
-            VerifyDigest(source, stageSha);
-            VerifyDigest(archive, archiveSha);
-            PeSafety.ValidateArchitecture(source, options.Architecture);
+            VerifyPackage(options, source, stageSha, archive, archiveSha);
             using var updateLock = new FileStream(
                 Path.Combine(Path.GetDirectoryName(target)!, ".lockscreen-update.lock"),
                 FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -103,11 +100,22 @@ internal static class PortableUpdateCoordinator
                 VerifyDigest(next, stageSha);
                 File.Replace(next, target, backup, ignoreMetadataErrors: false);
                 replaced = true;
+                VerifyDigest(target, stageSha);
                 if (!SelfTest(target, TimeSpan.FromSeconds(90)))
                     throw new InvalidOperationException("Updated EXE failed the offline self-test.");
                 VerifyDigest(target, stageSha);
-                if (previousMoved) File.Delete(earlierBackup);
+                // Keep the earlier checkpoint until the new process actually starts.
                 StartManager(target);
+                if (previousMoved)
+                {
+                    try { File.Delete(earlierBackup); }
+                    catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException)
+                    {
+                        // The new manager is already running. Do not roll back a live EXE
+                        // because cleanup failed; preserve the checkpoint for manual review.
+                        AppLog.Write(cleanupError, "Portable update checkpoint cleanup");
+                    }
+                }
                 return 0;
             }
             catch
@@ -160,16 +168,31 @@ internal static class PortableUpdateCoordinator
         if (!process.WaitForExit((int)timeout.TotalMilliseconds))
         {
             process.Kill(entireProcessTree: true);
+            process.WaitForExit();
             return false;
         }
         return process.ExitCode == 0;
     }
 
-    private static void StartManager(string file) =>
-        Process.Start(new ProcessStartInfo(file) {
+    private static void StartManager(string file)
+    {
+        using var process = Process.Start(new ProcessStartInfo(file) {
             WorkingDirectory = Path.GetDirectoryName(file)!,
-            UseShellExecute = true
-        });
+            UseShellExecute = false
+        }) ?? throw new IOException("Could not restart the manager.");
+    }
+
+    private static void VerifyPackage(UpdateOptions options, string source, string stageSha,
+        string archive, string archiveSha)
+    {
+        var rule = options.Assets.SingleOrDefault(a =>
+            a.Architecture == options.Architecture &&
+            string.Equals(a.AssetName, Path.GetFileName(archive), StringComparison.Ordinal))
+            ?? throw new InvalidDataException("Unexpected portable update archive name.");
+        SingleExeArchiveBinding.Verify(archive, archiveSha, source, stageSha, rule,
+            options.MaxArchiveBytes, options.MaxExpandedBytes);
+        PeSafety.ValidateArchitecture(source, options.Architecture);
+    }
 
     private static void VerifyPaths(string target, string source,
         string archive, string stagingRoot)
