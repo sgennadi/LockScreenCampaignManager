@@ -84,8 +84,9 @@ class WizardReviewTests(unittest.TestCase):
             self.assertIn(key, en, key)
             self.assertIn('["' + key + '"]', ru, key)
             self.assertIn('["' + key + '"]', he, key)
-        self.assertIn("0.4.0-preview.125", read("LockScreenCampaignManager.csproj"))
+        self.assertIn("0.4.0-preview.126", read("LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW125.md").is_file())
+        self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW126.md").is_file())
 
 
 if __name__ == "__main__":
