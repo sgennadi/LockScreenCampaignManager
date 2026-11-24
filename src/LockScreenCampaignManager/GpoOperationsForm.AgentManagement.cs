@@ -103,11 +103,9 @@ internal sealed partial class GpoOperationsForm
     {
         var panel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = Padding.Empty
+            Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, Padding = Padding.Empty
         };
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 119));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         _agentScopeStatus.Dock = DockStyle.Fill;
@@ -116,31 +114,39 @@ internal sealed partial class GpoOperationsForm
         UiStyle.ApplyStatus(_agentScopeStatus,
             "AD OU: not checked | Assigned to group: not checked | AD activity: not checked.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentScopeStatus, 0, 0);
+        _agentScopeStatus.Name = "AgentScopeStatus";
         _agentReportsStatus.Dock = DockStyle.Fill;
         _agentReportsStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentReportsStatus.AutoEllipsis = true;
         UiStyle.ApplyStatus(_agentReportsStatus,
             "OU / group / feedback statistics: load verified AD inventory.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentReportsStatus, 0, 1);
+        _agentReportsStatus.Name = "AgentReportsStatus";
         _agentProbeStatus.Dock = DockStyle.Fill;
         _agentProbeStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentProbeStatus.AutoEllipsis = true;
         UiStyle.ApplyStatus(_agentProbeStatus,
             "Load AD computers, then check RPC reachability. TCP/135 is not proof that the agent is running.",
             UiStatusKind.Neutral);
-        panel.Controls.Add(_agentProbeStatus, 0, 2);
-        panel.Controls.Add(_computers, 0, 3);
+        _agentProbeStatus.Name = "AgentProbeStatus";
+        var status = new UiWrappedStatusPanel(
+            _agentScopeStatus, _agentReportsStatus, _agentProbeStatus) {
+            Name = "AgentManagementScrollableStatus"
+        };
+        panel.Controls.Add(status, 0, 0);
+        panel.Controls.Add(_computers, 0, 1);
         _agentSelectedDetails.Dock = DockStyle.Fill;
         _agentSelectedDetails.Multiline = true;
         _agentSelectedDetails.ReadOnly = true;
+        _agentSelectedDetails.Name = "AgentSelectedDetails";
+        _agentSelectedDetails.WordWrap = true;
+        _agentSelectedDetails.RightToLeft = RightToLeft.No;
         _agentSelectedDetails.ScrollBars = ScrollBars.Vertical;
         _agentSelectedDetails.BackColor = UiStyle.Surface;
         _agentSelectedDetails.Font = new Font("Segoe UI", 9f);
         _agentSelectedDetails.Text = UiLocale.Display(
             "Select a verified computer to see RPC hints, client-reported health and latest command outcome.");
-        panel.Controls.Add(_agentSelectedDetails, 0, 4);
+        panel.Controls.Add(_agentSelectedDetails, 0, 2);
         return panel;
     }
 
