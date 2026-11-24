@@ -18,6 +18,10 @@ internal static partial class UiLocale
         ["AD loopback"] = "Обратная обработка GPO (loopback)",
         ["User scope"] = "Область политики пользователя",
         ["AD source details"] = "Подробности источников GPO",
+        ["AD timer priority"] = "Приоритет таймеров по AD",
+        ["Timer source precedence unresolved."] = "Приоритет источников таймера не определён.",
+        ["Ranked AD/SYSVOL source only. Confirm the actual user, active power plan and endpoint policy; not applied RSoP."] =
+            "Только приоритет источника AD/SYSVOL. Проверьте пользователя, активный план питания и политику клиента; не итоговый RSoP.",
         ["No exact computer/user ACL+OU+loopback scan was requested."] =
             "Анализ связей OU, ACL и loopback для конкретного объекта ещё не запрошен.",
         ["AD-only expected applicability. Not endpoint RSoP or winning setting."] =
@@ -61,6 +65,10 @@ internal static partial class UiLocale
         ["AD loopback"] = "עיבוד מדיניות Loopback",
         ["User scope"] = "תחולת מדיניות המשתמש",
         ["AD source details"] = "פרטי מקורות GPO",
+        ["AD timer priority"] = "עדיפות זמני המתנה לפי AD",
+        ["Timer source precedence unresolved."] = "עדיפות מקורות זמני ההמתנה לא נקבעה.",
+        ["Ranked AD/SYSVOL source only. Confirm the actual user, active power plan and endpoint policy; not applied RSoP."] =
+            "עדיפות מקור AD/SYSVOL בלבד. יש לאמת משתמש, תוכנית צריכת חשמל פעילה ומדיניות מחשב; לא RSoP מיושם.",
         ["No exact computer/user ACL+OU+loopback scan was requested."] =
             "טרם התבקשה בדיקת OU, ACL ו-loopback למחשב ולמשתמש הנבחרים.",
         ["AD-only expected applicability. Not endpoint RSoP or winning setting."] =
