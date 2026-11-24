@@ -1,3 +1,11 @@
+## 0.4.0-preview.127 — readable GPO and fleet status (2026-11-24)
+
+1. **Readable GPO analysis.** Automatically wrap observations and next steps; keep selected-row details synchronized with English, Russian and Hebrew, including timer comparisons.
+2. **Consistent Client Health reports.** Clear outdated reports and alert baselines when the SMB source or campaign changes; discard results from earlier asynchronous reads.
+3. **Reliable exports.** Keep CSV and final HTML exports on the same captured report and abort when its source changes during the export dialog.
+4. **Improved fleet interface.** Wrap and scroll AD, SMB and RPC statistics, automatically size Client Health headers and visible rows, and preserve status colors and readable agent details.
+5. **Regression coverage.** Extend offline source-consistency and WinForms layout checks, including language switching and simulated UI scales up to 200%.
+
 ## 0.4.0-preview.126 — update integrity and exact-scope GPO analysis (2026-11-24)
 
 1. **Safer portable updates.** Bind the extracted EXE to the verified release ZIP, verify installed bytes before the self-test, and retain the previous rollback checkpoint until the new process starts.
