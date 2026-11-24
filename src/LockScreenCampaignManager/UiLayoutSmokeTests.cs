@@ -1391,6 +1391,8 @@ internal static class UiLayoutSmokeTests
         CheckPreview96UpdaterLabLanguageAndDpi();
         CheckPreview97GpoClientHealth();
         CheckRepairResultTranslations();
+        using (var pilot = CreateGpoPilotReadinessSmoke())
+            PilotReadinessPresentationTests.RunLayout(pilot);
         foreach (string language in new[] { "Russian", "Hebrew" })
         {
             const string caption = "Visual DPI / language acceptance";

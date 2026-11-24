@@ -7,7 +7,12 @@ namespace LockScreenCampaignManager;
 /// current interactive HKCU, final setting precedence, or a causal blocker.
 /// </summary>
 internal sealed record DomainPilotFinding(
-    string Area, string State, string Observation, string NextStep);
+    string Area, string State, string Observation, string NextStep)
+{
+    // Optional typed presentation data. Observation stays canonical English;
+    // localization never changes registry values or evidence identity.
+    internal PilotTimerPresentation? TimerPresentation { get; init; }
+}
 
 internal sealed class DomainGpoPilotReadiness
 {

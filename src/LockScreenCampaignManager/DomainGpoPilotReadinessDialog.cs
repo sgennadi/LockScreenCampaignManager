@@ -37,6 +37,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
     private EndpointPowerObservation? _observation;
     private bool _reading;
     private DomainGpoPilotReadiness? _assessment;
+    private string _reviewLanguage = "English";
 
     internal DomainGpoPilotReadinessDialog(
         DomainWideGpoReport report, RsopEvidence? computerXml,
@@ -135,13 +136,21 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _findings.AllowUserToAddRows = false;
         _findings.AllowUserToDeleteRows = false;
         _findings.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _findings.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        foreach (var (caption,width) in new (string,int)[] {
-            ("Area", 205), ("State", 140),
-            ("Observation", 595), ("Next step", 530)
+        // Use the available width rather than a fixed 1470 px table. Wrap
+        // long translated observations; size visible rows to their contents.
+        _findings.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _findings.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCellsExceptHeaders;
+        _findings.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _findings.DefaultCellStyle.Alignment = DataGridViewContentAlignment.TopLeft;
+        _findings.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _findings.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        foreach (var (caption,weight,minWidth) in new (string,float,int)[] {
+            ("Area", 16, 145), ("State", 13, 115),
+            ("Observation", 41, 290), ("Next step", 30, 220)
         })
             _findings.Columns.Add(new DataGridViewTextBoxColumn {
-                HeaderText = UiLocale.Display(caption), Width = width,
+                HeaderText = UiLocale.Display(caption), FillWeight = weight,
+                MinimumWidth = minWidth,
                 SortMode = DataGridViewColumnSortMode.NotSortable
             });
         _findings.SelectionChanged += (_, _) => Details();
@@ -150,10 +159,10 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _details.Dock = DockStyle.Fill;
         _details.ReadOnly = true;
         _details.Multiline = true;
-        _details.ScrollBars = ScrollBars.Both;
+        _details.ScrollBars = ScrollBars.Vertical;
         _details.WordWrap = true;
         _details.RightToLeft = RightToLeft.No;
-        _details.Font = new Font("Consolas", 9.2f);
+        _details.Font = new Font("Segoe UI", 9.5f);
         _details.BackColor = UiStyle.Surface;
         root.Controls.Add(_details, 0, 3);
 
@@ -334,9 +343,7 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
             foreach (DomainPilotFinding finding in _assessment.Findings)
             {
                 int i = _findings.Rows.Add(
-                    UiLocale.Display(finding.Area), UiLocale.Display(finding.State),
-                    UiLocale.Display(finding.Observation),
-                    UiLocale.Display(finding.NextStep));
+                    PilotFindingPresentation.Cells(finding, _reviewLanguage));
                 _findings.Rows[i].Tag = finding;
                 if (finding.State == "Observed concern")
                     _findings.Rows[i].DefaultCellStyle.ForeColor = Color.Firebrick;
@@ -356,33 +363,51 @@ internal sealed class DomainGpoPilotReadinessDialog : Form
         _reviewNamedGpos.Enabled = _assessment.NamedBlockers.Count > 0;
         _clearEndpoint.Enabled = _endpointUser is not null;
         _clearSysvol.Enabled = _sysvolSystem is not null;
+        RefreshSummary();
+    }
+
+    private string ReviewText(string text) => UiLocale.Translate(text, _reviewLanguage);
+
+    private void RefreshSummary()
+    {
+        if (_assessment is null || _reading) return;
         _summary.Text = _assessment.NamedBlockers.Count +
-            UiLocale.Display(" named GPO candidates | ") +
-            _assessment.Concerns +
-            UiLocale.Display(" observed concerns | ") +
-            _assessment.Potential + UiLocale.Display(" source candidates | ") +
-            _assessment.NotVerified + UiLocale.Display(" not verified");
+            ReviewText(" named GPO candidates | ") +
+            _assessment.Concerns + ReviewText(" observed concerns | ") +
+            _assessment.Potential + ReviewText(" source candidates | ") +
+            _assessment.NotVerified + ReviewText(" not verified");
+    }
+
+    // Called by the shared locale pass. Re-render existing immutable evidence,
+    // never repeat an AD/endpoint read or change the selected user/computer.
+    internal void ApplyReviewLanguage(string language)
+    {
+        _reviewLanguage = language;
+        if (_assessment is null || _reading) return;
+        foreach (DataGridViewRow row in _findings.Rows)
+            if (row.Tag is DomainPilotFinding finding)
+                row.SetValues(PilotFindingPresentation.Cells(finding, language));
+        RefreshSummary();
+        Details();
     }
 
     private void Details()
     {
         if (_assessment is null) return;
+        string warning = ReviewText(
+            DomainGpoRsopCorrelation.EvidenceWarning(_computerXml, _userXml));
         if (_findings.SelectedRows.Count > 0 &&
             _findings.SelectedRows[0].Tag is DomainPilotFinding selected)
-            _details.Text = selected.Area + ": " + selected.State +
-                Environment.NewLine + selected.Observation +
-                Environment.NewLine + "Next: " + selected.NextStep +
+            _details.Text = PilotFindingPresentation.Details(selected, _reviewLanguage) +
                 Environment.NewLine + Environment.NewLine +
                 (_adScope is null
-                    ? UiLocale.Display("AD-only scope not scanned.")
-                    : "AD-only scan: " + _adScope.ObservedUtc.ToString("u") +
-                      " | loopback " + _adScope.Loopback +
-                      " | source candidates only, NOT RSoP.") +
-                Environment.NewLine +
-                DomainGpoRsopCorrelation.EvidenceWarning(_computerXml, _userXml);
+                    ? ReviewText("AD-only scope not scanned.")
+                    : ReviewText("AD-only scan") + ": " + _adScope.ObservedUtc.ToString("u") +
+                      " | " + ReviewText("AD loopback") + ": " + ReviewText(_adScope.Loopback) +
+                      " | " + ReviewText("Source candidates only, not endpoint RSoP.")) +
+                Environment.NewLine + warning;
         else
-            _details.Text = DomainGpoRsopCorrelation.EvidenceWarning(
-                _computerXml, _userXml);
+            _details.Text = warning;
     }
 
 

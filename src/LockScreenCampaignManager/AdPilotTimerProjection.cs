@@ -118,22 +118,15 @@ internal static class AdPilotTimerProjection
         {
             if (leader is null)
             {
-                findings.Add(new("AD timer priority", "Not verified",
-                    timer + ": " + UiLocale.Display("Timer source precedence unresolved."), Next));
+                findings.Add(new PilotTimerPresentation(timer, null, "", "", "", null,
+                    false).ToFinding(Next));
                 continue;
             }
             _ = TryValue(leader, out uint value);
-            string observed = timer + " = " + value.ToString(CultureInfo.InvariantCulture) +
-                (timer == "ScreenSaveActive" ? "" : " s") + " | " + leader.Row.Gpo +
-                " [" + leader.Row.GpoId + "] | " + leader.Row.Source;
-            if (leader.Row.Scope == "Computer")
-            {
-                string target = projectedUser ? "ScreenSaveTimeOut (AD)" : "ScreenSaveTimeOut (campaign)";
-                observed += value == 0 ? " | 0 = Never" :
-                    " | " + value + " s " + (value < reference ? "<" :
-                        value == reference ? "=" : ">") + " " + target + " " + reference + " s";
-            }
-            findings.Add(new("AD timer priority", "Source candidate", observed, Next));
+            findings.Add(new PilotTimerPresentation(timer, value, leader.Row.Gpo,
+                leader.Row.GpoId, leader.Row.Source,
+                leader.Row.Scope == "Computer" ? reference : null,
+                projectedUser).ToFinding(Next));
         }
         return findings;
     }
