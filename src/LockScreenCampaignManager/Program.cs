@@ -32,13 +32,13 @@ internal static class Program
 
         if (args.Contains("--updater-self-test", StringComparer.OrdinalIgnoreCase))
         {
-            try { SelfTests.RunUpdaterOnly(); return 0; }
+            try { SelfTests.RunUpdaterOnly(); UpdateArchiveBindingTests.Run(); return 0; }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
 
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
-            try { SelfTests.Run(); return 0; }
+            try { SelfTests.Run(); UpdateArchiveBindingTests.Run(); return 0; }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         }
 

@@ -472,13 +472,13 @@ internal sealed class UniversalUpdaterWindow : Form
             StagedPackage staged = await downloader.StageAsync(
                 options, selected, progress, _operation!.Token,
                 _sessionToken.Text.Length == 0 ? null : _sessionToken.Text);
-            _stagedPath = staged.ArchivePath;
-            _staged = staged;
             var signature = staged.ExtractedExecutablePath is not null
                 ? await Task.Run(() => WindowsAuthenticodeAudit.Inspect(
                     staged.ExtractedExecutablePath))
                 : new WindowsAuthenticodeAudit.Result(false, "NOT_AVAILABLE",
                     "No extracted EXE for native Authenticode verification.");
+            _stagedPath = staged.ArchivePath;
+            _staged = staged;
             _output.Text = T("SHA-256 and archive safety verified; package staged.") +
                 Environment.NewLine + T("Windows Authenticode: ") +
                 T(signature.Trusted ? "TRUSTED" : "NOT VERIFIED") +
