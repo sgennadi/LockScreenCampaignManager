@@ -498,7 +498,8 @@ internal static class NativeGpoConflictScan
     }
 
     internal static IReadOnlyList<Hit> ParseRegistryPol(byte[] contents,
-        bool userScope = false)
+        bool userScope = false,
+        Action<string, string, uint, string>? inspectEntry = null)
     {
         if (contents is null || contents.Length is < 8 or > 2097152)
             throw new InvalidDataException("Invalid Registry.pol length.");
@@ -529,6 +530,7 @@ internal static class NativeGpoConflictScan
             if (bytes.Length != len) throw new InvalidDataException("Truncated Registry.pol value.");
             Expect(reader, ']');
             string display = DisplayRegistryPolicyValue(type, bytes);
+            inspectEntry?.Invoke(key, name, type, display);
             var hit = TargetValue(key, name, display, userScope);
             if (hit is not null) hits.Add(hit);
             if (hits.Count > 120)

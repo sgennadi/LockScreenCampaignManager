@@ -13,6 +13,7 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         source = read("NativeGpoDomainAudit.cs")
         scoped = read("NativeGpoDomainAudit.PilotScope.cs")
         router = read("DomainPowerShellRunner.cs")
+        loopback = read("LoopbackPolicyProjection.cs")
         self.assertIn("internal static partial class NativeGpoDomainAudit", source)
         self.assertIn('if (mode == "PilotScope")', source)
         self.assertIn("ExecutePilotScope(request, credentials)", source)
@@ -22,19 +23,23 @@ class UnifiedAdGpoContracts(unittest.TestCase):
         self.assertIn('mode == "AllGpos"', router)
         self.assertIn("NativeGpoDomainAudit.Execute(", router)
         for x in ("ReadScopedLinks(", "ScopeTokensVerified(",
-                  "NativeGpoConflictScan.ParseRegistryPol(",
+                  "LoopbackPolicyProjection.ReadRegistryPol(",
+                  "LoopbackPolicyProjection.Decide(",
                   "QualifyComputerRead(", "computerForUser!", "readOnly: true",
                   'userSid = user?.Sid ?? ""',
                   "ScopeSubject(string Dn, string Name, string Sid",
                   "computer GPO Read denied", "computer Read not verified",
                   "NativeGpoConflictScan.PolicyHalfHasConfiguredSettings("):
             self.assertIn(x, scoped)
+        self.assertIn("NativeGpoConflictScan.ParseRegistryPol(", loopback)
         for forbidden in ("Process.Start(", "ModifyRequest(", "Registry.SetValue(",
                           "gpupdate.exe", "File.WriteAllText(", "File.Delete("):
             self.assertNotIn(forbidden, scoped)
+            self.assertNotIn(forbidden, loopback)
 
     def test_ad_ancestry_nested_groups_security_and_loopback_are_conservative(self):
         model = read("NativeGpoDomainAudit.PilotScope.cs")
+        loopback = read("LoopbackPolicyProjection.cs")
         for key in ("tokenGroups", "SearchPaged(", "SearchScope.Base",
                     "NativeAdDiscovery.Connect(", "ReferralChasingOptions.None",
                     "SessionOptions", "nTSecurityDescriptor",
@@ -45,8 +50,8 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "Classify(", "Excluded: block inheritance",
                     "Excluded: matching security deny",
                     "NativeGpoLifecycleList.ParseLinks",
-                    "DecideLoopback(", "UserPolicyMode",
-                    "Merge candidate", "Replace candidate",
+                    "DecideLoopback(", "LoopbackPolicyProjection.Decide(",
+                    "Replace candidate",
                     "Computer OU (loopback)", "Conditional: WMI not evaluated",
                     "TryGpoFlags(", "QualifyLoopbackUserRow(",
                     "Conditional: loopback Replace candidate",
@@ -55,6 +60,14 @@ class UnifiedAdGpoContracts(unittest.TestCase):
                     "Not configured", "Unknown",
                     "provesWinningGpo = false", "provesClientApplication = false"):
             self.assertIn(key, model, key)
+        for key in ("UserPolicyMode", "Merge candidate", "Replace candidate",
+                    "GpoLinkPriority.Compare(", "type != 4",
+                    "**DeleteValues", "**DeleteKeys", "**DelVals.",
+                    "if (!complete)", "AD candidate"):
+            self.assertIn(key, loopback, key)
+        self.assertIn("RegistryCseAdvertised(cse)", model)
+        self.assertIn("LoopbackPolicyProjectionTests.Run();", read("Program.cs"))
+        self.assertIn("GpoLinkPriority.Compare(", read("WinningPolicyAnalysis.cs"))
         # No optimistic 'winning GPO' or direct endpoint policy modification
         self.assertNotIn('provesClientApplication = true', model)
         self.assertNotIn('provesWinningGpo = true', model)
