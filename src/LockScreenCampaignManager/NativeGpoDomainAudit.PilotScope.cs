@@ -464,47 +464,80 @@ internal static partial class NativeGpoDomainAudit
                 return "Unknown";
             var acl = new RawSecurityDescriptor(data, 0).DiscretionaryAcl;
             if (acl is null) return "Unknown";
-            bool readAllow = false, applyAllow = false;
-            bool readDeny = false, applyDeny = false;
-            foreach (GenericAce ace in acl)
-            {
-                if ((ace.AceFlags & AceFlags.InheritOnly) != 0 ||
-                    ace is not QualifiedAce q ||
-                    !subject.TokenSids.Contains(q.SecurityIdentifier.Value))
-                    continue;
-                int rights = q.AccessMask;
-                bool all = (rights & 0x10000000) != 0;
-                // READ_CONTROL alone only reads the ACL, not GPO attributes.
-                bool read = GrantsGpcReadFromAccessMask(rights);
-                bool apply = all || (rights & 0x00000100) != 0;
-                if (q is ObjectAce objectAce &&
-                    (objectAce.ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
-                {
-                    if (objectAce.ObjectAceType != ScopeApplyRight)
-                        apply = false;
-                    // Cannot interpret an object-specific Read as full Read.
-                    read = false;
-                }
-                if (q.AceQualifier == AceQualifier.AccessDenied)
-                {
-                    readDeny |= read;
-                    applyDeny |= apply;
-                }
-                if (q.AceQualifier == AceQualifier.AccessAllowed)
-                {
-                    readAllow |= read;
-                    applyAllow |= apply;
-                }
-            }
-            if (readOnly)
-                return readDeny ? "Deny" : readAllow ? "Read" : "Unknown";
-            return readDeny || applyDeny ? "Deny" :
-                readAllow && applyAllow ? "Read+Apply" : "Unknown";
+            return ClassifyScopeDacl(acl, subject.TokenSids, readOnly);
         }
         catch (Exception e) when (e is DirectoryOperationException or
             LdapException or InvalidDataException or ArgumentException or
             UnauthorizedAccessException)
         { return "Unknown"; }
+    }
+
+    // This is a conservative AD-only estimate, not AccessCheck on the actual
+    // endpoint token. Conditional ACEs depend on claims/context not present in
+    // tokenGroups; a property-specific Read deny cannot be ignored simply
+    // because a different ACE grants generic Read.
+    internal static string ClassifyScopeDacl(RawAcl acl,
+        IReadOnlySet<string> tokenSids, bool readOnly = false)
+    {
+        if (tokenSids.Count == 0) return "Unknown";
+        bool readAllow = false, applyAllow = false;
+        bool readDeny = false, applyDeny = false;
+        bool ambiguous = false;
+        foreach (GenericAce ace in acl)
+        {
+            if ((ace.AceFlags & AceFlags.InheritOnly) != 0 ||
+                ace is not QualifiedAce q ||
+                !tokenSids.Contains(q.SecurityIdentifier.Value) ||
+                q.AceQualifier is not (AceQualifier.AccessAllowed or AceQualifier.AccessDenied))
+                continue;
+
+            int rights = q.AccessMask;
+            bool read = GrantsGpcReadFromAccessMask(rights);
+            bool apply = (rights & 0x10000000) != 0 ||
+                (rights & 0x00000100) != 0;
+            bool denied = q.AceQualifier == AceQualifier.AccessDenied;
+
+            if (q is ObjectAce objectAce &&
+                (objectAce.ObjectAceFlags & ObjectAceFlags.ObjectAceTypePresent) != 0)
+            {
+                if (objectAce.ObjectAceType != ScopeApplyRight)
+                    apply = false;
+                // Object/property-specific Read is not equivalent to full GPC
+                // Read. A deny may restrict a required attribute; we do not
+                // have schema/attribute-level effective access evidence here.
+                if (read && denied) ambiguous = true;
+                read = false;
+            }
+            if (readOnly) apply = false;
+            if (!read && !apply) continue;
+
+            if (q.IsCallback)
+            {
+                ambiguous = true;
+                continue;
+            }
+
+            if (denied)
+            {
+                // A preceding applicable allow may have satisfied part of the
+                // access request already. Do not claim a conclusive deny from
+                // a simplified aggregate when DACL order matters.
+                if ((read && readAllow) || (apply && applyAllow))
+                    ambiguous = true;
+                readDeny |= read;
+                applyDeny |= apply;
+            }
+            else
+            {
+                readAllow |= read;
+                applyAllow |= apply;
+            }
+        }
+        if (ambiguous) return "Unknown";
+        if (readOnly)
+            return readDeny ? "Deny" : readAllow ? "Read" : "Unknown";
+        return readDeny || applyDeny ? "Deny" :
+            readAllow && applyAllow ? "Read+Apply" : "Unknown";
     }
 
     /// <summary>Only the loopback setting in MACHINE Registry.pol is consulted;
