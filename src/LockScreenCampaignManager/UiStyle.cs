@@ -65,7 +65,9 @@ internal static class UiStyle
     public static void ApplyStatus(Label label, string value, UiStatusKind status)
     {
         label.Text = value;
-        label.AutoEllipsis = true;
+        // Status bands inside a wrapping scroll region must remain complete
+        // after live refresh, not revert to a one-line ellipsis.
+        label.AutoEllipsis = label.Parent is not UiWrappedStatusPanel;
         label.TabStop = false;
         label.AccessibleName = "Active Directory connection status";
         label.AccessibleDescription = value;
@@ -165,7 +167,9 @@ internal static class UiStyle
                     grid.DefaultCellStyle.SelectionForeColor = SystemInformation.HighContrast
                         ? SystemColors.HighlightText : Foreground;
                     int text = TextRenderer.MeasureText("Ag", grid.Font).Height;
-                    grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, text + 18);
+                    if (grid.ColumnHeadersHeightSizeMode !=
+                        DataGridViewColumnHeadersHeightSizeMode.AutoSize)
+                        grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight, text + 18);
                     grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height, text + 19);
                 }
                 else if (c is FlowLayoutPanel flow) flow.AutoScroll = true;

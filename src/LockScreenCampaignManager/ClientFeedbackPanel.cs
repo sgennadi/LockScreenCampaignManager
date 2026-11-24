@@ -180,7 +180,11 @@ internal sealed class ClientFeedbackPanel : UserControl
         _grid.MultiSelect = true;
         _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _grid.ColumnHeadersHeight = Math.Max(_grid.ColumnHeadersHeight, 45);
+        _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        _grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCellsExceptHeaders;
+        _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _grid.DefaultCellStyle.Alignment = DataGridViewContentAlignment.TopLeft;
         _grid.RowTemplate.Height = Math.Max(_grid.RowTemplate.Height, 40);
         _grid.ScrollBars = ScrollBars.Both;
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Computer", FillWeight = 128 });
@@ -196,11 +200,7 @@ internal sealed class ClientFeedbackPanel : UserControl
         foreach (DataGridViewColumn column in _grid.Columns)
             column.MinimumWidth = Math.Max(94, (int)column.FillWeight);
         layout.Controls.Add(_grid, 0, 2);
-        var foot = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
-            RowCount = 3, AutoScroll = true };
-        foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        foot.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-        foot.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        // Keep totals and multi-line coverage readable independently of the grid.
         _totals.Name = "ClientHealthTotals";
         _totals.Dock = DockStyle.Fill;
         _totals.AutoEllipsis = false;
@@ -218,9 +218,9 @@ internal sealed class ClientFeedbackPanel : UserControl
         _message.Padding = new Padding(4, 6, 4, 6);
         _message.ForeColor = UiStyle.Muted;
         _message.Text = "No data. Reports are diagnostic; Healthy does not prove the image is visible.";
-        foot.Controls.Add(_totals, 0, 0);
-        foot.Controls.Add(_coverage, 0, 1);
-        foot.Controls.Add(_message, 0, 2);
+        var foot = new UiWrappedStatusPanel(_totals, _coverage, _message) {
+            Name = "ClientHealthScrollableStatus"
+        };
         layout.Controls.Add(foot, 0, 3);
     }
 

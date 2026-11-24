@@ -909,6 +909,22 @@ internal static class UiLayoutSmokeTests
                     $"Client Health read-only AD/SMB coverage must start unverified " +
                     $"with a visible activity window at {profile}.");
         }
+        foreach (var statusPanel in all.OfType<UiWrappedStatusPanel>())
+        {
+            if (!statusPanel.AutoScroll || statusPanel.WrapContents ||
+                statusPanel.FlowDirection != FlowDirection.TopDown ||
+                statusPanel.Controls.OfType<Label>().Count() != 3 ||
+                statusPanel.Controls.OfType<Label>().Any(label =>
+                    !label.AutoSize || label.AutoEllipsis || label.MaximumSize.Width < 1))
+                throw new InvalidOperationException(
+                    $"Fleet status wrapping/scroll contract failed: {statusPanel.Name} / {profile}.");
+        }
+        if (all.OfType<ClientFeedbackPanel>().Any() &&
+            !all.OfType<UiWrappedStatusPanel>().Any(x => x.Name == "ClientHealthScrollableStatus"))
+            throw new InvalidOperationException($"Client Health status panel missing: {profile}.");
+        if (form is GpoOperationsForm &&
+            !all.OfType<UiWrappedStatusPanel>().Any(x => x.Name == "AgentManagementScrollableStatus"))
+            throw new InvalidOperationException($"Agent Management status panel missing: {profile}.");
         if (form is GpoOperationsForm &&
             !all.OfType<TextBox>().Any(x =>
                 x.Name == "GpoScopePathViewer" && x.ReadOnly &&
@@ -2195,7 +2211,11 @@ internal static class UiLayoutSmokeTests
                     health.Columns[1].HeaderText !=
                         UiLocale.Translate("Condition", lang) ||
                     status.Text != UiLocale.Translate(initialStatus, lang) ||
-                    totals.Text != UiLocale.Translate(initialTotals, lang))
+                    totals.Text != UiLocale.Translate(initialTotals, lang) ||
+                    health.ColumnHeadersHeightSizeMode != DataGridViewColumnHeadersHeightSizeMode.AutoSize ||
+                    health.ColumnHeadersDefaultCellStyle.WrapMode != DataGridViewTriState.True ||
+                    health.DefaultCellStyle.WrapMode != DataGridViewTriState.True ||
+                    health.AutoSizeRowsMode != DataGridViewAutoSizeRowsMode.DisplayedCellsExceptHeaders)
                     throw new InvalidOperationException(
                         "Preview.97 Client Health localized labels or LTR share damaged: " +
                         lang + "/" + profile.Name);
@@ -2210,6 +2230,16 @@ internal static class UiLayoutSmokeTests
                 shareText.Text != share)
                 throw new InvalidOperationException(
                     "Preview.97 language switching changed Client Health evidence.");
+            var wrapping = Descendants(host).OfType<UiWrappedStatusPanel>()
+                .Single(x => x.Name == "ClientHealthScrollableStatus");
+            var liveStatus = wrapping.Controls.OfType<Label>().Last();
+            string longStatus = string.Join(" | ", Enumerable.Repeat(
+                "AD inventory and SMB diagnostic observations; no online proof.", 12));
+            UiStyle.ApplyStatus(liveStatus, longStatus, UiStatusKind.Warning);
+            wrapping.PerformLayout();
+            if (liveStatus.Text != longStatus || liveStatus.AutoEllipsis ||
+                !liveStatus.AutoSize || !wrapping.AutoScroll)
+                throw new InvalidOperationException("Live status refresh clipped or changed fleet evidence.");
             health.Rows.Add("SYNTHETIC-PC");
             shareText.Text = @"\\example.com\OtherReports$";
             if (health.Rows.Count != 0)
