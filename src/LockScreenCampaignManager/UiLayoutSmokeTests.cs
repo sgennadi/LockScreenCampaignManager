@@ -30,12 +30,13 @@ internal static class UiLayoutSmokeTests
             "Not verified: offline simulated UI.");
     }
 
-    private static DomainWideGpoReport CreateAllDcGpoFixture()
+    private static DomainWideGpoReport CreateAllDcGpoFixture(bool pilot = false)
     {
+        string[] computerOus = pilot ? ["OU=Computers,DC=example,DC=com"] : [];
         var input = System.Text.Json.JsonSerializer.SerializeToElement(new {
             domain = "example.com", dc = "dc01.example.com",
             observedUtc = DateTimeOffset.UtcNow,
-            computerOus = Array.Empty<string>(),
+            computerOus,
             userOus = Array.Empty<string>(),
             gpoCount = 1, inspectedHalves = 1, emptyHalves = 1,
             issueCount = 0, complete = true,
@@ -45,7 +46,7 @@ internal static class UiLayoutSmokeTests
         });
         var report = DomainWideGpoReport.Parse(
             input, "example.com", "dc01.example.com",
-            [], []);
+            computerOus, []);
         return report;
     }
 
@@ -75,7 +76,7 @@ internal static class UiLayoutSmokeTests
         new DomainPilotBlockersDialog([]);
 
     private static Form CreateGpoPilotReadinessSmoke() =>
-        new DomainGpoPilotReadinessDialog(CreateAllDcGpoFixture(),
+        new DomainGpoPilotReadinessDialog(CreateAllDcGpoFixture(pilot: true),
             null, null, "pilot.example.com", 600, null);
 
     private static readonly (string Name, UiPreferences Settings)[] Profiles =
