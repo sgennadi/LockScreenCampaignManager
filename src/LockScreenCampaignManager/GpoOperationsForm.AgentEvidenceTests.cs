@@ -36,6 +36,12 @@ internal sealed partial class GpoOperationsForm
         _agentValidReportCount = 1;
         _agentReportsCheckedUtc = now;
         _agentEvidenceNotice = "Validated client reports for selected campaign; client-supplied status is not authenticated proof.";
+        var listRow = _agentInventory[0];
+        _computers.Items.Add(listRow);
+        _computers.SelectedIndex = 0;
+        int checkEvents = 0;
+        _computers.ItemCheck += (_, _) => checkEvents++;
+        SetAgentProbeResult(3, 7, "10:15:02", 12);
         foreach (string language in new[] { "English", "Russian", "Hebrew", "English" })
         {
             UiStyle.Apply(this, new UiPreferences { Language = language, UiScalePercent = 150 });
@@ -58,6 +64,19 @@ internal sealed partial class GpoOperationsForm
                 throw new InvalidOperationException("Agent detail localization changed evidence or missed status: " + language);
             if (evidence.Condition != "Reported issue" || evidence.Details.IndexOf("missing files 3", StringComparison.Ordinal) < 0)
                 throw new InvalidOperationException("Canonical agent evidence was changed.");
+            string itemText = _computers.GetItemText(listRow);
+            if (!ReferenceEquals(_computers.SelectedItem, listRow) ||
+                _computers.CheckedItems.Count != 0 || checkEvents != 0 ||
+                itemText != RenderAgentListItem(listRow) ||
+                !itemText.Contains("pilot.example.com", StringComparison.Ordinal) ||
+                !itemText.Contains(FleetStatusPresentation.T("Reported issue", language), StringComparison.Ordinal) ||
+                !_agentSelectedDetails.Text.Contains(detail, StringComparison.Ordinal) ||
+                !_agentProbeStatus.Text.Contains("3/7", StringComparison.Ordinal) ||
+                !_agentProbeStatus.Text.Contains("10:15:02", StringComparison.Ordinal) ||
+                !_agentProbeStatus.Text.Contains(FleetStatusPresentation.Format(
+                    " | {0} deferred to next scan (oldest checked first)", language, 12), StringComparison.Ordinal) ||
+                (language != "English" && _agentProbeStatus.Text.StartsWith("RPC TCP/135 reachable:", StringComparison.Ordinal)))
+                throw new InvalidOperationException("Agent list selection, detail or RPC status localization changed evidence: " + language);
         }
 
         int previousRead = _agentEvidenceGeneration;

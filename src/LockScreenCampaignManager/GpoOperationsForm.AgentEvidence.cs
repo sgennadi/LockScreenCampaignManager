@@ -265,6 +265,8 @@ internal sealed partial class GpoOperationsForm
     {
         _agentUiLanguage = language;
         UpdateAgentOverview(_computers.Items.Count);
+        RefreshAgentListPresentation();
+        RenderAgentProbeStatus();
         DisplaySelectedAgentDetails();
     }
 
