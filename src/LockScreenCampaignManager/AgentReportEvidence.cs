@@ -12,6 +12,10 @@ internal sealed record AgentReportEvidence(
     DateTimeOffset? LastReportedUtc, bool Fresh, string Details,
     string ClientType = "Unknown")
 {
+    // Presentation facts are optional for old/synthetic interpretations.
+    // The canonical Details string remains unchanged for other consumers.
+    internal AgentReportFacts? Facts { get; init; }
+
     private static readonly Regex SafeVersion = new(
         @"\A[A-Za-z0-9][A-Za-z0-9.+_ -]{0,49}\z",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
@@ -79,6 +83,12 @@ internal sealed record AgentReportEvidence(
             " | timestamp supplied by endpoint; not authenticated proof.";
         return new AgentReportEvidence(condition, report.Stage, version,
             report.Health, report.LastSeenUtc, recent && report.Stage != "Completed", details,
-            clientType);
+            clientType) {
+                Facts = new AgentReportFacts(report.ImageMatches, report.RegistryMatches,
+                    report.TaskPresent, report.MissingFiles, report.CorruptFiles)
+            };
     }
 }
+
+internal sealed record AgentReportFacts(bool ImageMatches, bool RegistryMatches,
+    bool TaskPresent, int MissingFiles, int CorruptFiles);

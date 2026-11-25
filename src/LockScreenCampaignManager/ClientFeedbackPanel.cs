@@ -36,6 +36,7 @@ internal sealed class ClientFeedbackPanel : UserControl
     private ClientHealthSnapshot? _snapshot;
     private bool _busy;
     private readonly ClientFeedbackReadGate _sourceGate = new();
+    private string _healthUiLanguage = UiStyle.Preferences.Language;
 
     public ClientFeedbackPanel(string domain, string dc, string ouDn, string groupDn,
         DomainCredentials credentials, CampaignProject project,
@@ -90,6 +91,12 @@ internal sealed class ClientFeedbackPanel : UserControl
             _campaignId.Text = campaignId;
             _message.Text = UiLocale.Display("Campaign changed. Load its reports and refresh the AD computer list.");
         }
+    }
+
+    internal void ApplyHealthLanguage(string language)
+    {
+        _healthUiLanguage = language;
+        _grid.Invalidate();
     }
 
     private void InvalidateFeedbackSource()
@@ -179,6 +186,18 @@ internal sealed class ClientFeedbackPanel : UserControl
         buttons.Controls.Add(Action("History", OpenHistory, 115));
         layout.Controls.Add(buttons, 0, 1);
         _grid.Name = "ClientHealthGrid";
+        // Translate formatted values only. Raw Value, Tag, snapshot, sorting,
+        // repair authorization and exports keep the canonical report data.
+        _grid.CellFormatting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.Value is not string raw) return;
+            string display = FleetStatusPresentation.HealthCell(e.ColumnIndex, raw, _healthUiLanguage);
+            if (!string.Equals(raw, display, StringComparison.Ordinal))
+            {
+                e.Value = display;
+                e.FormattingApplied = true;
+            }
+        };
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;

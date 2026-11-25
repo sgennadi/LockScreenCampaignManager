@@ -190,40 +190,52 @@ internal sealed partial class GpoOperationsForm
     private void DisplaySelectedAgentDetails()
     {
         if (_agentSelectedDetails.IsDisposed) return;
-        if (_computers.SelectedItem is not PcRow row)
-        {
-            _agentSelectedDetails.Text = "Select a verified computer. AD activity is approximate; SMB reports are untrusted.";
-            return;
-        }
+        _agentSelectedDetails.Text = _computers.SelectedItem is PcRow row
+            ? RenderSelectedAgentDetails(row)
+            : FleetStatusPresentation.T(
+                "Select a verified computer. AD activity is approximate; SMB reports are untrusted.",
+                _agentUiLanguage);
+    }
 
+    private string RenderSelectedAgentDetails(PcRow row)
+    {
+        string T(string key) => FleetStatusPresentation.T(key, _agentUiLanguage);
+        string F(string key, params object[] args) =>
+            FleetStatusPresentation.Format(key, _agentUiLanguage, args);
+        string Stamp(DateTimeOffset? time, string format, string missing = "—") =>
+            time?.ToLocalTime().ToString(format, CultureInfo.InvariantCulture) ?? T(missing);
         var sb = new StringBuilder();
-        sb.AppendLine("Computer: " + row.Name);
-        sb.AppendLine("AD last activity (replicated, approximate): " +
-            (row.AdLastSeenUtc?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "Never / unknown") +
-            " | Disabled: " + (row.AdDisabled?.ToString() ?? "Unknown"));
-        sb.AppendLine("RPC TCP/135: " +
-            (row.RpcReachable is null ? "NOT CHECKED" :
-                row.RpcReachable.Value ? "Reachable" : "Not reachable") +
-            " | Probe: " + (row.CheckedUtc?.ToLocalTime().ToString("dd.MM HH:mm:ss") ?? "—"));
+        sb.AppendLine(F("Computer: {0}", row.Name));
+        sb.AppendLine(F("AD last activity (replicated, approximate): {0} | Disabled: {1}",
+            Stamp(row.AdLastSeenUtc, "dd.MM.yyyy HH:mm", "Never / unknown"),
+            T(row.AdDisabled is null ? "Unknown" : row.AdDisabled.Value ? "Yes" : "No")));
+        sb.AppendLine(F("RPC TCP/135: {0} | Probe: {1}",
+            T(row.RpcReachable is null ? "Not checked" :
+                row.RpcReachable.Value ? "Reachable" : "Not reachable"),
+            Stamp(row.CheckedUtc, "dd.MM HH:mm:ss")));
         var evidence = row.AgentReport;
-        sb.AppendLine("Client report: " + (evidence?.Condition ?? "Not checked") +
-            " | Version: " + (evidence?.Version ?? "—") +
-            " | Last: " + (evidence?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm") ?? "—"));
-        if (evidence is not null) sb.AppendLine(evidence.Details);
-        sb.AppendLine("Managed GPO method: " +
-            (_policies.SelectedItem is GpoRow managed ? managed.ClientType : "Unknown") +
-            " | Client-reported type: " + (evidence?.ClientType ?? "Unknown") +
-            " | Comparison: " + row.MethodAgreement);
+        sb.AppendLine(F("Client report: {0} | Version: {1} | Last: {2}",
+            T(evidence?.Condition ?? "Not checked"), evidence?.Version ?? "—",
+            Stamp(evidence?.LastReportedUtc, "dd.MM HH:mm")));
+        if (evidence is not null)
+            sb.AppendLine(FleetStatusPresentation.ReportDetails(evidence, _agentUiLanguage));
+        sb.AppendLine(F("Managed GPO method: {0} | Client-reported type: {1} | Comparison: {2}",
+            FleetStatusPresentation.ClientType(
+                _policies.SelectedItem is GpoRow managed ? managed.ClientType : "Unknown", _agentUiLanguage),
+            FleetStatusPresentation.ClientType(evidence?.ClientType ?? "Unknown", _agentUiLanguage),
+            T(row.MethodAgreement)));
         if (row.MethodAgreement == "Reported mismatch")
-            sb.AppendLine("WARNING: Client-reported type differs from the verified managed GPO method. " +
-                "Verify installed endpoint binary before any repair.");
-        sb.AppendLine("Last remote task submission: " +
-            (row.LastAction is { } task
-                ? task.Display + " at " + task.SubmittedUtc.ToLocalTime().ToString("dd.MM HH:mm:ss")
-                : "No recorded command in this Manager session"));
+            sb.AppendLine(T("WARNING: Client-reported type differs from the verified managed GPO method. " +
+                "Verify installed endpoint binary before any repair."));
+        sb.AppendLine(row.LastAction is { } task
+            ? F("Last remote task submission: {0} / {1} at {2}",
+                task.Action, T(FleetStatusPresentation.SubmissionKey(task.Status)),
+                Stamp(task.SubmittedUtc, "dd.MM HH:mm:ss"))
+            : T("Last remote task submission: no recorded command in this Manager session"));
         if (row.LastAction is { } result)
-            sb.AppendLine("Task result: " + result.Detail);
-        _agentSelectedDetails.Text = sb.ToString();
+            // Free-form task diagnostics are evidence, not translation keys.
+            sb.AppendLine(F("Task result: {0}", result.Detail));
+        return sb.ToString();
     }
 
     private static bool MatchesAdActivity(PcRow row, string activity, DateTimeOffset utc)
@@ -253,6 +265,7 @@ internal sealed partial class GpoOperationsForm
     {
         _agentUiLanguage = language;
         UpdateAgentOverview(_computers.Items.Count);
+        DisplaySelectedAgentDetails();
     }
 
     private void UpdateAgentOverview(int visible)

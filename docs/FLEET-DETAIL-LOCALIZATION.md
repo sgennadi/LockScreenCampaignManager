@@ -1,0 +1,5 @@
+# Fleet detail localization
+
+Agent Management selected-computer details and recognized report, RPC, method-comparison and task-submission states now render in EN/RU/HE. The report's typed file, image, registry and task facts support translated detail text without parsing or modifying the canonical English diagnostic description. Raw task diagnostic notes, action identifiers, computer names, versions, timestamps and client methods stay unchanged. A successful task submission does not prove remote completion.
+
+Client Health translates only formatted status, stage, file-count, registry/task and unknown client-type cells. Canonical grid values, row tags, raw snapshots, sorting, CSV and HTML exports remain unchanged. Language changes do not start network reads. Offline UI regression compares raw and formatted cells and selected-computer details across languages. The compact Agent Management checked-list summary and other dynamic diagnostics remain partly English. Physical Windows monitor, RTL and domain acceptance remain open.

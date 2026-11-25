@@ -23,8 +23,10 @@ internal sealed partial class GpoOperationsForm
         _adOuComputerTotal = 7;
         var now = DateTimeOffset.UtcNow;
         var history = new AgentTaskOutcome("Report", "success", now, "Synthetic submission");
-        var evidence = new AgentReportEvidence("Reported healthy", "Active",
-            "0.4.0-preview.127", "Healthy", now, true, "Synthetic evidence", "PowerShell");
+        var evidence = AgentReportEvidence.Interpret("PILOT", "synthetic-campaign",
+            new ClientFeedbackRecord("PILOT", "synthetic-campaign", now, "Active",
+                "Healthy", "test.jpg", false, true, true, 3, 2,
+                "0.4.0-preview.127", "PowerShell"), now, 15);
         // No AD last-seen value: the default activity view does not select this
         // row or schedule any CheckedListBox selection event.
         _agentInventory.Add(new PcRow("pilot.example.com", "PILOT$",
@@ -44,6 +46,18 @@ internal sealed partial class GpoOperationsForm
                 (language != "English" && _agentReportsStatus.Text.StartsWith("SMB reports:", StringComparison.Ordinal)) ||
                 !ReferenceEquals(_agentInventory[0].AgentReport, evidence))
                 throw new InvalidOperationException("Agent overview localization changed evidence or counts: " + language);
+            string detail = RenderSelectedAgentDetails(_agentInventory[0]);
+            if (!detail.Contains("pilot.example.com", StringComparison.Ordinal) ||
+                !detail.Contains("0.4.0-preview.127", StringComparison.Ordinal) ||
+                !detail.Contains("PowerShell", StringComparison.Ordinal) ||
+                !detail.Contains("Synthetic submission", StringComparison.Ordinal) ||
+                !detail.Contains(FleetStatusPresentation.T("Reported issue", language), StringComparison.Ordinal) ||
+                !detail.Contains(FleetStatusPresentation.T("Submission accepted", language), StringComparison.Ordinal) ||
+                !detail.Contains(FleetStatusPresentation.ReportDetails(evidence, language), StringComparison.Ordinal) ||
+                (language != "English" && detail.StartsWith("Computer:", StringComparison.Ordinal)))
+                throw new InvalidOperationException("Agent detail localization changed evidence or missed status: " + language);
+            if (evidence.Condition != "Reported issue" || evidence.Details.IndexOf("missing files 3", StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException("Canonical agent evidence was changed.");
         }
 
         int previousRead = _agentEvidenceGeneration;
