@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -15,41 +16,56 @@ internal sealed partial class GpoOperationsForm
     }
 
     private int _adOuComputerTotal;
+    private bool _agentInventoryVerified;
+    private string _agentUiLanguage = "English";
     private int _agentValidReportCount;
     private int _agentInvalidReportCount;
     private DateTimeOffset? _agentReportsCheckedUtc;
-    private string _agentEvidenceNotice = "Not checked";
+    private string _agentEvidenceNotice = "Agent reports not checked. Choose a managed GPO and refresh feedback.";
     private bool _agentShareAvailable;
 
     private void InvalidateAgentEvidence()
+    {
+        ResetAgentReports("Select a managed GPO and refresh the reports.", resetTasks: true);
+        if (!IsDisposed && !Disposing) DrawAgentInventory();
+    }
+
+    private void OnAgentFeedbackShareChanged()
+    {
+        ResetAgentReports("SMB source changed. Refresh Agent Reports for the selected GPO.");
+        if (!IsDisposed && !Disposing) DrawAgentInventory();
+    }
+
+    // Do not present prior-source or failed-read reports as current.
+    // RPC and local task submission history are independent of the SMB root.
+    private void ResetAgentReports(string notice, bool resetTasks = false)
     {
         ++_agentEvidenceGeneration;
         _agentValidReportCount = 0;
         _agentInvalidReportCount = 0;
         _agentReportsCheckedUtc = null;
         _agentShareAvailable = false;
-        _agentEvidenceNotice = "Select a managed GPO and refresh the reports.";
+        _agentEvidenceNotice = notice;
         for (int i = 0; i < _agentInventory.Count; ++i)
         {
             var row = _agentInventory[i];
             _agentInventory[i] = row with {
-                AgentReport = null, LastAction = null, MethodAgreement = "Not checked"
+                AgentReport = null, LastAction = resetTasks ? null : row.LastAction,
+                MethodAgreement = "Not checked"
             };
         }
-        if (!IsDisposed && !Disposing) DrawAgentInventory();
     }
 
     private async Task RefreshAgentEvidenceAsync()
     {
-        if (_agentEvidenceLoading || _agentInventory.Count == 0 ||
+        if (_agentEvidenceLoading || !_agentInventoryVerified || _agentInventory.Count == 0 ||
             IsDisposed || Disposing || _agentTabControl is null)
             return;
 
         if (_policies.SelectedItem is not GpoRow policy ||
             !NativeSysvolStorage.ValidCampaignId(policy.CampaignId))
         {
-            _agentEvidenceNotice = "Choose a managed GPO to read that campaign's SMB reports.";
-            _agentShareAvailable = false;
+            ResetAgentReports("Choose a managed GPO to read that campaign's SMB reports.");
             DrawAgentInventory();
             return;
         }
@@ -58,8 +74,7 @@ internal sealed partial class GpoOperationsForm
         try { share = FeedbackPath.ValidateRoot(share); }
         catch (ArgumentException)
         {
-            _agentEvidenceNotice = "Client feedback share is missing or invalid. Configure SMB Client Health.";
-            _agentShareAvailable = false;
+            ResetAgentReports("Client feedback share is missing or invalid. Configure SMB Client Health.");
             DrawAgentInventory();
             return;
         }
@@ -70,18 +85,17 @@ internal sealed partial class GpoOperationsForm
         // SMB evidence may be attached to either AD computer.
         if (names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != _agentInventory.Count)
         {
-            _agentEvidenceNotice = "Duplicate or invalid AD short computer names: cannot map SMB reports safely.";
-            _agentShareAvailable = false;
+            ResetAgentReports("Duplicate or invalid AD short computer names: cannot map SMB reports safely.");
             DrawAgentInventory();
             return;
         }
 
         string campaign = policy.CampaignId;
         int scopeGeneration = _agentInventoryGeneration;
-        int requestGeneration = ++_agentEvidenceGeneration;
+        ResetAgentReports("Reading validated, campaign-matching SMB reports...");
+        int requestGeneration = _agentEvidenceGeneration;
         _agentEvidenceLoading = true;
         if (_agentRefreshReportsButton is not null) _agentRefreshReportsButton.Enabled = false;
-        _agentEvidenceNotice = "Reading validated, campaign-matching SMB reports...";
         DrawAgentInventory();
         try
         {
@@ -124,11 +138,7 @@ internal sealed partial class GpoOperationsForm
         {
             if (IsDisposed || Disposing || scopeGeneration != _agentInventoryGeneration ||
                 requestGeneration != _agentEvidenceGeneration) return;
-            _agentValidReportCount = 0;
-            _agentInvalidReportCount = 0;
-            _agentReportsCheckedUtc = null;
-            _agentShareAvailable = false;
-            _agentEvidenceNotice = "Cannot read SMB Client Health share; report count is UNKNOWN, not zero.";
+            ResetAgentReports("Cannot read SMB Client Health share; report count is UNKNOWN, not zero.");
             AppLog.Write(ex, "Agent Management read client feedback");
             DrawAgentInventory();
         }
@@ -237,6 +247,14 @@ internal sealed partial class GpoOperationsForm
         return seen >= utc.AddDays(-days) && seen <= utc.AddDays(2);
     }
 
+    // Called by UiLocale.Apply; refresh presentation only, not the domain or
+    // the checked computer list. All stored statuses remain canonical English.
+    internal void ApplyAgentOverviewLanguage(string language)
+    {
+        _agentUiLanguage = language;
+        UpdateAgentOverview(_computers.Items.Count);
+    }
+
     private void UpdateAgentOverview(int visible)
     {
         if (_agentReportsStatus.IsDisposed) return;
@@ -246,27 +264,39 @@ internal sealed partial class GpoOperationsForm
             pc.AdLastSeenUtc is null || pc.AdLastSeenUtc < DateTimeOffset.UtcNow.AddDays(-90));
         int fresh = _agentInventory.Count(pc => pc.AgentReport?.Fresh == true);
         int methodMismatch = _agentInventory.Count(pc => pc.MethodAgreement == "Reported mismatch");
-        string reported = _agentShareAvailable ? _agentValidReportCount.ToString() : "?";
-        string noReport = _agentShareAvailable
-            ? (eligible - _agentValidReportCount).ToString() : "?";
-        string scopeSummary = "AD OU: " + _adOuComputerTotal +
-            " | OU + security group: " + eligible +
-            " | Visible after filters: " + visible +
-            " | Disabled: " + disabled +
-            " | AD inactive / unknown >90d: " + inactive;
-        UiStyle.ApplyStatus(_agentScopeStatus, scopeSummary, UiStatusKind.Neutral);
-        _agentScopeStatus.AccessibleDescription = scopeSummary +
-            ". AD lastLogonTimestamp is replicated, approximate and not live online status.";
-        string checkedAt = _agentReportsCheckedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "Not checked";
-        string feedbackSummary = "SMB reports: " + reported + " / " + eligible +
-            " eligible | Recent: " + (_agentShareAvailable ? fresh.ToString() : "?") +
-            " | Client type mismatch: " + (_agentShareAvailable ? methodMismatch.ToString() : "?") +
-            " | No report: " + noReport +
-            " | Invalid files: " + (_agentShareAvailable ? _agentInvalidReportCount.ToString() : "?") +
-            " | Checked: " + checkedAt;
+        string T(string key) => UiLocale.Translate(key, _agentUiLanguage);
+        string Count(bool known, int value) =>
+            known ? value.ToString(CultureInfo.InvariantCulture) : "?";
+        string scopeSummary = string.Format(CultureInfo.InvariantCulture, T(
+            "AD OU: {0} | OU + security group: {1} | Visible after filters: {2} | Disabled: {3} | AD inactive / unknown >90d: {4}"),
+            Count(_agentInventoryVerified, _adOuComputerTotal),
+            Count(_agentInventoryVerified, eligible),
+            Count(_agentInventoryVerified, visible),
+            Count(_agentInventoryVerified, disabled),
+            Count(_agentInventoryVerified, inactive));
+        if (!_agentInventoryVerified)
+            scopeSummary += Environment.NewLine + T("Agent AD inventory not verified.");
+        UiStyle.ApplyStatus(_agentScopeStatus, scopeSummary,
+            _agentInventoryVerified ? UiStatusKind.Neutral : UiStatusKind.Warning);
+        _agentScopeStatus.AccessibleDescription = scopeSummary + Environment.NewLine +
+            T("Agent AD activity is approximate, not live online status.");
+
+        bool reportsKnown = _agentInventoryVerified && _agentShareAvailable &&
+            _agentReportsCheckedUtc.HasValue;
+        string checkedAt = reportsKnown
+            ? _agentReportsCheckedUtc!.Value.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+            : T("SMB check not verified");
+        string feedbackSummary = string.Format(CultureInfo.InvariantCulture, T(
+            "SMB reports: {0} / {1} eligible | Recent at check: {2} | Client type mismatch: {3} | No report: {4} | Invalid files: {5} | Checked: {6}"),
+            Count(reportsKnown, _agentValidReportCount), Count(_agentInventoryVerified, eligible),
+            Count(reportsKnown, fresh), Count(reportsKnown, methodMismatch),
+            Count(reportsKnown, eligible - _agentValidReportCount),
+            Count(reportsKnown, _agentInvalidReportCount), checkedAt);
+        // A failure/retry reason must be visible, not only in accessibility metadata.
+        feedbackSummary += Environment.NewLine + T(_agentEvidenceNotice);
         UiStyle.ApplyStatus(_agentReportsStatus, feedbackSummary,
-            _agentShareAvailable ? UiStatusKind.Success : UiStatusKind.Warning);
-        _agentReportsStatus.AccessibleDescription = feedbackSummary +
-            ". " + _agentEvidenceNotice + " Reports are untrusted diagnostic hints.";
+            reportsKnown ? UiStatusKind.Success : UiStatusKind.Warning);
+        _agentReportsStatus.AccessibleDescription = feedbackSummary + Environment.NewLine +
+            T("Agent reports are untrusted diagnostic hints, not online proof.");
     }
 }

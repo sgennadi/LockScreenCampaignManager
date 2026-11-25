@@ -191,6 +191,7 @@ internal sealed partial class GpoOperationsForm : Form
             () => _busy, running => _busy = running);
         tabs.TabPages.Add(_dcConsistency.AsTabPage());
         _clientHealth = new ClientFeedbackPanel(_domain, _dc, _ouDn, _groupDn, _credentials, _project, RepairFromHealthAsync);
+        _clientHealth.FeedbackShareChanged += OnAgentFeedbackShareChanged;
         var clientHealthTab = _clientHealth.AsTabPage();
         _agentHealthTab = clientHealthTab;
         _deviceDashboard = new DeviceRepairDashboard(
@@ -682,11 +683,12 @@ internal sealed partial class GpoOperationsForm : Form
             }
             if (matched != _agentInventory.Count || _adOuComputerTotal < matched)
                 throw new InvalidDataException("AD OU and group inventory counts do not match.");
+            _agentInventoryVerified = true;
             _agentShareAvailable = false;
             _agentValidReportCount = 0;
             _agentInvalidReportCount = 0;
             _agentReportsCheckedUtc = null;
-            _agentEvidenceNotice = UiLocale.Display("Agent reports not checked. Choose a managed GPO and refresh feedback.");
+            _agentEvidenceNotice = "Agent reports not checked. Choose a managed GPO and refresh feedback.";
             DrawAgentInventory();
             UiStyle.ApplyStatus(_agentProbeStatus,
                 "Loaded " + _agentInventory.Count +
@@ -713,8 +715,8 @@ internal sealed partial class GpoOperationsForm : Form
             ++_agentEvidenceGeneration;
             _agentInventory.Clear();
             _adOuComputerTotal = 0;
-            _agentShareAvailable = false;
-            _agentEvidenceNotice = UiLocale.Display("AD inventory unavailable; all computer and report counts are UNKNOWN.");
+            _agentInventoryVerified = false;
+            ResetAgentReports("AD inventory unavailable; all computer and report counts are UNKNOWN.");
             DrawAgentInventory();
             Fail(ex, "List eligible computers");
         }

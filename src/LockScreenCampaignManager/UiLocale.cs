@@ -461,6 +461,8 @@ internal static partial class UiLocale
         }
         if (form is DomainGpoPilotReadinessDialog pilot)
             pilot.ApplyReviewLanguage(language);
+        if (form is GpoOperationsForm operations)
+            operations.ApplyAgentOverviewLanguage(language);
     }
 
     private static void ApplyComboLocalization(ComboBox combo, string language)

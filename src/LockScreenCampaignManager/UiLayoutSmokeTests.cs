@@ -1410,6 +1410,9 @@ internal static class UiLayoutSmokeTests
         CheckRepairResultTranslations();
         using (var pilot = CreateGpoPilotReadinessSmoke())
             PilotReadinessPresentationTests.RunLayout(pilot);
+        using (var agents = (GpoOperationsForm)Windows.Single(x =>
+            x.Name == "Agent Management - read-only desktop layout").Factory())
+            agents.TestAgentEvidenceSourceAndOverview();
         foreach (string language in new[] { "Russian", "Hebrew" })
         {
             const string caption = "Visual DPI / language acceptance";

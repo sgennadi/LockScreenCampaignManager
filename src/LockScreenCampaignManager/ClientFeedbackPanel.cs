@@ -54,7 +54,11 @@ internal sealed class ClientFeedbackPanel : UserControl
         Dock = DockStyle.Fill;
         BackColor = UiStyle.Canvas;
         Build();
-        _root.TextChanged += (_, _) => InvalidateFeedbackSource();
+        _root.TextChanged += (_, _) =>
+        {
+            InvalidateFeedbackSource();
+            FeedbackShareChanged?.Invoke();
+        };
         _campaignId.TextChanged += (_, _) => InvalidateFeedbackSource();
         _timer.Interval = 15_000;
         _timer.Tick += async (_, _) =>
@@ -74,6 +78,9 @@ internal sealed class ClientFeedbackPanel : UserControl
 
     public string SelectedCampaignId => _campaignId.Text.Trim();
     internal string FeedbackShareRoot => _root.Text.Trim();
+    // The Agent Management tab uses the same SMB root but its own selected
+    // managed GPO. Every edit (including A -> B -> A) invalidates its reads.
+    internal event Action? FeedbackShareChanged;
 
     public void SetSelectedManagedCampaign(string? campaignId)
     {
