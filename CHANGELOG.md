@@ -1,3 +1,11 @@
+## 0.4.0-preview.128 — localized fleet management and consistent report sources (2026-11-26)
+
+1. **Consistent Agent Management reports.** Editing the SMB root or encountering an unavailable source invalidates pending reads and clears old report counts, timestamps and client-method comparisons without losing independent RPC and task-submission evidence.
+2. **Accurate coverage statistics.** Distinguish unknown AD/SMB counts from a verified empty scope and show the reason for unavailable reports.
+3. **Localized fleet details.** Render Agent Management computer lists, selected-computer details, client status and RPC progress/results in English, Russian and Hebrew.
+4. **Localized Client Health cells.** Translate displayed condition, stage, file counts and task/registry states while keeping canonical report values, row identities and export data unchanged.
+5. **Regression coverage.** Verify language switching, evidence identity, selection preservation, stale-source invalidation and count semantics in offline WinForms tests.
+
 ## 0.4.0-preview.127 — readable GPO and fleet status (2026-11-24)
 
 1. **Readable GPO analysis.** Automatically wrap observations and next steps; keep selected-row details synchronized with English, Russian and Hebrew, including timer comparisons.

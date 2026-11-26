@@ -94,7 +94,7 @@ class SysvolSystemContracts(unittest.TestCase):
                        '["Clear SYSVOL evidence"]',
                        '["Import private local SYSTEM SYSVOL report"]'):
             self.assertGreaterEqual(locale.count(marker), 2, marker)
-        self.assertIn("0.4.0-preview.127", get(
+        self.assertIn("0.4.0-preview.128", get(
             "src/LockScreenCampaignManager/LockScreenCampaignManager.csproj"))
         self.assertTrue((ROOT / "docs" / "SYSVOL-SYSTEM-PILOT.md").is_file())
         self.assertTrue((ROOT / "docs" / "RELEASE-PREVIEW120.md").is_file())
