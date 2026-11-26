@@ -25,6 +25,10 @@ internal sealed partial class GpoOperationsForm
     private bool _agentProbing;
     private int _agentInventoryGeneration;
     private bool _openAgentManagementInitially;
+    private string _agentProbeKey = "Load AD computers, then check RPC reachability. TCP/135 is not proof that the agent is running.";
+    private object[] _agentProbeArguments = [];
+    private UiStatusKind _agentProbeKind = UiStatusKind.Neutral;
+    private int _agentProbeDeferredCount;
 
     internal void OpenAgentManagementInitially() =>
         _openAgentManagementInitially = true;
@@ -125,9 +129,7 @@ internal sealed partial class GpoOperationsForm
         _agentProbeStatus.Dock = DockStyle.Fill;
         _agentProbeStatus.TextAlign = ContentAlignment.MiddleLeft;
         _agentProbeStatus.AutoEllipsis = true;
-        UiStyle.ApplyStatus(_agentProbeStatus,
-            "Load AD computers, then check RPC reachability. TCP/135 is not proof that the agent is running.",
-            UiStatusKind.Neutral);
+        RenderAgentProbeStatus();
         _agentProbeStatus.Name = "AgentProbeStatus";
         var status = new UiWrappedStatusPanel(
             _agentScopeStatus, _agentReportsStatus, _agentProbeStatus) {
@@ -210,6 +212,7 @@ internal sealed partial class GpoOperationsForm
         }
         if (!selected.SetEquals(_computers.CheckedItems.Cast<PcRow>().Select(x => x.Name)))
             InvalidatePlans();
+        RefreshAgentListPresentation();
         DisplaySelectedAgentDetails();
         UpdateAgentOverview(visible.Length);
     }
@@ -257,6 +260,70 @@ internal sealed partial class GpoOperationsForm
             .ToArray();
     }
 
+    private string RenderAgentListItem(PcRow row)
+    {
+        string T(string key) => FleetStatusPresentation.T(key, _agentUiLanguage);
+        var evidence = row.AgentReport;
+        string command = row.LastAction is { } task
+            ? task.Action + " / " + T(FleetStatusPresentation.SubmissionKey(task.Status)) : "—";
+        return FleetStatusPresentation.Format(
+            "{0} | RPC: {1} | Agent: {2} | Client type: {3} | GPO method: {4} | Version: {5} | Last report: {6} | Last command: {7}",
+            _agentUiLanguage, row.Name,
+            T(row.RpcReachable is null ? "Not checked" :
+                row.RpcReachable.Value ? "Reachable" : "Not reachable"),
+            T(evidence?.Condition ?? "Not checked"),
+            FleetStatusPresentation.ClientType(evidence?.ClientType ?? "Unknown", _agentUiLanguage),
+            T(row.MethodAgreement), evidence?.Version ?? "—",
+            evidence?.LastReportedUtc?.ToLocalTime().ToString("dd.MM HH:mm",
+                System.Globalization.CultureInfo.InvariantCulture) ?? "—", command);
+    }
+
+    private void RefreshAgentListPresentation()
+    {
+        if (_computers.IsDisposed) return;
+        // CheckedListBox formatting changes display only. Never replace
+        // objects, rebuild selections or invalidate an approved plan for locale.
+        int width = 0;
+        foreach (var row in _computers.Items.OfType<PcRow>())
+            width = Math.Max(width, TextRenderer.MeasureText(
+                RenderAgentListItem(row), _computers.Font).Width + 36);
+        _computers.HorizontalExtent = width;
+        _computers.Invalidate();
+    }
+
+    private void SetAgentProbeStatus(UiStatusKind kind, string key, params object[] args)
+    {
+        _agentProbeKey = key;
+        _agentProbeArguments = args;
+        _agentProbeKind = kind;
+        _agentProbeDeferredCount = 0;
+        RenderAgentProbeStatus();
+    }
+
+    private void SetAgentProbeResult(int reachable, int checkedCount, string time, int deferred)
+    {
+        _agentProbeKey = "RPC TCP/135 reachable: {0}/{1} | checked {2}{3} | verify agent via Report / Client Health";
+        _agentProbeArguments = [reachable, checkedCount, time];
+        _agentProbeDeferredCount = deferred;
+        _agentProbeKind = reachable > 0 ? UiStatusKind.Success : UiStatusKind.Warning;
+        RenderAgentProbeStatus();
+    }
+
+    private void RenderAgentProbeStatus()
+    {
+        if (_agentProbeStatus.IsDisposed) return;
+        object[] args = _agentProbeArguments;
+        if (_agentProbeKey.StartsWith("RPC TCP/135 reachable:", StringComparison.Ordinal))
+        {
+            string deferred = _agentProbeDeferredCount > 0
+                ? FleetStatusPresentation.Format(" | {0} deferred to next scan (oldest checked first)",
+                    _agentUiLanguage, _agentProbeDeferredCount) : "";
+            args = [.. _agentProbeArguments, deferred];
+        }
+        UiStyle.ApplyStatus(_agentProbeStatus,
+            FleetStatusPresentation.Format(_agentProbeKey, _agentUiLanguage, args), _agentProbeKind);
+    }
+
     private async Task ProbeVisibleAgentHostsAsync()
     {
         if (_busy || _agentProbing || _agentInventory.Count == 0 || IsDisposed || Disposing)
@@ -264,12 +331,16 @@ internal sealed partial class GpoOperationsForm
         var candidates = ProbeCandidates();
         var hosts = candidates.Take(AgentReachabilityProbe.MaximumPerScan)
             .Select(pc => pc.Name).ToArray();
+        if (hosts.Length == 0)
+        {
+            SetAgentProbeStatus(UiStatusKind.Neutral, "No verified computers match the RPC probe filters.");
+            return;
+        }
         int generation = _agentInventoryGeneration;
         _agentProbing = true;
         if (_agentProbeButton is not null) _agentProbeButton.Enabled = false;
-        UiStyle.ApplyStatus(_agentProbeStatus,
-            "Checking RPC TCP/135 on " + hosts.Length + " verified AD computers (read-only)...",
-            UiStatusKind.Busy);
+        SetAgentProbeStatus(UiStatusKind.Busy,
+            "Checking RPC TCP/135 on {0} verified AD computers (read-only)...", hosts.Length);
         try
         {
             var status = await AgentReachabilityProbe.CheckAsync(hosts, _domain);
@@ -286,21 +357,15 @@ internal sealed partial class GpoOperationsForm
             }
             DrawAgentInventory();
             int reachable = status.Count(x => x.RpcEndpointReachable);
-            string limit = candidates.Length > hosts.Length
-                ? " | " + (candidates.Length - hosts.Length) +
-                  " deferred to next scan (oldest checked first)" : "";
-            UiStyle.ApplyStatus(_agentProbeStatus,
-                "RPC TCP/135 reachable: " + reachable + "/" + hosts.Length +
-                " | checked " + DateTime.Now.ToString("HH:mm:ss") + limit +
-                " | verify agent via Report / Client Health",
-                reachable > 0 ? UiStatusKind.Success : UiStatusKind.Warning);
+            SetAgentProbeResult(reachable, hosts.Length,
+                DateTime.Now.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+                candidates.Length - hosts.Length);
         }
         catch (Exception ex)
         {
-            if (!IsDisposed && !Disposing)
-                UiStyle.ApplyStatus(_agentProbeStatus,
-                    "RPC reachability check unavailable. Remote computer status is UNKNOWN.",
-                    UiStatusKind.Warning);
+            if (!IsDisposed && !Disposing && generation == _agentInventoryGeneration)
+                SetAgentProbeStatus(UiStatusKind.Warning,
+                    "RPC reachability check unavailable. Remote computer status is UNKNOWN.");
             AppLog.Write(ex, "Agent Management TCP/135 reachability");
         }
         finally

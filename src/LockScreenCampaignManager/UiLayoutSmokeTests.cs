@@ -1410,6 +1410,9 @@ internal static class UiLayoutSmokeTests
         CheckRepairResultTranslations();
         using (var pilot = CreateGpoPilotReadinessSmoke())
             PilotReadinessPresentationTests.RunLayout(pilot);
+        using (var agents = (GpoOperationsForm)Windows.Single(x =>
+            x.Name == "Agent Management - read-only desktop layout").Factory())
+            agents.TestAgentEvidenceSourceAndOverview();
         foreach (string language in new[] { "Russian", "Hebrew" })
         {
             const string caption = "Visual DPI / language acceptance";
@@ -2199,6 +2202,12 @@ internal static class UiLayoutSmokeTests
                 .Select(x => x.HeaderText).ToArray();
             var initialStatus = status.Text;
             var initialTotals = totals.Text;
+            string[] rawCells = ["SYNTHETIC-PC", "Needs attention", "Active",
+                "Active", "24.11 10:15:02", "Missing 3, Corrupt 2",
+                "Not verified", "Yes", "0.4.0-preview.127", "PowerShell"];
+            int fixtureRow = health.Rows.Add(rawCells.Cast<object>().ToArray());
+            health.Rows[fixtureRow].Tag = rawCells[0];
+            health.ClearSelection();
 
             foreach (var lang in new[] { "Russian", "Hebrew", "English" })
             {
@@ -2222,6 +2231,17 @@ internal static class UiLayoutSmokeTests
                 if (health.Columns[1].HeaderText == "Condition" && lang != "English")
                     throw new InvalidOperationException(
                         "Preview.97 Client Health condition column untranslated.");
+                for (int col = 0; col < rawCells.Length; ++col)
+                {
+                    var cell = health.Rows[fixtureRow].Cells[col];
+                    string expected = FleetStatusPresentation.HealthCell(col, rawCells[col], lang);
+                    if (!Equals(cell.Value, rawCells[col]) || !Equals(cell.FormattedValue, expected))
+                        throw new InvalidOperationException("Client Health cell formatting modified raw evidence: " + col);
+                }
+                if (!Equals(health.Rows[fixtureRow].Tag, rawCells[0]) ||
+                    (lang != "English" &&
+                    Equals(health.Rows[fixtureRow].Cells[1].FormattedValue, rawCells[1])))
+                    throw new InvalidOperationException("Client Health status or host tag not preserved.");
             }
             if (!health.Columns.Cast<DataGridViewColumn>()
                     .Select(x => x.HeaderText).SequenceEqual(originalColumns) ||

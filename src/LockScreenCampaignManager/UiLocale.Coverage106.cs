@@ -6,6 +6,22 @@ internal static partial class UiLocale
 {
     private static readonly Dictionary<string, string> Coverage106Russian = new(StringComparer.Ordinal)
     {
+        ["AD OU: {0} | OU + security group: {1} | Visible after filters: {2} | Disabled: {3} | AD inactive / unknown >90d: {4}"] = "AD OU: {0} | OU + группа безопасности: {1} | Видно после фильтров: {2} | Отключены: {3} | Неактивны в AD >90 дней / неизвестно: {4}",
+        ["Agent AD inventory not verified."] = "Инвентаризация AD для агентов не подтверждена.",
+        ["Agent AD activity is approximate, not live online status."] = "Активность в AD приблизительная, не онлайн-статус компьютера.",
+        ["SMB reports: {0} / {1} eligible | Recent at check: {2} | Client type mismatch: {3} | No report: {4} | Invalid files: {5} | Checked: {6}"] = "SMB-отчёты: {0} / {1} подходящих ПК | Свежие на момент проверки: {2} | Несовпадение типа клиента: {3} | Без отчёта: {4} | Неверные файлы: {5} | Проверено: {6}",
+        ["SMB check not verified"] = "Проверка SMB не подтверждена",
+        ["Agent reports are untrusted diagnostic hints, not online proof."] = "Отчёты агентов — диагностические сведения, не доказательство онлайн-статуса.",
+        ["Agent reports not checked. Choose a managed GPO and refresh feedback."] = "Отчёты агентов не проверены. Выберите управляемый GPO и обновите отчёты.",
+        ["Select a managed GPO and refresh the reports."] = "Выберите управляемый GPO и обновите отчёты агентов.",
+        ["SMB source changed. Refresh Agent Reports for the selected GPO."] = "Источник SMB изменён. Обновите Agent Reports для выбранного GPO.",
+        ["Choose a managed GPO to read that campaign's SMB reports."] = "Выберите управляемый GPO, чтобы прочитать SMB-отчёты его кампании.",
+        ["Client feedback share is missing or invalid. Configure SMB Client Health."] = "SMB-папка отчётов отсутствует или неверна. Настройте Client Health.",
+        ["Duplicate or invalid AD short computer names: cannot map SMB reports safely."] = "Короткие имена ПК в AD повторяются или недопустимы: сопоставление SMB-отчётов невозможно.",
+        ["Reading validated, campaign-matching SMB reports..."] = "Чтение проверяемых SMB-отчётов выбранной кампании...",
+        ["Validated client reports for selected campaign; client-supplied status is not authenticated proof."] = "Отчёты сопоставлены с кампанией; данные клиента не являются подтверждённым доказательством.",
+        ["Cannot read SMB Client Health share; report count is UNKNOWN, not zero."] = "Не удалось прочитать SMB Client Health: количество отчётов неизвестно, а не ноль.",
+        ["AD inventory unavailable; all computer and report counts are UNKNOWN."] = "Инвентаризация AD недоступна: количество ПК и отчётов неизвестно.",
         ["Feedback source changed. Refresh SMB reports before reviewing or exporting."] = "Источник отчётов изменён. Обновите SMB-отчёты перед просмотром или экспортом.",
         ["AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status."] =
             "Область AD не загружена. Отчёты агентов — непроверенные сведения, не доказательство работы компьютера в сети.",
@@ -27,6 +43,22 @@ internal static partial class UiLocale
 
     private static readonly Dictionary<string, string> Coverage106Hebrew = new(StringComparer.Ordinal)
     {
+        ["AD OU: {0} | OU + security group: {1} | Visible after filters: {2} | Disabled: {3} | AD inactive / unknown >90d: {4}"] = "AD OU: {0} | OU + קבוצת אבטחה: {1} | מוצגים לאחר סינון: {2} | מושבתים: {3} | ללא פעילות ב-AD מעל 90 יום / לא ידוע: {4}",
+        ["Agent AD inventory not verified."] = "מלאי AD עבור הסוכנים לא אומת.",
+        ["Agent AD activity is approximate, not live online status."] = "פעילות הסוכנים ב-AD משוערת, אינה מצב מקוון בזמן אמת.",
+        ["SMB reports: {0} / {1} eligible | Recent at check: {2} | Client type mismatch: {3} | No report: {4} | Invalid files: {5} | Checked: {6}"] = "דוחות SMB: {0} / {1} מחשבים מתאימים | עדכניים בעת הבדיקה: {2} | סוג לקוח לא תואם: {3} | ללא דוח: {4} | קבצים לא תקינים: {5} | נבדק: {6}",
+        ["SMB check not verified"] = "בדיקת SMB לא אומתה",
+        ["Agent reports are untrusted diagnostic hints, not online proof."] = "דוחות הסוכנים הם מידע אבחוני לא מאומת, לא הוכחה לחיבור מקוון.",
+        ["Agent reports not checked. Choose a managed GPO and refresh feedback."] = "דוחות הסוכנים טרם נבדקו. בחר GPO מנוהל ורענן דוחות.",
+        ["Select a managed GPO and refresh the reports."] = "בחר GPO מנוהל ורענן את דוחות הסוכנים.",
+        ["SMB source changed. Refresh Agent Reports for the selected GPO."] = "מקור SMB השתנה. רענן את דוחות הסוכנים עבור ה-GPO שנבחר.",
+        ["Choose a managed GPO to read that campaign's SMB reports."] = "בחר GPO מנוהל לקריאת דוחות SMB של הקמפיין שלו.",
+        ["Client feedback share is missing or invalid. Configure SMB Client Health."] = "שיתוף SMB של דוחות הלקוח חסר או לא תקין. הגדר Client Health.",
+        ["Duplicate or invalid AD short computer names: cannot map SMB reports safely."] = "שמות מחשבים קצרים ב-AD כפולים או לא תקינים: לא ניתן לשייך דוחות SMB בבטחה.",
+        ["Reading validated, campaign-matching SMB reports..."] = "קורא דוחות SMB מאומתים מול הקמפיין שנבחר...",
+        ["Validated client reports for selected campaign; client-supplied status is not authenticated proof."] = "דוחות הלקוח תואמים לקמפיין שנבחר; נתוני הלקוח אינם הוכחה מאומתת.",
+        ["Cannot read SMB Client Health share; report count is UNKNOWN, not zero."] = "לא ניתן לקרוא את שיתוף SMB של Client Health: מספר הדוחות לא ידוע, אינו אפס.",
+        ["AD inventory unavailable; all computer and report counts are UNKNOWN."] = "מלאי AD אינו זמין: מספר המחשבים והדוחות אינו ידוע.",
         ["Feedback source changed. Refresh SMB reports before reviewing or exporting."] = "מקור הדוחות השתנה. יש לרענן את דוחות SMB לפני סקירה או ייצוא.",
         ["AD scope not loaded. Agent reports are untrusted diagnostics, not proof of online status."] =
             "תחום ה-AD לא נטען. דוחות הסוכנים הם מידע לא מאומת, ואינם הוכחה לחיבור מקוון.",
